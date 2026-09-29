@@ -66,7 +66,8 @@ function apply_nav_manifest(registry, manifest) {
         route: entry.route,
         icon: entry.icon !== void 0 ? entry.icon : null,
         requiredPermissions: [],
-        group: group.group_id
+        group: group.group_id,
+        section: typeof entry.section === "string" ? entry.section : ""
       });
     }
   }

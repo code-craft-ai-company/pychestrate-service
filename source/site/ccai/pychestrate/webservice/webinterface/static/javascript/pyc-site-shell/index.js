@@ -2498,7 +2498,8 @@ function _normalize_entry(entry) {
     requiredPermissions: Array.isArray(entry.requiredPermissions) ? entry.requiredPermissions.filter(
       (item) => typeof item === "string"
     ) : [],
-    group: entry.group !== void 0 ? entry.group : null
+    group: entry.group !== void 0 ? entry.group : null,
+    section: typeof entry.section === "string" ? entry.section : ""
   };
   return rtnval;
 }
@@ -2905,7 +2906,16 @@ var SidebarRenderer = class {
     const panel_list = document.createElement("ul");
     panel_list.classList.add("pyc-site-shell__sidebar-panel-list");
     let has_active_entry = false;
+    let current_section = "";
     for (const entry of entries) {
+      const section = typeof entry.section === "string" ? entry.section : "";
+      if (section.length > 0 && section !== current_section) {
+        const heading = document.createElement("li");
+        heading.classList.add("pyc-site-shell__sidebar-section");
+        heading.textContent = section;
+        panel_list.appendChild(heading);
+      }
+      current_section = section;
       const entry_element = this._build_entry_element(
         entry.label,
         entry.route,
@@ -3179,7 +3189,8 @@ function apply_nav_manifest(registry, manifest) {
         route: entry.route,
         icon: entry.icon !== void 0 ? entry.icon : null,
         requiredPermissions: [],
-        group: group.group_id
+        group: group.group_id,
+        section: typeof entry.section === "string" ? entry.section : ""
       });
     }
   }

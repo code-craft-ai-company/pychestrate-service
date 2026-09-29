@@ -448,6 +448,14 @@ preview tag.
   and float values are read strictly: `1_000`, `inf`, `nan` and `1_0.5`,
   which Python accepts, are refused.
 
+- **The Admin menu is in sections.** It listed fifteen entries in one
+  run, with the two secrets screens far apart. Each admin entry now has a
+  section (People & access, Configuration, Fleet enrollment, Platform),
+  the entries of a section are together, and the sidebar writes the
+  section's name above them. The Overview stays first. The navigation
+  answer carries a `section` on admin entries only; other menus are
+  unchanged.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

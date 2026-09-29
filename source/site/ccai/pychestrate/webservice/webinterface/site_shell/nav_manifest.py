@@ -53,6 +53,9 @@ class NavEntry:
                                     the caller must hold for the
                                     entry to be visible.
         :ivar icon: Optional icon token.
+        :ivar section: Optional heading the sidebar writes above this entry
+                       and the entries after it that share it, inside the
+                       group (the Admin group has four).
     """
     entry_id: str
     label: str
@@ -61,6 +64,7 @@ class NavEntry:
     required_permissions: List[str] = field(default_factory=list)
     icon: str = ""
     surfaces: Tuple[str, ...] = ()
+    section: str = ""
 
 
 @dataclass(frozen=True)
@@ -368,44 +372,12 @@ NAV_ENTRIES: List[NavEntry] = [
         required_permissions=["system:ui.admin.view"],
     ),
     NavEntry(
-        entry_id="admin.feature-flags",
-        label="Feature Flags",
-        route="/admin/feature-flags",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:ui.admin.view"],
-    ),
-    NavEntry(
-        entry_id="admin.extensions",
-        label="Extension Registry",
-        route="/admin/extensions",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:plugin_api.read"],
-    ),
-    NavEntry(
-        entry_id="admin.system-health",
-        label="System Health",
-        route="/admin/system-health",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:ui.admin.view"],
-    ),
-    # Pychestrate's own update channels (canary / beta / stable
-    # releases of the service and agent). Formerly "Release Channels"
-    # under Operations and tagged as a Build Automation surface, which
-    # read as a project's release channels (audit ORC-31). The route
-    # keeps its name so existing links still work.
-    NavEntry(
-        entry_id="admin.pychestrate-updates",
-        label="Pychestrate Updates",
-        route="/release-channels",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:release_channels.read"],
-    ),
-    NavEntry(
         entry_id="admin.users",
         label="Users",
         route="/admin/users",
         group_id=GROUP_ADMIN,
         required_permissions=["system:users.read"],
+        section="People & access",
     ),
     NavEntry(
         entry_id="admin.roles",
@@ -413,21 +385,34 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/roles",
         group_id=GROUP_ADMIN,
         required_permissions=["system:rbac.read"],
+        section="People & access",
     ),
     NavEntry(
-        entry_id="admin.rpa-job-types",
-        label="RPA Job Types",
-        route="/admin/rpa-job-types",
+        entry_id="admin.sessions",
+        label="Sessions",
+        route="/admin/sessions",
         group_id=GROUP_ADMIN,
-        required_permissions=["system:rpa.job_types.manage"],
-        surfaces=("rpa",),
+        required_permissions=["system:auth.read"],
+        section="People & access",
+    ),
+    # Machine identity: service accounts and every API token
+    # (webinterface/blueprints/config/routes_tokens.py). A user's own
+    # tokens live at /account/api-tokens.
+    NavEntry(
+        entry_id="admin.api-tokens",
+        label="API Tokens",
+        route="/admin/api-tokens",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:auth.read"],
+        section="People & access",
     ),
     NavEntry(
-        entry_id="admin.ui-profile",
-        label="UI Profile",
-        route="/admin/ui-profile",
+        entry_id="admin.audit",
+        label="Audit Logs",
+        route="/admin/audit-logs",
         group_id=GROUP_ADMIN,
-        required_permissions=["system:ui.profile.manage"],
+        required_permissions=["system:audit.read"],
+        section="People & access",
     ),
     NavEntry(
         entry_id="admin.variables",
@@ -438,6 +423,7 @@ NAV_ENTRIES: List[NavEntry] = [
         # like Feature Flags, the page is gated by the admin UX
         # signal (the group requires it too).
         required_permissions=["system:ui.admin.view"],
+        section="Configuration",
     ),
     NavEntry(
         entry_id="admin.scopes",
@@ -445,6 +431,7 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/scopes",
         group_id=GROUP_ADMIN,
         required_permissions=["system:secrets.admin"],
+        section="Configuration",
     ),
     NavEntry(
         entry_id="admin.secrets",
@@ -455,20 +442,32 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/secrets",
         group_id=GROUP_ADMIN,
         required_permissions=["system:secrets.read"],
+        section="Configuration",
     ),
     NavEntry(
-        entry_id="admin.sessions",
-        label="Sessions",
-        route="/admin/sessions",
+        entry_id="admin.rpa-job-types",
+        label="RPA Job Types",
+        route="/admin/rpa-job-types",
         group_id=GROUP_ADMIN,
-        required_permissions=["system:auth.read"],
+        required_permissions=["system:rpa.job_types.manage"],
+        surfaces=("rpa",),
+        section="Configuration",
     ),
     NavEntry(
-        entry_id="admin.audit",
-        label="Audit Logs",
-        route="/admin/audit-logs",
+        entry_id="admin.ui-profile",
+        label="UI Profile",
+        route="/admin/ui-profile",
         group_id=GROUP_ADMIN,
-        required_permissions=["system:audit.read"],
+        required_permissions=["system:ui.profile.manage"],
+        section="Configuration",
+    ),
+    NavEntry(
+        entry_id="admin.feature-flags",
+        label="Feature Flags",
+        route="/admin/feature-flags",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:ui.admin.view"],
+        section="Configuration",
     ),
     NavEntry(
         entry_id="admin.enrollment-tokens",
@@ -482,16 +481,36 @@ NAV_ENTRIES: List[NavEntry] = [
         # webinterface/blueprints/config/routes_enrollment.py), so
         # the nav gate matches the page's actual enforcement.
         required_permissions=["system:resources.manage"],
+        section="Fleet enrollment",
     ),
-    # Machine identity: service accounts and every API token
-    # (webinterface/blueprints/config/routes_tokens.py). A user's own
-    # tokens live at /account/api-tokens.
     NavEntry(
-        entry_id="admin.api-tokens",
-        label="API Tokens",
-        route="/admin/api-tokens",
+        entry_id="admin.system-health",
+        label="System Health",
+        route="/admin/system-health",
         group_id=GROUP_ADMIN,
-        required_permissions=["system:auth.read"],
+        required_permissions=["system:ui.admin.view"],
+        section="Platform",
+    ),
+    NavEntry(
+        entry_id="admin.extensions",
+        label="Extension Registry",
+        route="/admin/extensions",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:plugin_api.read"],
+        section="Platform",
+    ),
+    # Pychestrate's own update channels (canary / beta / stable
+    # releases of the service and agent). Formerly "Release Channels"
+    # under Operations and tagged as a Build Automation surface, which
+    # read as a project's release channels (audit ORC-31). The route
+    # keeps its name so existing links still work.
+    NavEntry(
+        entry_id="admin.pychestrate-updates",
+        label="Pychestrate Updates",
+        route="/release-channels",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:release_channels.read"],
+        section="Platform",
     ),
 ]
 
@@ -530,6 +549,8 @@ def _entry_to_dict(entry: NavEntry) -> Dict[str, Any]:
         "required_permissions": list(entry.required_permissions),
         "surfaces": list(entry.surfaces),
     }
+    if len(entry.section) > 0:
+        rtnval["section"] = entry.section
     return rtnval
 
 

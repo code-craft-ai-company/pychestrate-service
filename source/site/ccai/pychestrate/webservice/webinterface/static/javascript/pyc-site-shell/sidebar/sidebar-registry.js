@@ -187,7 +187,8 @@ function _normalize_entry(entry) {
     requiredPermissions: Array.isArray(entry.requiredPermissions) ? entry.requiredPermissions.filter(
       (item) => typeof item === "string"
     ) : [],
-    group: entry.group !== void 0 ? entry.group : null
+    group: entry.group !== void 0 ? entry.group : null,
+    section: typeof entry.section === "string" ? entry.section : ""
   };
   return rtnval;
 }

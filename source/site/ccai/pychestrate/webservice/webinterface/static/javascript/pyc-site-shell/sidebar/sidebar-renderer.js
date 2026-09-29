@@ -183,7 +183,18 @@ class SidebarRenderer {
     const panel_list = document.createElement("ul");
     panel_list.classList.add("pyc-site-shell__sidebar-panel-list");
     let has_active_entry = false;
+    let current_section = "";
     for (const entry of entries) {
+      // A group can be split into sections (the Admin group has four):
+      // write the heading whenever the section changes.
+      const section = typeof entry.section === "string" ? entry.section : "";
+      if (section.length > 0 && section !== current_section) {
+        const heading = document.createElement("li");
+        heading.classList.add("pyc-site-shell__sidebar-section");
+        heading.textContent = section;
+        panel_list.appendChild(heading);
+      }
+      current_section = section;
       const entry_element = this._build_entry_element(
         entry.label,
         entry.route,
