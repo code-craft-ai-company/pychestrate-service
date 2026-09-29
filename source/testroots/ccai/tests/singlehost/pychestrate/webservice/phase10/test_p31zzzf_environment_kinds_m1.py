@@ -113,3 +113,31 @@ def test_the_route_returns_the_kinds_to_a_caller_who_may_read_environments():
 
     testbase.assert_equal(outcomes, [(200, ["k8s-cluster"]), (403, None)])
     return
+
+
+def test_the_rules_a_form_checks_are_the_rules_the_kind_enforces():
+    """
+    **Feature: registry-fed forms (ORC-17)**
+    **Property: the number field is described as a whole number of at least
+    zero, and the kind accepts the attribute shapes the form builds (required
+    fields only; everything filled, the number as a number and the tags as a
+    list) while refusing a fractional or negative count.**
+    """
+    reset_registry_for_testing()
+    register_builtin_extensions()
+    node_pools = next(field for field in environment_service.list_kinds()[0]["fields"] if field["name"] == "node_pool_count")
+    required_only = {"cluster_id": "prod-east-1", "region": "us-east-1", "api_endpoint": "https://k8s.example.test:6443"}
+    everything = dict(required_only, node_pool_count=3, capability_tags=["gpu", "arm64"])
+
+    def accepted(attrs: Dict[str, Any]) -> bool:
+        return K8sClusterEnvironmentKind.validate_attrs(attrs=attrs)[0]
+
+    testbase.assert_equal(
+        (
+            node_pools.get("integer"), node_pools.get("min"),
+            accepted(required_only), accepted(everything),
+            accepted(dict(required_only, node_pool_count=2.5)), accepted(dict(required_only, node_pool_count=-1)),
+        ),
+        (True, 0, True, True, False, False),
+    )
+    return

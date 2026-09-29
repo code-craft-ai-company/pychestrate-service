@@ -56,7 +56,7 @@ K8S = {
         {"name": "cluster_id", "label": "Cluster id", "type": "text", "required": True, "hint": "prod-east-1"},
         {"name": "region", "label": "Region", "type": "text", "required": True, "hint": "us-east-1"},
         {"name": "api_endpoint", "label": "API endpoint", "type": "url", "required": True, "hint": "https://k8s.example.com:6443"},
-        {"name": "node_pool_count", "label": "Node pools", "type": "number", "required": False, "hint": "0"},
+        {"name": "node_pool_count", "label": "Node pools", "type": "number", "required": False, "hint": "0", "integer": True, "min": 0},
         {"name": "capability_tags", "label": "Capability tags", "type": "tags", "required": False, "hint": "gpu, arm64"},
     ],
 }
@@ -217,5 +217,42 @@ def test_the_kind_fields_sit_on_their_own_row_at_a_readable_width(browser: Brows
             boxes["field_font"] == boxes["name_font"],
         ),
         (5, True, True, True, True),
+    )
+    return
+
+
+def test_a_count_the_kind_would_refuse_is_named_before_anything_is_sent(browser: Browser):
+    """
+    **Feature: registry-fed forms (ORC-17)**
+    **Property: a fractional or negative node-pool count shows "Node pools must
+    be a whole number." or "Node pools must be 0 or more." and sends no
+    request; a required-only registration sends just the three required
+    attributes (the optional ones are left out, not sent empty).**
+    """
+    page, posts = _open(browser, [K8S])
+    try:
+        _fill(page, "register-name", "prod-east")
+        _fill(page, "register-field-cluster_id", "prod-east-1")
+        _fill(page, "register-field-region", "us-east-1")
+        _fill(page, "register-field-api_endpoint", "https://k8s.example.test:6443")
+        messages = []
+        for value in ("2.5", "-1"):
+            _fill(page, "register-field-node_pool_count", value)
+            page.get_by_role("button", name="Register Environment").last.click()
+            page.wait_for_timeout(400)
+            messages.append(page.locator('[data-role="register-status"]').inner_text())
+        sent_before = len(posts)
+        _fill(page, "register-field-node_pool_count", "")
+        page.get_by_role("button", name="Register Environment").last.click()
+        page.wait_for_timeout(800)
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (messages, sent_before, [post["attrs"] for post in posts]),
+        (
+            ["Node pools must be a whole number.", "Node pools must be 0 or more."], 0,
+            [{"cluster_id": "prod-east-1", "region": "us-east-1", "api_endpoint": "https://k8s.example.test:6443"}],
+        ),
     )
     return

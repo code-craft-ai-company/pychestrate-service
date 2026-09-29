@@ -393,6 +393,12 @@ function build_attrs_from_fields(fields, values) {
       if (Number.isFinite(number) === false) {
         return { error: field.label + " must be a number." };
       }
+      if (field.integer === true && Number.isInteger(number) === false) {
+        return { error: field.label + " must be a whole number." };
+      }
+      if (typeof field.min === "number" && number < field.min) {
+        return { error: field.label + " must be " + field.min + " or more." };
+      }
       attrs[field.name] = number;
     } else if (field.type === "tags") {
       attrs[field.name] = raw.split(",").map((part) => part.trim()).filter((part) => part.length > 0);

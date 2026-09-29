@@ -204,6 +204,9 @@ preview tag.
   JSON. A kind describes its fields with an optional `attribute_fields()`
   on the kind protocol; a kind that does not still works through a typed
   kind and a JSON box, whose placeholders are now `kind name` and `{}`.
+  A number field can say it must be a whole number of at least some
+  minimum (`integer`, `min`), and the form then names a value the kind would
+  refuse before sending it.
   `GET /api/v1/environment-kinds` lists the kinds and fields (read
   permission on environments). The release-channel, pipeline, SLO and guard
   forms still carry placeholder text of their own; those are not changed

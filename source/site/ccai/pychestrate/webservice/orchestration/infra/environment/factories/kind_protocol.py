@@ -52,9 +52,11 @@ class EnvironmentKindProtocol(FactoryProtocolBase):
         """
             The attributes this kind takes, for a form to offer (ORC-17). Each
             entry is ``{"name", "label", "type", "required", "hint"}`` with
-            ``type`` one of ``text``, ``url``, ``number`` or ``tags``. A kind that
-            does not describe its attributes returns ``[]`` and the form falls
-            back to a JSON box.
+            ``type`` one of ``text``, ``url``, ``number`` or ``tags``. A ``number``
+            may add ``"integer": True`` and ``"min": <number>`` so the form can
+            refuse a value the kind would reject before it sends anything. A
+            kind that does not describe its attributes returns ``[]`` and the
+            form falls back to a JSON box.
         """
         return []
 
