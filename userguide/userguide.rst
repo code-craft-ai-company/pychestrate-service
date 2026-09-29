@@ -38,6 +38,8 @@ Operating Pychestrate
 * `Deploying Pychestrate <13-00-alpha-deployment.rst>`_ -- the operator
   runbook: Postgres, secrets, gunicorn, TLS, the first administrator,
   and smoke tests.
+* `Environment Variable Reference <21-00-environment-reference.rst>`_ --
+  every variable the service reads, its default, and what it changes.
 
 
 Extending Pychestrate
@@ -86,6 +88,7 @@ root. The standards and internals it refers to:
    :caption: Operating Pychestrate
 
    13-00-alpha-deployment
+   21-00-environment-reference
 
 .. toctree::
    :hidden:

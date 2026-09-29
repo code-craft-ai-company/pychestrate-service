@@ -159,6 +159,15 @@ preview tag.
   sets its own Content-Security-Policy so its search worker runs and
   nothing loads from another host.
 
+- **An environment variable reference.** `userguide/21-00-environment-reference.rst`
+  lists every `PYCHESTRATE_*` variable the service and its scripts read,
+  with its default and what it changes: state directories, the server
+  process, the five key materials, the presign and embed secrets,
+  monitoring, and the test-mode variables. A test compares the page with
+  the variables the code reads, so one cannot be added or removed
+  without the page changing. It replaces a gap the audit measured: 21
+  of 47 variables had no description anywhere.
+
 ### Changed
 
 - **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`

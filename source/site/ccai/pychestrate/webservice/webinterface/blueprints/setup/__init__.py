@@ -8,7 +8,7 @@
 The setup blueprint serves the two pages of the wizard:
 
 * ``GET/POST /setup/unlock`` -- paste the token from
-  ``${PYCHESTRATE_RUNTIME_DIR}/initial-admin-token``.
+  ``${PYCHESTRATE_PRESENCE_DIR}/initial-admin-token``.
 * ``GET/POST /setup/admin`` -- choose login + email + password for
   the first administrator.
 

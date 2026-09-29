@@ -174,7 +174,9 @@ for example ``/etc/pychestrate/pychestrate.env``;
 
     PYTHONUNBUFFERED=1
 
-The variables, by group:
+The variables, by group. The `Environment Variable Reference
+<21-00-environment-reference.rst>`_ lists every variable the service
+reads, including the ones a production installation does not need:
 
 ``PYCHESTRATE_RUNTIME_ENVIRONMENT``
     ``production``, ``staging``, ``testing``, or ``development``;
