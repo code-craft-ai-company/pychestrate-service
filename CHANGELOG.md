@@ -542,6 +542,15 @@ preview tag.
 
 ### Fixed
 
+- Every form control on a bundle page has an accessible name (ORC-42). Six
+  text fields had none: the pipeline document and matrix spec, the new
+  resource pool's name, description and capability tags, and the webhooks
+  page's project id (`mj-text-field` and `mj-textarea` take their name only
+  from their own `label`, not from a wrapping label or a host `aria-label`).
+  They are labelled with the component's `label`, so the visible text is the
+  same and a screen reader now announces it. On the 26 navigation pages that
+  have form controls, 56 controls were read and none is unnamed.
+
 - The two native checkboxes in the bundle views follow the theme (ORC-48): the
   test catalog's "Include retired" and the alert-rule editor's "Enabled" use
   the theme's accent colour and an 18px box instead of the browser's default

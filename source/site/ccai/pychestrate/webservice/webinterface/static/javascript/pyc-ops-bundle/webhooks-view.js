@@ -313,6 +313,7 @@ class PycWebhooks extends HTMLElement {
     project_input.classList.add("pyc-ops__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-input");
     project_input.addEventListener("change", () => {
       this._projectId = project_input.value.trim();

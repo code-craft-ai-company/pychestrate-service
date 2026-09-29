@@ -342,10 +342,10 @@ class PycPipelinesList extends HTMLElement {
     filename_label.appendChild(filename_input);
     fields.appendChild(filename_label);
     form.appendChild(fields);
-    const document_label = document.createElement("label");
+    const document_label = document.createElement("div");
     document_label.classList.add("pyc-pipelines__field", "pyc-pipelines__field--wide");
-    document_label.textContent = "Pipeline document (YAML / JSON)";
     const document_area = document.createElement("mj-textarea");
+    document_area.setAttribute("label", "Pipeline document (YAML / JSON)");
     document_area.classList.add("pyc-pipelines__textarea");
     document_area.setAttribute("data-role", "upsert-document");
     document_area.setAttribute(
@@ -406,10 +406,10 @@ class PycPipelinesList extends HTMLElement {
     heading.classList.add("pyc-pipelines__panel-heading");
     heading.textContent = "Matrix Expand Preview";
     panel.appendChild(heading);
-    const matrix_label = document.createElement("label");
+    const matrix_label = document.createElement("div");
     matrix_label.classList.add("pyc-pipelines__field", "pyc-pipelines__field--wide");
-    matrix_label.textContent = "Matrix spec (JSON)";
     const matrix_area = document.createElement("mj-textarea");
+    matrix_area.setAttribute("label", "Matrix spec (JSON)");
     matrix_area.classList.add("pyc-pipelines__textarea");
     matrix_area.setAttribute("data-role", "matrix-spec");
     matrix_area.setAttribute(
