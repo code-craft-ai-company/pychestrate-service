@@ -1,4 +1,6 @@
+import { may } from "../shared/permissions.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
+import { keep_list_state_on_back, mirror_to_query, query_value } from "../shared/view-state.js";
 import {
   build_chart_element,
   build_timeseries_url
@@ -20,6 +22,24 @@ function build_dashboards_collection_url(project_id) {
 }
 function build_dashboard_detail_url(project_id, dashboard_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/dashboards/" + encodeURIComponent(dashboard_id);
+  return rtnval;
+}
+const DASHBOARDS_WRITE_PERMISSION = "system:dashboards.write";
+// A dashboard belongs to one project, so its address carries that project
+// (the list, the detail page and the editor all read it back).
+function dashboard_href(dashboard_id, project_id, suffix) {
+  const path = DASHBOARDS_ROUTE + "/" + encodeURIComponent(dashboard_id) + (typeof suffix === "string" ? suffix : "");
+  const rtnval = typeof project_id === "string" && project_id.length > 0 ? path + "?project_id=" + encodeURIComponent(project_id) : path;
+  return rtnval;
+}
+// The project a dashboard page is about: the one in the address, else (for
+// an older link without it) the first project the viewer can see.
+function project_id_for_page(projects) {
+  const wanted = query_value("project_id");
+  if (wanted.length > 0) {
+    return wanted;
+  }
+  const rtnval = projects.length > 0 ? projects[0].project_id : "";
   return rtnval;
 }
 function dashboard_id_from_path(path) {
@@ -162,6 +182,7 @@ class PycDashboardsList extends HTMLElement {
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
       this._state.projectId = project_select.value;
+      mirror_to_query({ project_id: this._state.projectId });
       void this._refresh();
     });
     project_label.appendChild(project_select);
@@ -174,6 +195,7 @@ class PycDashboardsList extends HTMLElement {
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
       this._state.projectId = project_input.value.trim();
+      mirror_to_query({ project_id: this._state.projectId });
       void this._refresh();
     });
     controls.appendChild(project_input);
@@ -186,6 +208,9 @@ class PycDashboardsList extends HTMLElement {
       this._toggle_create_form();
     });
     controls.appendChild(create_button);
+    void may(DASHBOARDS_WRITE_PERMISSION).then((allowed) => {
+      create_button.hidden = allowed === false;
+    });
     root.appendChild(controls);
     const projects_notice = document.createElement("p");
     projects_notice.classList.add("pyc-metrics__projects-notice");
@@ -249,7 +274,9 @@ class PycDashboardsList extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      const wanted = query_value("project_id");
+      this._state.projectId = projects.some((project) => project.project_id === wanted) ? wanted : projects[0].project_id;
+      mirror_to_query({ project_id: this._state.projectId });
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -464,10 +491,7 @@ class PycDashboardsList extends HTMLElement {
         render: (dashboard) => {
           const link = document.createElement("a");
           link.classList.add("pyc-metrics__row-link");
-          link.setAttribute(
-            "href",
-            DASHBOARDS_ROUTE + "/" + encodeURIComponent(dashboard.dashboard_id)
-          );
+          link.setAttribute("href", dashboard_href(dashboard.dashboard_id, this._state.projectId));
           link.textContent = dashboard.name;
           return link;
         }
@@ -653,6 +677,8 @@ class PycDashboardDetail extends HTMLElement {
   _errorStatus;
   _root;
   _tiles_region;
+  _projectId;
+  _actions_region;
   constructor() {
     super();
     this._projects = [];
@@ -662,6 +688,8 @@ class PycDashboardDetail extends HTMLElement {
     this._errorStatus = 0;
     this._root = null;
     this._tiles_region = null;
+    this._projectId = "";
+    this._actions_region = null;
   }
   /**
    * Diagnostic accessor used by unit tests.
@@ -690,8 +718,15 @@ class PycDashboardDetail extends HTMLElement {
     const back = document.createElement("a");
     back.classList.add("pyc-metrics__row-link");
     back.setAttribute("href", DASHBOARDS_ROUTE);
+    back.setAttribute("data-role", "back-link");
     back.textContent = "\u2190 All dashboards";
+    keep_list_state_on_back(back, DASHBOARDS_ROUTE);
     root.appendChild(back);
+    const actions_region = document.createElement("div");
+    actions_region.classList.add("pyc-metrics__controls");
+    actions_region.setAttribute("data-role", "detail-actions");
+    root.appendChild(actions_region);
+    this._actions_region = actions_region;
     const tiles_region = document.createElement("div");
     tiles_region.classList.add("pyc-metrics__tiles-region");
     tiles_region.setAttribute("data-role", "tiles-region");
@@ -718,31 +753,32 @@ class PycDashboardDetail extends HTMLElement {
       this._render_tiles();
       return;
     }
-    let project_id = "";
-    try {
-      const response = await fetch(PROJECTS_LIST_URL, {
-        method: "GET",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" }
-      });
-      if (response.ok === true) {
-        const body = await response.json();
-        this._projects = extract_projects(body);
-        if (this._projects.length > 0) {
-          project_id = this._projects[0].project_id;
+    let project_id = query_value("project_id");
+    if (project_id.length === 0) {
+      try {
+        const response = await fetch(PROJECTS_LIST_URL, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        });
+        if (response.ok === true) {
+          const body = await response.json();
+          this._projects = extract_projects(body);
+          project_id = project_id_for_page(this._projects);
         }
+      } catch (reason) {
+        console.warn(
+          "pychestrate.ui.metrics.projects_fetch_failed",
+          { reason: String(reason) }
+        );
       }
-    } catch (reason) {
-      console.warn(
-        "pychestrate.ui.metrics.projects_fetch_failed",
-        { reason: String(reason) }
-      );
     }
     if (project_id.length === 0) {
       this._errored = true;
       this._render_tiles();
       return;
     }
+    this._projectId = project_id;
     this._loading = true;
     this._render_tiles();
     let dashboard = null;
@@ -778,6 +814,32 @@ class PycDashboardDetail extends HTMLElement {
     this._errorStatus = error_status;
     this._dashboard = dashboard;
     this._render_tiles();
+    await this._render_actions();
+    return;
+  }
+  /*
+   * "Edit layout" for a viewer who may change dashboards, and a "back" link that
+   * returns to the project's list (ORC-16: the editor had no way in).
+   */
+  async _render_actions() {
+    if (this._actions_region === null || this._root === null || this._dashboard === null) {
+      return;
+    }
+    const back = this._root.querySelector('[data-role="back-link"]');
+    if (back instanceof HTMLAnchorElement) {
+      back.setAttribute("href", DASHBOARDS_ROUTE + "?project_id=" + encodeURIComponent(this._projectId));
+    }
+    const allowed = await may(DASHBOARDS_WRITE_PERMISSION);
+    if (allowed === false) {
+      this._actions_region.replaceChildren();
+      return;
+    }
+    const edit = document.createElement("a");
+    edit.classList.add("pyc-metrics__row-link");
+    edit.setAttribute("data-role", "edit-layout");
+    edit.setAttribute("href", dashboard_href(this._dashboard.dashboard_id, this._projectId, "/edit"));
+    edit.textContent = "Edit layout";
+    this._actions_region.replaceChildren(edit);
     return;
   }
   _render_tiles() {
@@ -953,13 +1015,16 @@ function extract_dashboards(body) {
 }
 export {
   DASHBOARDS_ROUTE,
+  DASHBOARDS_WRITE_PERMISSION,
   PycDashboardDetail,
   PycDashboardsList,
   build_dashboard_detail_url,
   build_dashboards_collection_url,
   create_message_for_status,
+  dashboard_href,
   dashboard_id_from_path,
   extract_dashboards,
+  project_id_for_page,
   short_metric_id,
   tile_metric_name
 };

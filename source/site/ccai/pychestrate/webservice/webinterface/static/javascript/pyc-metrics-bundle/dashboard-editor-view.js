@@ -7,8 +7,13 @@ import {
 } from "./test-metrics-view.js";
 import {
   build_dashboard_detail_url,
-  DASHBOARDS_ROUTE
+  dashboard_href,
+  DASHBOARDS_ROUTE,
+  DASHBOARDS_WRITE_PERMISSION,
+  project_id_for_page
 } from "./dashboards-view.js";
+import { may } from "../shared/permissions.js";
+import { query_value } from "../shared/view-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -222,6 +227,10 @@ class PycDashboardEditor extends HTMLElement {
   _grid_region;
   _add_region;
   _toast_region;
+  _saved_json;
+  _can_write;
+  _save_button;
+  _on_before_unload;
   constructor() {
     super();
     this._projects = [];
@@ -235,6 +244,16 @@ class PycDashboardEditor extends HTMLElement {
     this._grid_region = null;
     this._add_region = null;
     this._toast_region = null;
+    this._saved_json = "";
+    this._can_write = true;
+    this._save_button = null;
+    // Leaving with unsaved tiles asks first (the page reloads on navigation).
+    this._on_before_unload = (event) => {
+      if (this._is_dirty() === true) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
   }
   /**
    * Diagnostic accessor used by unit tests -- the current tile
@@ -258,8 +277,35 @@ class PycDashboardEditor extends HTMLElement {
    */
   connectedCallback() {
     this._render_chrome();
+    window.addEventListener("beforeunload", this._on_before_unload);
     void this._load_catalog();
     void this._load_dashboard();
+    return;
+  }
+  disconnectedCallback() {
+    window.removeEventListener("beforeunload", this._on_before_unload);
+    return;
+  }
+  /*
+   * The layout as it would be saved, and whether it differs from the last
+   * layout loaded or saved.
+   */
+  _tiles_json() {
+    const rtnval = JSON.stringify(build_save_payload(this._dashboard !== null ? this._dashboard : {}, this._tiles).tiles);
+    return rtnval;
+  }
+  _is_dirty() {
+    const rtnval = this._dashboard !== null && this._tiles_json() !== this._saved_json;
+    return rtnval;
+  }
+  /* Save is offered only when there is something to save (ORC-16). */
+  _sync_save_button() {
+    if (this._save_button === null) {
+      return;
+    }
+    const dirty = this._is_dirty();
+    this._save_button.toggleAttribute("disabled", dirty === false || this._can_write === false);
+    this._save_button.setAttribute("title", dirty === true ? "" : "No changes to save");
     return;
   }
   _render_chrome() {
@@ -276,6 +322,13 @@ class PycDashboardEditor extends HTMLElement {
     back.setAttribute("href", DASHBOARDS_ROUTE);
     back.textContent = "\u2190 All dashboards";
     root.appendChild(back);
+    const to_dashboard = document.createElement("a");
+    to_dashboard.classList.add("pyc-metrics__row-link");
+    to_dashboard.setAttribute("data-role", "dashboard-link");
+    to_dashboard.setAttribute("href", DASHBOARDS_ROUTE);
+    to_dashboard.textContent = "\u2190 Back to this dashboard";
+    to_dashboard.hidden = true;
+    root.appendChild(to_dashboard);
     const add_region = document.createElement("div");
     add_region.classList.add("pyc-metrics__form-region");
     add_region.setAttribute("data-role", "add-region");
@@ -342,25 +395,25 @@ class PycDashboardEditor extends HTMLElement {
       this._render_grid();
       return;
     }
-    let project_id = "";
-    try {
-      const response = await fetch(PROJECTS_LIST_URL, {
-        method: "GET",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" }
-      });
-      if (response.ok === true) {
-        const body = await response.json();
-        this._projects = extract_projects(body);
-        if (this._projects.length > 0) {
-          project_id = this._projects[0].project_id;
+    let project_id = query_value("project_id");
+    if (project_id.length === 0) {
+      try {
+        const response = await fetch(PROJECTS_LIST_URL, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        });
+        if (response.ok === true) {
+          const body = await response.json();
+          this._projects = extract_projects(body);
+          project_id = project_id_for_page(this._projects);
         }
+      } catch (reason) {
+        console.warn(
+          "pychestrate.ui.metrics.editor_projects_fetch_failed",
+          { reason: String(reason) }
+        );
       }
-    } catch (reason) {
-      console.warn(
-        "pychestrate.ui.metrics.editor_projects_fetch_failed",
-        { reason: String(reason) }
-      );
     }
     if (project_id.length === 0) {
       this._errored = true;
@@ -368,6 +421,7 @@ class PycDashboardEditor extends HTMLElement {
       return;
     }
     this._projectId = project_id;
+    this._point_links_at(dashboard_id);
     this._loading = true;
     this._render_grid();
     let dashboard = null;
@@ -400,8 +454,26 @@ class PycDashboardEditor extends HTMLElement {
     } else {
       this._tiles = [];
     }
+    this._saved_json = this._tiles_json();
+    this._can_write = await may(DASHBOARDS_WRITE_PERMISSION);
     this._render_grid();
     this._render_add_region();
+    return;
+  }
+  /* Both links back keep the project this dashboard belongs to. */
+  _point_links_at(dashboard_id) {
+    if (this._root === null) {
+      return;
+    }
+    const all = this._root.querySelector('[data-role="back-link"]');
+    if (all !== null) {
+      all.setAttribute("href", DASHBOARDS_ROUTE + "?project_id=" + encodeURIComponent(this._projectId));
+    }
+    const one = this._root.querySelector('[data-role="dashboard-link"]');
+    if (one !== null) {
+      one.setAttribute("href", dashboard_href(dashboard_id, this._projectId));
+      one.hidden = false;
+    }
     return;
   }
   /**
@@ -456,6 +528,14 @@ class PycDashboardEditor extends HTMLElement {
     const region = this._add_region;
     region.replaceChildren();
     if (this._dashboard === null) {
+      return;
+    }
+    if (this._can_write === false) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "read-only-notice");
+      notice.textContent = "You can view this layout but not change it. Ask an administrator for dashboard write access.";
+      region.appendChild(notice);
       return;
     }
     const form = document.createElement("form");
@@ -514,6 +594,7 @@ class PycDashboardEditor extends HTMLElement {
       void this._on_save(save_button);
     });
     form.appendChild(save_button);
+    this._save_button = save_button;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const metric = metric_select.value.trim();
@@ -524,9 +605,15 @@ class PycDashboardEditor extends HTMLElement {
       this.addTile(metric, kind_select.value);
     });
     region.appendChild(form);
+    this._sync_save_button();
     return;
   }
   _render_grid() {
+    this._render_grid_body();
+    this._sync_save_button();
+    return;
+  }
+  _render_grid_body() {
     if (this._grid_region === null || this._root === null) {
       return;
     }
@@ -625,7 +712,7 @@ class PycDashboardEditor extends HTMLElement {
   }
   async _on_save(button) {
     const outcome = await this._do_save();
-    button.toggleAttribute("disabled", false);
+    this._sync_save_button();
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
@@ -633,10 +720,7 @@ class PycDashboardEditor extends HTMLElement {
     if (outcome.ok === true && outcome.dashboardId.length > 0) {
       const link = document.createElement("a");
       link.classList.add("pyc-metrics__row-link");
-      link.setAttribute(
-        "href",
-        DASHBOARDS_ROUTE + "/" + encodeURIComponent(outcome.dashboardId)
-      );
+      link.setAttribute("href", dashboard_href(outcome.dashboardId, this._projectId));
       link.textContent = "Open the saved dashboard \u2192";
       if (this._toast_region !== null) {
         this._toast_region.appendChild(link);
@@ -717,6 +801,9 @@ class PycDashboardEditor extends HTMLElement {
       return rtnval2;
     }
     const ok = status === 200 || status === 201;
+    if (ok === true) {
+      this._saved_json = this._tiles_json();
+    }
     const rtnval = {
       ok,
       status,

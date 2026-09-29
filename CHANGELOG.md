@@ -194,6 +194,23 @@ preview tag.
 
 ### Changed
 
+- Dashboards keep their project, the layout editor can be reached, and Save
+  follows the changes (ORC-16, ORC-33). The dashboards list chose a project
+  but the detail page and the editor always loaded from the first one, so a
+  dashboard in any other project answered "not found". The project is now in
+  the address (`?project_id=`) of the list, of every link to a dashboard, and
+  of the detail page and editor; an older link without it still falls back to
+  the first project. The detail page offers "Edit layout" (the editor had no
+  link at all) and the editor links back to the dashboard. Save is enabled
+  only when the tiles differ from the last saved layout, and leaving the
+  editor with unsaved tiles asks first. Views can now leave out an action the
+  viewer's permissions rule out: `shared/permissions.js` (`may`) reads
+  `/api/v1/me/permissions` once per page and says yes when it cannot be read,
+  since the server still decides. The dashboards views use it for "Create
+  Dashboard" and "Edit layout", and the editor shows why it cannot be used
+  instead of a form that cannot be saved. The other bundle views still show
+  every action.
+
 - Registering an environment offers the kinds that exist and their fields
   (ORC-17). The form asked for a kind name whose placeholder named a kind
   that does not exist (`terraform`) and a JSON object whose example was
