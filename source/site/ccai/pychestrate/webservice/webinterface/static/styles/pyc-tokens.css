@@ -129,6 +129,11 @@
 }
 
 [data-theme="dark"] {
+    /* Text on the accent: the mj pack keeps it white, which is 3.55:1 on the
+       dark theme's light accent (#4d83f7); the page's own dark is 5.4:1
+       (axe color-contrast on every primary mj-button, XC-05). */
+    --mj-text-on-accent: var(--pyc-color-app-bg);
+
     /* ---- Surfaces and text ---- */
     --pyc-color-app-bg: #14181f;
     --pyc-color-surface: #232934;
@@ -219,7 +224,7 @@
  */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
-        --mj-text-on-accent: #ffffff;
+        --mj-text-on-accent: var(--pyc-color-app-bg);
         --mj-accent-hover: var(--mj-color-accent-300);
         --mj-accent-active: var(--mj-color-accent-200);
 

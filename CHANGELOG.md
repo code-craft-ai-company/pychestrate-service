@@ -542,6 +542,13 @@ preview tag.
 
 ### Fixed
 
+- Primary buttons in the bundle views are readable in the dark theme (WCAG
+  1.4.3). The mj token pack keeps the text on the accent white, which is 3.55:1
+  on the dark theme's light-blue accent (below the 4.5:1 AA asks for at 14px);
+  axe flagged every primary `mj-button` (Save, Upsert, Add) in the dark theme.
+  The text on the accent is now the page's own dark in both dark cases (the
+  explicit choice and the OS preference); the light theme is unchanged.
+
 - The Enrollment Tokens page no longer skips a heading level (WCAG 1.3.1): "Mint
   New Token" was an h3 straight under the page's h1. A test reads the headings
   of every server-rendered template, full and empty, and fails on a skipped level.
