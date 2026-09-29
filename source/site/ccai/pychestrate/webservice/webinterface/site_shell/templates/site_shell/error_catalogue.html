@@ -37,7 +37,7 @@
             {% for item in problem_types %}
             <tr>
                 <td>{% if item.status %}{{ item.status }}{% else %}&mdash;{% endif %}</td>
-                <td><a href="{{ item.type }}">{{ item.slug }}</a></td>
+                <td><a href="/errors/{{ item.slug }}">{{ item.slug }}</a></td>
                 <td>{{ item.title }}</td>
             </tr>
             {% endfor %}

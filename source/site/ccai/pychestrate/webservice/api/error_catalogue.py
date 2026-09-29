@@ -34,6 +34,7 @@ from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_TYPES,
     ProblemTypeInfo,
     problem_type_info,
+    resolve_problem_type,
 )
 from ccai.pychestrate.webservice.api.problem_json_webworks import problem_response_for_http_status
 from ccai.pychestrate.webservice.webinterface.foundation.templating import render_template_response
@@ -63,18 +64,37 @@ def _entry_dict(*, entry: ProblemTypeInfo) -> Dict[str, Any]:
         One catalogue entry as JSON-friendly data, with its address.
     """
     rtnval = asdict(entry)
-    rtnval["type"] = PROBLEM_TYPE_BASE_URL + entry.slug
+    rtnval["type"] = resolve_problem_type(PROBLEM_TYPE_BASE_URL + entry.slug)
     return rtnval
+
+
+def index_context(*, unknown_slug: str = "") -> Dict[str, Any]:
+    """
+        The context of the index page. Every variable the template reads is
+        always present (production renders with a strict environment).
+
+        :param unknown_slug: The slug that was asked for and does not exist.
+    """
+    return {"problem_types": [_entry_dict(entry=entry) for entry in PROBLEM_TYPES], "unknown_slug": unknown_slug}
+
+
+def type_context(*, entry: ProblemTypeInfo) -> Dict[str, Any]:
+    """
+        The context of one type's page.
+
+        :param entry: The type.
+    """
+    return {"problem_type": _entry_dict(entry=entry)}
 
 
 def handle_error_index(request: Request) -> Response:
     """
         ``GET /errors``: every documented problem type.
     """
-    entries = [_entry_dict(entry=entry) for entry in PROBLEM_TYPES]
+    context = index_context()
     if _wants_json(request=request):
-        return JSONResponse({"types": entries})
-    return render_template_response(template_name=INDEX_TEMPLATE, context={"problem_types": entries})
+        return JSONResponse({"types": context["problem_types"]})
+    return render_template_response(template_name=INDEX_TEMPLATE, context=context)
 
 
 def handle_error_type(request: Request) -> Response:
@@ -89,13 +109,11 @@ def handle_error_type(request: Request) -> Response:
                 status=404, detail="There is no problem type '{}'.".format(slug), instance=request.path,
             )
         return render_template_response(
-            template_name=INDEX_TEMPLATE,
-            context={"problem_types": [_entry_dict(entry=item) for item in PROBLEM_TYPES], "unknown_slug": slug},
-            status_code=404,
+            template_name=INDEX_TEMPLATE, context=index_context(unknown_slug=slug), status_code=404,
         )
     if _wants_json(request=request):
         return JSONResponse(_entry_dict(entry=entry))
-    return render_template_response(template_name=TYPE_TEMPLATE, context={"problem_type": _entry_dict(entry=entry)})
+    return render_template_response(template_name=TYPE_TEMPLATE, context=type_context(entry=entry))
 
 
 def register_error_catalogue_routes(*, app: Any) -> None:
@@ -114,6 +132,8 @@ def register_error_catalogue_routes(*, app: Any) -> None:
 
 __all__ = [
     "CATALOGUE_PATH",
+    "index_context",
+    "type_context",
     "handle_error_index",
     "handle_error_type",
     "register_error_catalogue_routes",

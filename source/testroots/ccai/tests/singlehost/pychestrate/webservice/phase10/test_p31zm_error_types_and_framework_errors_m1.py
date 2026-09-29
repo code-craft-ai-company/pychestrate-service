@@ -131,6 +131,44 @@ def _page(*, slug: Optional[str] = None, accept: str = "text/html") -> Any:
     )
 
 
+def test_the_pages_render_in_the_strict_environment_production_uses():
+    """
+    **Feature: error types (DOC-14)**
+    **Property: the index (with and without an unknown slug) and a type page
+    render from the contexts the handlers build, in the strict Jinja
+    environment the service runs with -- the lenient test environment once
+    let an undefined variable through and staging answered 500.**
+    """
+    from ccai.tests.singlehost.pychestrate.webservice.phase13._template_harness import strict_environment
+
+    environment = strict_environment()
+    rendered = [
+        environment.get_template(error_catalogue.INDEX_TEMPLATE).render(error_catalogue.index_context()),
+        environment.get_template(error_catalogue.INDEX_TEMPLATE).render(error_catalogue.index_context(unknown_slug="nope")),
+        environment.get_template(error_catalogue.TYPE_TEMPLATE).render(error_catalogue.type_context(entry=PROBLEM_TYPES[0])),
+    ]
+
+    testbase.assert_equal(
+        ("nope" in rendered[1], "nope" in rendered[0], PROBLEM_TYPES[0].title in rendered[2]),
+        (True, False, True),
+    )
+    return
+
+
+def test_the_json_entry_names_its_type_the_way_a_response_does():
+    """
+    **Feature: error types (DOC-14)**
+    **Property: with a public base URL configured, the ``type`` in the JSON
+    of an entry is the same absolute URL a response of that type carries.**
+    """
+    with _PublicBase("https://pyc.example.com"):
+        entry = json.loads(_page(slug="conflict", accept="application/json").body)
+        response_type = problem_for_http_status(status=409, detail="x").body["type"]
+
+    testbase.assert_equal((entry["type"], response_type), ("https://pyc.example.com/errors/conflict",) * 2)
+    return
+
+
 def test_each_type_has_a_page_that_says_what_it_means_and_what_to_do():
     """
     **Feature: error types (DOC-14)**
