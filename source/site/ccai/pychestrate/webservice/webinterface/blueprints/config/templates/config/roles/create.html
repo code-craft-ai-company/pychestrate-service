@@ -9,7 +9,7 @@
     <p>Add a new role with specific permissions</p>
 </div>
 
-<div class="card narrow">
+<div class="card">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {{ ui.error_summary(errors, error_labels) }}
@@ -29,17 +29,8 @@
         {% if permissions %}
         <div class="form-group">
             <label id="permission_keys-label">Permissions</label>
-            <div class="scroll-box" id="permission_keys" role="group" aria-labelledby="permission_keys-label"{% if errors and 'permission_keys' in errors %} aria-describedby="permission_keys-error"{% endif %} tabindex="-1">
-                {% for permission in permissions %}
-                <div class="my-sm">
-                    <label class="regular">
-                        <input type="checkbox" name="permission_keys" value="{{ permission.id }}"
-                               {% if form_data and permission.id in form_data.getlist('permission_keys') %}checked{% endif %}>
-                        {{ permission.name }}
-                        {% if permission.description %}<span class="muted"> - {{ permission.description }}</span>{% endif %}
-                    </label>
-                </div>
-                {% endfor %}
+            <div id="permission_keys" role="group" aria-labelledby="permission_keys-label"{% if errors and 'permission_keys' in errors %} aria-describedby="permission_keys-error"{% endif %} tabindex="-1">
+                {{ ui.permission_picker(permissions, form_data.getlist('permission_keys') if form_data else []) }}
             </div>
             {{ ui.field_error(errors, 'permission_keys') }}
         </div>
@@ -53,4 +44,5 @@
         </div>
     </form>
 </div>
+{% include "site_shell/_permission_filter.html" %}
 {% endblock %}

@@ -1,0 +1,54 @@
+{#-
+    Filter box and selected count for ``ui.permission_picker`` (audit ADM-06).
+    Include once per page, after the form. Without script every permission
+    stays visible and selectable.
+-#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var picker = document.querySelector("[data-role='permission-picker']");
+    if (picker === null) {
+        return;
+    }
+    var filter = picker.querySelector("[data-role='permission-filter']");
+    var count = picker.querySelector("[data-role='permission-count']");
+    var none = picker.querySelector("[data-role='permission-none']");
+    var groups = picker.querySelectorAll("[data-permission-group]");
+    var boxes = picker.querySelectorAll("input[type='checkbox']");
+
+    function refreshCount() {
+        var selected = 0;
+        for (var b = 0; b < boxes.length; b++) {
+            if (boxes[b].checked) {
+                selected++;
+            }
+        }
+        count.textContent = selected + " of " + boxes.length + " selected";
+    }
+
+    function applyFilter() {
+        var words = filter.value.toLowerCase().split(/\s+/).filter(function (word) { return word.length > 0; });
+        var visibleGroups = 0;
+        for (var g = 0; g < groups.length; g++) {
+            var rows = groups[g].querySelectorAll("[data-permission-text]");
+            var shown = 0;
+            for (var r = 0; r < rows.length; r++) {
+                var text = rows[r].getAttribute("data-permission-text");
+                var match = words.every(function (word) { return text.indexOf(word) >= 0; });
+                rows[r].hidden = !match;
+                if (match) {
+                    shown++;
+                }
+            }
+            groups[g].hidden = shown === 0;
+            if (shown > 0) {
+                visibleGroups++;
+            }
+        }
+        none.hidden = visibleGroups > 0;
+    }
+
+    filter.addEventListener("input", applyFilter);
+    picker.addEventListener("change", refreshCount);
+    refreshCount();
+})();
+</script>

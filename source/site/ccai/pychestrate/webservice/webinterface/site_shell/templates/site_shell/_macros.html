@@ -241,6 +241,35 @@
 <button type="submit" class="{{ class }}">{% if icon_name %}{{ icon(icon_name) }} {% endif %}{{ label }}</button>
 {%- endmacro %}
 
+{#- permission_picker(permissions, selected=[]) -- the permission checkboxes of a
+    role form, grouped by product area with plain names and a filter box
+    (audit ADM-06). The checkbox value is still the canonical key. Include
+    ``site_shell/_permission_filter.html`` once after the form for the filter
+    and the selected count. -#}
+{% macro permission_picker(permissions, selected=[]) -%}
+<div class="pyc-permissions" data-role="permission-picker">
+    <div class="pyc-permissions__toolbar">
+        <input type="search" class="form-control w-md" data-role="permission-filter" placeholder="Filter, for example builds or secrets" aria-label="Filter permissions">
+        <span class="muted" data-role="permission-count" role="status" aria-live="polite"></span>
+    </div>
+    <div class="pyc-permissions__groups">
+    {%- for group in permissions | permission_groups %}
+        <fieldset class="pyc-permissions__group" data-permission-group>
+            <legend>{{ group.label }}</legend>
+            {%- for item in group["items"] %}
+            <label class="pyc-permissions__item regular" title="{{ item.permission.name }}" data-permission-text="{{ (group.label ~ ' ' ~ item.label ~ ' ' ~ item.description ~ ' ' ~ item.permission.name) | lower }}">
+                <input type="checkbox" name="permission_keys" value="{{ item.permission.id }}"{% if item.permission.id in selected %} checked{% endif %}>
+                <span class="pyc-permissions__name">{{ item.label }}</span>
+                {%- if item.description %}<span class="muted pyc-permissions__description">{{ item.description }}</span>{% endif %}
+            </label>
+            {%- endfor %}
+        </fieldset>
+    {%- endfor %}
+    </div>
+    <p class="muted" data-role="permission-none" hidden>No permission matches the filter.</p>
+</div>
+{%- endmacro %}
+
 {#- log_viewer(text, running=False, filename="log.txt", refresh_seconds=10, waiting=False)
     -- shared log output with a Follow toggle, Copy, Download, and
     live refresh while the job runs (chrome/log-viewer.js). Replaces

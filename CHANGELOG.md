@@ -341,6 +341,16 @@ preview tag.
   extension). The boxed Refresh buttons, the header pattern shared with other
   pages and plain-language names for each health check are not done.
 
+- Roles are built by product area, not from 73 raw keys (ADM-06). The role
+  forms listed every permission key in one scroll box, 52 of them described as
+  "... via the REST surface". They now group the keys into fewer than 45 areas
+  ("Builds", "Resource pools", "Project secrets" ...), name what each allows
+  ("View", "Start", "Change", "Administer", "Members · manage"), drop the
+  implementation wording from the descriptions, and have a filter box and an
+  "N of 73 selected" count; the checkbox value is still the canonical key (shown
+  on hover) and the role page groups the same way. Presets, cloning a role, a
+  list of who holds it and a preview of the menu a role unlocks are not done.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

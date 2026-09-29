@@ -125,7 +125,11 @@ Users, roles, and permissions
     ``system:users.read``), granted through system roles such as
     ``system-admin`` and ``auditor``. Project roles decide what members
     may do inside a project. Security-relevant changes are recorded in
-    the audit log.
+    the audit log. On the role forms (**Admin**, **Roles**) the permissions
+    are grouped by product area (*Builds*, *Resource pools*, ...) with a
+    filter box; under each area, *View*, *Start*, *Change* and *Administer*
+    are the keys ending ``.read``, ``.create``, ``.write`` and ``.admin``, and
+    hovering a row shows the key itself.
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.

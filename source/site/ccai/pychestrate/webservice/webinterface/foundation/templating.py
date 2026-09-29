@@ -51,6 +51,8 @@ import jinja2
 
 from ccai.webworks.routing.response import HTMLResponse
 
+from ccai.pychestrate.webservice.webinterface.foundation.permission_presentation import group_permissions
+
 
 _default_environment: Optional[jinja2.Environment] = None
 
@@ -160,6 +162,7 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
     environment.filters["enum_value"] = enum_value_filter
+    environment.filters["permission_groups"] = group_permissions
     return
 
 

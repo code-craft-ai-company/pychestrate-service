@@ -1159,3 +1159,61 @@
 .pyc-admin-page-fragment .pyc-inline-notice p:last-child {
     margin-bottom: 0;
 }
+
+/* Role forms: permissions grouped by product area, with a filter (ADM-06). */
+.pyc-admin-page-fragment .pyc-permissions__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    gap: 0.75rem;
+    max-height: 34rem;
+    overflow-y: auto;
+    padding: 0.25rem;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__group {
+    margin: 0;
+    padding: 0.5rem 0.75rem 0.75rem;
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    min-width: 0;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__group legend {
+    padding: 0 0.35rem;
+    font-weight: 600;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.5rem;
+    align-items: start;
+    padding: 0.25rem 0;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__item[hidden] {
+    display: none;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__item input {
+    margin-top: 0.2rem;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__description {
+    grid-column: 2;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .pyc-permissions__area {
+    margin: 1rem 0 0.25rem;
+    font-size: var(--pyc-font-size-body, 1rem);
+}
+
