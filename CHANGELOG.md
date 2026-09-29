@@ -181,6 +181,18 @@ preview tag.
 
 ### Changed
 
+- The pod client (`pychestrate-client`) now agrees with `pyc` on what it
+  shares (CLI-20, client repository): `enroll` takes `--server-url` like
+  `pyc login` (`--service-url` still works), its default state directory is
+  `$XDG_DATA_HOME/pychestrate-client` (an already-enrolled pod keeps using
+  `~/.pychestrate-client` until the new directory exists), and its docs and
+  messages say "pod label", the word the Enrollment Tokens page uses. The
+  Enrollment Tokens page still prints `--service-url` so its command also
+  runs on a pod with an older client. The service's own `server.log`
+  (`~/.pychestrate/`) and database (`~/pychestrate/`) stay where they are:
+  moving them means changing the systemd unit, the log rotation and the
+  backup job on every host.
+
 - **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`
   (the Code Craft AI rebrand), together with the framework
   dependencies, which are now the `codecraftai-*` packages. Extension

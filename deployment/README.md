@@ -80,8 +80,8 @@ or `POST /api/v1/enrollment-tokens`), then on the pod:
 
 ```bash
 pychestrate-client enroll \
-    --service-url https://tc-app-server.tailb75ce6.ts.net \
-    --token <secret> --name <pod name the token was minted for>
+    --server-url https://tc-app-server.tailb75ce6.ts.net \
+    --token <secret> --name <pod label the token was minted for>
 ```
 
 The certificate the service returns has **CN = the pod's client
@@ -97,7 +97,9 @@ is what makes the pod eligible for dispatch.
 ### 3. Present the cert in client traffic
 
 ```bash
-# curl (the pod client's own files, ~/.pychestrate-client/)
+# curl (the pod client's own files: --state-dir, else
+# ~/.local/share/pychestrate-client/, else ~/.pychestrate-client/ on a pod
+# enrolled by an older client)
 curl --cert client.crt --key client.key \
     https://tc-app-server.tailb75ce6.ts.net/api/v1/clients/$(cat client_id)/heartbeat
 ```
