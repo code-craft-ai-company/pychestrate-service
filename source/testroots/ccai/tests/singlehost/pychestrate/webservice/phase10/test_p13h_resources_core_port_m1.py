@@ -307,6 +307,9 @@ class _FakeResourceManager:
             limit=len(self.list_resources_response),
         )
 
+    def get_current_holders(self, resource_ids: Any) -> Any:
+        return {}
+
     def list_pools(
             self, user_id: str, offset: int = 0, limit: int = 50
         ) -> Any:

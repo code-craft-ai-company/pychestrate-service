@@ -722,7 +722,8 @@ class ResourceManager:
         available_only: bool = False,
         offset: int = 0,
         limit: int = 50,
-        search: str = None
+        search: str = None,
+        availability: str = None
     ) -> ResourceListResponse:
         """
         List resources with filtering and pagination.
@@ -731,17 +732,26 @@ class ResourceManager:
         :param resource_type: Optional resource type to filter by
         :param tags: Optional list of tags to filter by (resources must have all tags)
         :param health_status: Optional health status to filter by
-        :param available_only: If True, only return resources with available capacity
+        :param available_only: Same as ``availability="available"``
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
-        :param search: Optional substring to match against resource name or description
+        :param search: Optional substring to match against resource name,
+                       description or metadata (so an OS version or a
+                       serial number finds the device); a resource that
+                       marks metadata keys as sensitive is matched by name
+                       and description only
+        :param availability: ``"available"`` for resources that can be
+                             checked out now (online or degraded, with
+                             capacity left) or ``"in_use"`` for resources
+                             with every slot taken. Applied before paging,
+                             so the total and the pages are right.
         :returns: ResourceListResponse with paginated resource list
 
         Validates: Requirements 1.5
         """
-        from sqlalchemy import or_
+        from sqlalchemy import String, and_, cast, func, or_
 
-        from ccai.pychestrate.core.orm import Resource, Tag
+        from ccai.pychestrate.core.orm import Allocation, AllocationStatus, Resource, Tag
 
         query = self._db_session.query(Resource)
 
@@ -757,15 +767,45 @@ class ResourceManager:
         if health_status is not None:
             query = query.filter(Resource.health_status == health_status)
 
-        # Apply search filter (case-insensitive substring on name or description)
+        # Apply search filter (case-insensitive substring on name, description
+        # or the metadata's text)
         if search:
             like_pattern = f"%{search}%"
             query = query.filter(
                 or_(
                     Resource.name.ilike(like_pattern),
-                    Resource.description.ilike(like_pattern)
+                    Resource.description.ilike(like_pattern),
+                    # A resource that marks metadata keys as sensitive is
+                    # found by name and description only: matching its
+                    # metadata would let a search probe values the pages
+                    # mask.
+                    and_(
+                        cast(Resource.sensitive_fields, String).in_(("[]", "null")),
+                        cast(Resource.metadata_json, String).ilike(like_pattern)
+                    )
                 )
             )
+
+        # Apply availability filter in the query, so paging stays right
+        if available_only and availability is None:
+            availability = "available"
+        if availability in ("available", "in_use"):
+            active_count = (
+                self._db_session.query(func.count(Allocation.id))
+                .filter(
+                    Allocation.resource_id == Resource.id,
+                    Allocation.status == AllocationStatus.ACTIVE.value
+                )
+                .correlate(Resource)
+                .scalar_subquery()
+            )
+            if availability == "available":
+                query = query.filter(
+                    Resource.health_status.in_(("online", "degraded")),
+                    active_count < Resource.capacity
+                )
+            else:
+                query = query.filter(active_count >= Resource.capacity)
         
         # Apply tag filter (resources must have all specified tags)
         if tags:
@@ -787,11 +827,6 @@ class ResourceManager:
         
         # Apply pagination
         resources = query.offset(offset).limit(limit).all()
-        
-        # Filter for available resources if requested
-        if available_only:
-            resources = [r for r in resources if self._get_current_allocations(r) < r.capacity]
-            total = len(resources)
         
         return ResourceListResponse(
             resources=[self._resource_to_response(resource) for resource in resources],
@@ -1522,6 +1557,40 @@ class ResourceManager:
     # Helper Methods
     # =========================================================================
     
+    def get_current_holders(self, resource_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Who holds each of the given resources now.
+
+        :param resource_ids: The resources to look up
+        :returns: ``{resource id: [{"username", "user_id", "mode",
+                  "job_id", "expected_checkin"}, ...]}`` for the resources
+                  that have an active check-out, longest-held first
+        """
+        from ccai.pychestrate.core.orm import Allocation, AllocationStatus, User
+
+        rtnval: Dict[int, List[Dict[str, Any]]] = {}
+        if len(resource_ids) == 0:
+            return rtnval
+        rows = (
+            self._db_session.query(Allocation, User)
+            .outerjoin(User, User.id == Allocation.user_id)
+            .filter(
+                Allocation.resource_id.in_(list(resource_ids)),
+                Allocation.status == AllocationStatus.ACTIVE.value
+            )
+            .order_by(Allocation.checkout_time.asc())
+            .all()
+        )
+        for allocation, holder in rows:
+            rtnval.setdefault(allocation.resource_id, []).append({
+                "username": holder.login if holder else None,
+                "user_id": str(allocation.user_id),
+                "mode": allocation.mode,
+                "job_id": allocation.job_id,
+                "expected_checkin": allocation.expected_checkin,
+            })
+        return rtnval
+
     def _get_current_allocations(self, resource) -> int:
         """
         Get the count of current active allocations for a resource.

@@ -12,9 +12,15 @@
 
 <div class="filter-bar">
     <form method="get" class="actions-row">
-        <input type="text" name="search" class="form-control w-md" placeholder="Search resources..."
-               aria-label="Search resources by name or description"
+        <input type="text" name="search" class="form-control w-md" placeholder="Search name, description, metadata..."
+               aria-label="Search resources by name, description or metadata"
                value="{{ search }}">
+
+        <select name="availability" class="form-control w-sm" aria-label="Filter by availability">
+            <option value="">Any availability</option>
+            <option value="available" {% if selected_availability == 'available' %}selected{% endif %}>Available now</option>
+            <option value="in_use" {% if selected_availability == 'in_use' %}selected{% endif %}>In use</option>
+        </select>
 
         <select name="pool_id" class="form-control w-sm" aria-label="Filter by pool">
             <option value="">All Pools</option>
@@ -74,7 +80,7 @@
             <th scope="col">Type</th>
             <th scope="col">Pool</th>
             <th scope="col">Health</th>
-            <th scope="col">Capacity</th>
+            <th scope="col">Availability</th>
             <th scope="col">Tags</th>
             {% if can_manage %}<th scope="col">Actions</th>{% endif %}
         </tr>
@@ -99,7 +105,27 @@
                 <span class="badge badge-secondary">{{ status | capitalize }}</span>
                 {% endif %}
             </td>
-            <td>{{ resource.current_allocations }}/{{ resource.capacity }}</td>
+            <td>
+                {% set who = holders.get(resource.id, []) if holders else [] %}
+                {% set free = resource.capacity - resource.current_allocations %}
+                {% if free > 0 and resource.health_status in ['online', 'degraded'] %}
+                <span class="badge badge-success">Available</span>
+                {% if resource.capacity > 1 %}<span class="muted small">{{ free }} of {{ resource.capacity }} free</span>{% endif %}
+                <form action="{{ url_for('resources.resource_checkout', resource_id=resource.id) }}" method="post" data-confirm="Check out {{ resource.name }}? It is yours until you check it back in.">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="mode" value="exclusive">
+                    <button type="submit" class="btn btn-sm btn-primary">Check out</button>
+                </form>
+                {% elif free > 0 %}
+                <span class="badge badge-secondary">Unavailable</span>
+                <span class="muted small">{{ resource.health_status | capitalize }}</span>
+                {% else %}
+                <span class="badge badge-warning">In use</span>
+                {% if who %}
+                <span class="small">by {{ who[0].username or 'someone' }}{% if who | length > 1 %} +{{ who | length - 1 }}{% endif %}{% if who[0].expected_checkin %} until {{ who[0].expected_checkin | format_datetime('%Y-%m-%d %H:%M', '') }}{% endif %}</span>
+                {% endif %}
+                {% endif %}
+            </td>
             <td>
                 {% for tag in resource.tags[:3] %}
                 <span class="badge badge-info">{{ tag }}</span>
@@ -136,5 +162,5 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.resource_list', page, total_pages, {'per_page': per_page, 'pool_id': selected_pool_id, 'resource_type': (selected_resource_type or none)}, total=None) }}
+{{ ui.pagination('resources.resource_list', page, total_pages, {'per_page': per_page, 'pool_id': selected_pool_id, 'resource_type': (selected_resource_type or none), 'health_status': (selected_health_status or none), 'availability': (selected_availability or none), 'search': (search or none)}, total=None) }}
 {% endblock %}

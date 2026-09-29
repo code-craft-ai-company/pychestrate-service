@@ -313,6 +313,16 @@ preview tag.
   unless every resource can. Moving needs the resource-management
   permission.
 
+- **The resource list says what is available.** Finding a free device
+  meant reading "Capacity 1/1" against "0/1". The list now has an
+  availability filter ("Available now" or "In use", applied in the query
+  so the pages and the total are right, and kept by the pager), an
+  Availability column ("Available", or "In use by quinn until 18:30
+  UTC"), a Check out button on each available row, and a search that also
+  matches a device's metadata, so an OS version or a serial number finds
+  it. A resource that marks metadata keys as sensitive is found by name
+  and description only.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

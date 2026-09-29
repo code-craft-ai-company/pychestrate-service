@@ -989,6 +989,9 @@ def handle_resource_list(request: Request) -> Response:
             request.query_params.get("health_status", None) or None
         )
         search = request.query_params.get("search", "") or ""
+        availability = request.query_params.get("availability", "") or ""
+        if availability not in ("available", "in_use"):
+            availability = ""
         # The list filter expects multi-valued ``tags`` -- the
         # query string can carry repeated ``?tags=…`` pairs.
         tag_query = []
@@ -1020,12 +1023,15 @@ def handle_resource_list(request: Request) -> Response:
             filter_kwargs["tags"] = tag_query
         if len(search) > 0:
             filter_kwargs["search"] = search
+        if len(availability) > 0:
+            filter_kwargs["availability"] = availability
 
         resource_manager = _build_resource_manager(db_session=db_session)
         resources_response = resource_manager.list_resources(
             **filter_kwargs
         )
         resources = resources_response.resources
+        holders = resource_manager.get_current_holders([item.id for item in resources])
         pools = resource_manager.list_pools(auth.user_id).pools
         all_tags = resource_manager.list_tags().tags
 
@@ -1043,6 +1049,7 @@ def handle_resource_list(request: Request) -> Response:
             or health_status_str is not None
             or len(tag_query) > 0
             or len(search) > 0
+            or len(availability) > 0
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -1067,6 +1074,8 @@ def handle_resource_list(request: Request) -> Response:
         context["selected_health_status"] = health_status_str
         context["selected_tags"] = tag_query
         context["search"] = search
+        context["selected_availability"] = availability
+        context["holders"] = holders
 
         response = _render(
             template_name="resources/resources/list.html",

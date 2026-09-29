@@ -480,6 +480,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     # Forms
     "form_data": _form_data,
     "issue_for": _const(None),
+    "selected_availability": _by_mode("available", ""),
+    "holders": _by_mode({}, {}),
     "addable_resources": _many(ResourceResponse),
     "other_pools": _many(ResourcePoolResponse),
     "my_allocations": _many(IPAllocationResponse),
