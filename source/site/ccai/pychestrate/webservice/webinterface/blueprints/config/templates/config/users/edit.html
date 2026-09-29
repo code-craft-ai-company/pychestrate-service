@@ -29,7 +29,7 @@
         
         <div class="form-group">
             <label for="display_name">Display Name *</label>
-            <input type="text" id="display_name" name="display_name" class="form-control" required
+            <input type="text" id="display_name" name="display_name" class="form-control" required maxlength="100"
                    value="{{ user.display_name }}"{{ ui.invalid_attrs(errors, 'display_name') }}>
             {{ ui.field_error(errors, 'display_name') }}
         </div>

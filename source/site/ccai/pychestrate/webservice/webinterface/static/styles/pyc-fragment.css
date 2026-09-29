@@ -1227,3 +1227,8 @@
     font-size: var(--pyc-font-size-body, 1rem);
 }
 
+/* A long name or address wraps inside its cell instead of widening the table (ADM-41). */
+.pyc-admin-page-fragment .data-table td {
+    overflow-wrap: anywhere;
+}
+

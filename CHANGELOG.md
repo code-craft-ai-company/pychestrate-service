@@ -351,6 +351,15 @@ preview tag.
   on hover) and the role page groups the same way. Presets, cloning a role, a
   list of who holds it and a preview of the menu a role unlocks are not done.
 
+- A display name has a length limit (ADM-41). A 3,000-character name broke the
+  users table because nothing bounded it. The create and edit user forms, the
+  REST create call (`POST /api/v1/identity/users`, 422) and the setup wizard now
+  refuse a display name over 100 characters ("Display name must be at most 100
+  characters", at the field), the inputs carry `maxlength`, and long values wrap
+  inside a server-rendered table's cell instead of widening it. Deleting or
+  anonymising a user (a data-protection request) is not done: it needs decisions
+  about the audit trail, tokens, sessions and project ownership first.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

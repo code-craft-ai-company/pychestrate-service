@@ -57,6 +57,10 @@ from typing import Any, Dict, List, Optional, Tuple
 # ``MIN_PASSWORD_LENGTH`` is re-exported for callers that read the
 # bound from here; the rules themselves live in
 # security.auth.password_policy.
+from ccai.pychestrate.webservice.identity.users.limits import (
+    MAX_DISPLAY_NAME_LENGTH,
+    display_name_too_long_message,
+)
 from ccai.pychestrate.webservice.security.auth.password_policy import (
     MIN_PASSWORD_LENGTH,
 )
@@ -300,6 +304,8 @@ def _validate_new_user_fields(
         )
     if display_name is None or len(display_name.strip()) == 0:
         raise AdminValidationError("Display name is required", field="display_name")
+    if len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        raise AdminValidationError(display_name_too_long_message(), field="display_name")
     if password is not None:
         _validate_password_for_user(
             password=password, login_name=username, email=email
@@ -1320,6 +1326,8 @@ def update_identity_user(
         )
     if display_name is None or len(display_name.strip()) == 0:
         raise AdminValidationError("Display name is required", field="display_name")
+    if len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        raise AdminValidationError(display_name_too_long_message(), field="display_name")
 
     conflicting_email = (
         db_session.query(IdentityUser)

@@ -71,6 +71,10 @@ from ccai.webworks.routing.response import (
 
 from ccai.errors.exceptions import ConfigurationError
 
+from ccai.pychestrate.webservice.identity.users.limits import (
+    MAX_DISPLAY_NAME_LENGTH,
+    display_name_too_long_message,
+)
 from ccai.pychestrate.webservice.identity.setup.exceptions import (
     SetupAlreadyCompleteError,
     SetupNotInitializedError,
@@ -520,6 +524,8 @@ def _collect_admin_field_errors(
         rtnval["email"] = "Email address looks invalid."
     if len(display_name) == 0:
         rtnval["display_name"] = "Display name is required."
+    elif len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        rtnval["display_name"] = display_name_too_long_message() + "."
     # The first administrator gets the same password rules as every
     # other account (security.auth.password_policy); every rule the
     # password breaks is reported under the password field.

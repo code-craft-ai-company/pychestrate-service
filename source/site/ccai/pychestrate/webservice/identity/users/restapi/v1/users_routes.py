@@ -33,6 +33,10 @@ from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from ccai.pychestrate.webservice.identity.users.limits import (
+    MAX_DISPLAY_NAME_LENGTH,
+    display_name_too_long_message,
+)
 from ccai.pychestrate.webservice.identity.users import user_service
 from ccai.pychestrate.webservice.identity.users.exceptions import (
     UserAlreadyExistsError,
@@ -208,12 +212,20 @@ def handle_create_user(request: Request) -> Response:
         actor_user_id = _resolve_actor_user_id(request=request)
 
         primary_email = payload.get("primary_email", "")
+        display_name = payload.get("display_name", "")
+        if isinstance(display_name, str) and len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=display_name_too_long_message() + ".",
+                extensions={"invalid_fields": ["display_name"], "max_length": MAX_DISPLAY_NAME_LENGTH},
+            )
         try:
             user = user_service.create_user(
                 db_session=db_session,
                 login_name=payload.get("login_name", ""),
                 primary_email=primary_email,
-                display_name=payload.get("display_name", ""),
+                display_name=display_name,
                 timezone=payload.get("timezone", "UTC"),
                 provisioning_source=payload.get("provisioning_source", "local"),
                 external_id=payload.get("external_id", None),
