@@ -54,6 +54,7 @@ from ccai.webworks.routing.response import Response
 from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -120,6 +121,30 @@ _ROUTE_PERMISSIONS: Dict[str, str] = {
 
 # Lifetimes offered by the create forms, in days.
 _LIFETIME_CHOICES_DAYS = (7, 30, 90, 180, 366)
+
+# Visible labels of the inputs, for the error summary. An input's id is
+# its name on the account page and the service account form; the issue
+# token form sits in a table row, one per account, so its ids end with
+# the account's id (see ``_issue_form_ids``).
+TOKEN_FIELD_LABELS: Dict[str, str] = {
+    "name": "Name",
+    "expires_in_days": "Expires after",
+    "scope": "Access",
+}
+SERVICE_ACCOUNT_FIELD_LABELS: Dict[str, str] = {
+    "login_name": "Login name",
+    "display_name": "Display name",
+}
+_ISSUE_TOKEN_LABELS: Dict[str, str] = {
+    "name": "Token name",
+    "expires_in_days": "Expires after",
+    "scope": "Access",
+}
+_ISSUE_TOKEN_ID_PREFIX: Dict[str, str] = {
+    "name": "sa-token-name-",
+    "expires_in_days": "sa-token-expires-",
+    "scope": "sa-token-scope-",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +366,55 @@ def _describe_failure(*, exc: Exception, action: str) -> str:
     return rtnval
 
 
+def _field_errors(*, exc: Exception) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused create when the error is
+        a validation error that names the input it is about. Anything
+        else is left for the banner.
+
+        :param exc: Raised exception.
+
+        :returns: One entry, or an empty dict.
+    """
+    if _is_validation_error(exc) is False:
+        rtnval: Dict[str, str] = {}
+        return rtnval
+    rtnval = form_errors.field_errors_from(exc)
+    return rtnval
+
+
+def _issue_form_errors(*, exc: Exception, user_id: str) -> Dict[str, str]:
+    """
+        Like :func:`_field_errors` for the issue token form of one
+        service account: the key is the id of that row's input.
+
+        :param exc: Raised exception.
+        :param user_id: The service account's id.
+
+        :returns: One entry, or an empty dict.
+    """
+    rtnval: Dict[str, str] = {}
+    for field, message in _field_errors(exc=exc).items():
+        prefix = _ISSUE_TOKEN_ID_PREFIX.get(field, None)
+        if prefix is not None:
+            rtnval[prefix + user_id] = message
+    return rtnval
+
+
+def _issue_form_labels(*, user_id: str) -> Dict[str, str]:
+    """
+        Labels for the issue token form's input ids of one account.
+
+        :param user_id: The service account's id.
+
+        :returns: ``{input id: label}``.
+    """
+    rtnval = {
+        _ISSUE_TOKEN_ID_PREFIX[field] + user_id: label for field, label in _ISSUE_TOKEN_LABELS.items()
+    }
+    return rtnval
+
+
 def _close_quietly(db_session: Any) -> None:
     """
         Close a db session, ignoring close failures.
@@ -428,13 +502,24 @@ def _minted_panel(*, request: Request, issued: Any, owner_label: str) -> Dict[st
 # ---------------------------------------------------------------------------
 
 
-def _render_account_page(*, request: Request, auth: Any, minted: Optional[Dict[str, Any]] = None) -> Response:
+def _render_account_page(
+        *,
+        request: Request,
+        auth: Any,
+        minted: Optional[Dict[str, Any]] = None,
+        errors: Optional[Dict[str, str]] = None,
+        form_data: Optional[Dict[str, Any]] = None,
+        status_code: int = 200
+    ) -> Response:
     """
         Render ``/account/api-tokens``.
 
         :param request: Incoming webworks request.
         :param auth: Auth resolution (open db session).
         :param minted: One-time panel data, or ``None``.
+        :param errors: Field errors of the create form that was refused.
+        :param form_data: What was typed into it.
+        :param status_code: HTTP status.
 
         :returns: HTML response.
     """
@@ -442,7 +527,10 @@ def _render_account_page(*, request: Request, auth: Any, minted: Optional[Dict[s
     context["tokens"] = _list_tokens(db_session=auth.db_session, user_id=str(auth.user_id))
     context["minted"] = minted
     context["can_view_admin_tokens"] = _has_permission(auth=auth, permission=TOKENS_READ_PERMISSION)
-    response = _render(template_name="config/tokens/account.html", context=context)
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = TOKEN_FIELD_LABELS
+    context["form_data"] = form_data if form_data is not None else {}
+    response = _render(template_name="config/tokens/account.html", context=context, status_code=status_code)
     _attach_session_to_response(response=response, session=auth.session)
     return response
 
@@ -494,6 +582,14 @@ def handle_account_token_create(request: Request) -> Response:
                 actor_user_id=str(auth.user_id),
             )
         except Exception as exc:
+            errors = _field_errors(exc=exc)
+            if len(errors) > 0:
+                rtnval = _render_account_page(
+                    request=request, auth=auth, errors=errors,
+                    form_data={key: str(form.get(key, "")) for key in TOKEN_FIELD_LABELS},
+                    status_code=400,
+                )
+                return rtnval
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.account_api_tokens"),
@@ -573,6 +669,10 @@ def _render_admin_page(
         request: Request,
         auth: Any,
         minted: Optional[Dict[str, Any]] = None,
+        errors: Optional[Dict[str, str]] = None,
+        error_labels: Optional[Dict[str, str]] = None,
+        form_data: Optional[Dict[str, Any]] = None,
+        issue_for: Optional[str] = None,
         status_code: int = 200
     ) -> Response:
     """
@@ -581,11 +681,22 @@ def _render_admin_page(
         :param request: Incoming webworks request.
         :param auth: Auth resolution (open db session).
         :param minted: One-time panel data, or ``None``.
+        :param errors: Field errors of the form that was refused, keyed
+                       by input id.
+        :param error_labels: Visible labels for those inputs.
+        :param form_data: What was typed into the service account form,
+                          or into the issue token form of ``issue_for``.
+        :param issue_for: Id of the service account whose issue token
+                          form was refused (its row opens).
         :param status_code: HTTP status.
 
         :returns: HTML response.
     """
     context = _base_context(auth=auth, request_endpoint="config.admin_api_tokens")
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = error_labels if error_labels is not None else {}
+    context["form_data"] = form_data if form_data is not None else {}
+    context["issue_for"] = issue_for
     context["service_accounts"] = _list_service_accounts(db_session=auth.db_session)
     context["tokens"] = _list_tokens(db_session=auth.db_session, user_id=None)
     context["minted"] = minted
@@ -642,6 +753,15 @@ def handle_service_account_create(request: Request) -> Response:
                 actor_user_id=str(auth.user_id),
             )
         except Exception as exc:
+            errors = _field_errors(exc=exc)
+            if len(errors) > 0:
+                rtnval = _render_admin_page(
+                    request=request, auth=auth, errors=errors,
+                    error_labels=SERVICE_ACCOUNT_FIELD_LABELS,
+                    form_data={key: str(form.get(key, "")) for key in SERVICE_ACCOUNT_FIELD_LABELS},
+                    status_code=400,
+                )
+                return rtnval
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.admin_api_tokens"),
@@ -703,6 +823,16 @@ def handle_service_account_token_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            errors = _issue_form_errors(exc=exc, user_id=user_id)
+            if len(errors) > 0:
+                rtnval = _render_admin_page(
+                    request=request, auth=auth, errors=errors,
+                    error_labels=_issue_form_labels(user_id=user_id),
+                    form_data={key: str(form.get(key, "")) for key in TOKEN_FIELD_LABELS},
+                    issue_for=user_id,
+                    status_code=400,
+                )
+                return rtnval
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.admin_api_tokens"),

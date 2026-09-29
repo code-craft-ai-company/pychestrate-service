@@ -1856,8 +1856,8 @@ def test_handle_member_add_post_without_user_explains_and_adds_nobody():
     """
     **Feature: projects members (PRJ-01)**
     **Property: POST /projects/{id}/members/add with no user chosen
-    re-renders the form with a flash asking the user to choose
-    someone and never calls add_member.**
+    re-renders the form with an error on the user input asking the
+    user to choose someone, no flash, and never calls add_member.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1893,13 +1893,13 @@ def test_handle_member_add_post_without_user_explains_and_adds_nobody():
         projects_routes.handle_member_add(request)
 
         ctx = env.last_template.render_calls[0]
-        messages = " ".join(message for _category, message in ctx["flashes"])
         testbase.assert_equal(
             (
-                "Choose a user to add to the project." in messages,
+                ctx["errors"],
+                ctx["flashes"],
                 _FakeProjectManager.last_instance.add_member_calls,
             ),
-            (True, []),
+            ({"user_id": "Choose a user to add to the project."}, [], []),
         )
     finally:
         for p in (enum_patch, role_patch, um_patch, pm_patch, sm_patch):

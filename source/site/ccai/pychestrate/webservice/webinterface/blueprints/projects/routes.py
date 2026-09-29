@@ -303,6 +303,26 @@ def _resolve_project_role(*, role_str: str) -> Any:
     return rtnval
 
 
+#: The inputs of the member forms, and their labels for the error summary.
+_MEMBER_FORM_FIELDS = ("user_id", "role")
+MEMBER_FIELD_LABELS: Dict[str, str] = {
+    "user_id": "User",
+    "role": "Role",
+}
+
+
+def _resolve_member_role(*, role_str: str) -> Any:
+    """
+        Like :func:`_resolve_project_role`, but an unknown role is a
+        form error about the role input rather than a bare ValueError.
+    """
+    try:
+        rtnval = _resolve_project_role(role_str=role_str)
+    except ValueError:
+        raise ProjectsFormError("Choose one of the listed roles.", field="role") from None
+    return rtnval
+
+
 #: What each project role may do, shown next to the role picker. The
 #: global ``project-*`` roles (assigned on a user's page) give the
 #: matching role on every project.
@@ -1397,6 +1417,8 @@ def handle_member_add(request: Request) -> Response:
 
         method = request.method.upper()
         form_data: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
+        status_code = 200
         user_search = str(request.query_params.get("q", "") or "").strip()
 
         if method == "POST":
@@ -1425,8 +1447,8 @@ def handle_member_add(request: Request) -> Response:
 
             try:
                 if user_id is None:
-                    raise ProjectsFormError("Choose a user to add to the project.")
-                role = _resolve_project_role(role_str=role_str)
+                    raise ProjectsFormError("Choose a user to add to the project.", field="user_id")
+                role = _resolve_member_role(role_str=role_str)
                 project_manager.add_member(
                     project_id, user_id, role, auth.user_id
                 )
@@ -1441,11 +1463,14 @@ def handle_member_add(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=_describe_failure(exc=exc, prefix="Error adding member: ", request_path=str(getattr(request, "path", ""))),
-                    category=flash.CATEGORY_ERROR,
-                )
+                status_code = 400
+                errors = _field_errors_from(exc=exc, fields=_MEMBER_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(exc=exc, prefix="Error adding member: ", request_path=str(getattr(request, "path", ""))),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         # GET, or POST that fell through.
         user_manager = _build_user_manager(db_session=db_session)
@@ -1485,6 +1510,8 @@ def handle_member_add(request: Request) -> Response:
         context["roles"] = roles
         context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         context["form_data"] = form_data
+        context["errors"] = errors
+        context["error_labels"] = MEMBER_FIELD_LABELS
         context["user_search"] = user_search
         context["can_create_users"] = _has_permission(
             auth=auth, permission=USERS_WRITE_PERMISSION
@@ -1492,6 +1519,7 @@ def handle_member_add(request: Request) -> Response:
         response = _render(
             template_name="projects/members/add.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
@@ -1557,6 +1585,9 @@ def handle_member_edit(request: Request) -> Response:
             return response
 
         method = request.method.upper()
+        errors: Dict[str, str] = {}
+        status_code = 200
+        submitted_role: Optional[str] = None
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1577,9 +1608,10 @@ def handle_member_edit(request: Request) -> Response:
                 return csrf_redirect
 
             role_str = str(single_form.get("role", "viewer"))
+            submitted_role = role_str
 
             try:
-                role = _resolve_project_role(role_str=role_str)
+                role = _resolve_member_role(role_str=role_str)
                 project_manager.update_member_role(
                     project_id, target_user_id, role, auth.user_id
                 )
@@ -1594,11 +1626,14 @@ def handle_member_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=_describe_failure(exc=exc, prefix="Error updating member role: ", request_path=str(getattr(request, "path", ""))),
-                    category=flash.CATEGORY_ERROR,
-                )
+                status_code = 400
+                errors = _field_errors_from(exc=exc, fields=_MEMBER_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(exc=exc, prefix="Error updating member role: ", request_path=str(getattr(request, "path", ""))),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         # GET, or POST that fell through.
         members = project_manager.list_members(
@@ -1633,9 +1668,13 @@ def handle_member_edit(request: Request) -> Response:
         context["member"] = member
         context["roles"] = roles
         context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
+        context["errors"] = errors
+        context["error_labels"] = MEMBER_FIELD_LABELS
+        context["submitted_role"] = submitted_role
         response = _render(
             template_name="projects/members/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
@@ -1804,8 +1843,14 @@ class ProjectsFormError(ValueError):
     """
         A problem with what the user submitted, raised by the projects
         route handlers themselves. Its message is written for the user
-        and is shown as-is.
+        and is shown as-is. ``field`` names the input it is about, so
+        the form can show it next to that input.
     """
+
+    def __init__(self, message: str, field: Optional[str] = None) -> None:
+        self.field: Optional[str] = field
+        super().__init__(message)
+        return
 
 
 def _is_user_facing_error(*, exc: BaseException) -> bool:

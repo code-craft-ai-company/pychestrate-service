@@ -12,12 +12,25 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from typing import Optional
+
+
 class ApiTokenValidationError(ValueError):
     """
         Raised when a token or service-account request carries an
         invalid field (empty name, unsupported scope, lifetime out of
         range). The message is safe to show to the caller.
+
+        ``field`` names the request field the message is about
+        (``name``, ``expires_in_days``, ``scope``, ``login_name``), so
+        a form can show it next to that input; it is ``None`` when the
+        message is about the request as a whole.
     """
+
+    def __init__(self, message: str, field: Optional[str] = None) -> None:
+        self.field: Optional[str] = field
+        super().__init__(message)
+        return
 
 
 class ApiTokenNotFoundError(LookupError):

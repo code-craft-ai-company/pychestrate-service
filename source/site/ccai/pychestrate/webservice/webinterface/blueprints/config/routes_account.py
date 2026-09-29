@@ -29,7 +29,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import Response
@@ -38,6 +38,10 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     flash,
     url_for as _url_for_module,
+)
+from ccai.pychestrate.webservice.webinterface.foundation.form_errors import (
+    PASSWORD_FIELD_LABELS,
+    password_form_errors,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _attach_session_to_response,
@@ -198,9 +202,14 @@ def _password_lifecycle() -> Any:
 def _render_password_page(
         *,
         auth: Any,
-        problems: List[str],
+        errors: Optional[Dict[str, str]] = None,
+        problems: Optional[List[str]] = None,
         status_code: int = 200
     ) -> Response:
+    """
+        Render the change-password form. ``errors`` are the messages that
+        belong next to an input; ``problems`` are the ones that do not.
+    """
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
         session=auth.session,
@@ -209,7 +218,9 @@ def _render_password_page(
         csrf_token=auth.csrf_token,
     )
     context.update(password_policy_template_context())
-    context["problems"] = problems
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = PASSWORD_FIELD_LABELS
+    context["problems"] = problems if problems is not None else []
     context["login_name"] = auth.username
     response = _render(
         template_name="config/account_password.html", context=context, status_code=status_code,
@@ -236,7 +247,7 @@ def handle_account_password(request: Request) -> Response:
     db_session = auth.db_session
     try:
         if request.method.upper() == "GET":
-            return _render_password_page(auth=auth, problems=[])
+            return _render_password_page(auth=auth)
 
         single_form = _parse_form_or_empty(request=request)
         csrf_redirect = auth_guard.enforce_csrf_or_redirect(
@@ -253,7 +264,9 @@ def handle_account_password(request: Request) -> Response:
         confirm = str(single_form.get("password_confirm", ""))
         if new_password != confirm:
             return _render_password_page(
-                auth=auth, problems=["The new passwords do not match."], status_code=400,
+                auth=auth,
+                errors={"password_confirm": "The new passwords do not match."},
+                status_code=400,
             )
 
         lifecycle = _password_lifecycle()
@@ -271,12 +284,12 @@ def handle_account_password(request: Request) -> Response:
                 source_ip=client_ip,
             )
             db_session.commit()
-        except PasswordPolicyError as exc:
+        except (PasswordPolicyError, lifecycle.PasswordLifecycleError) as exc:
             db_session.rollback()
-            return _render_password_page(auth=auth, problems=list(exc.problems), status_code=400)
-        except lifecycle.PasswordLifecycleError as exc:
-            db_session.rollback()
-            return _render_password_page(auth=auth, problems=[exc.message], status_code=400)
+            errors, problems = password_form_errors(exc)
+            return _render_password_page(
+                auth=auth, errors=errors, problems=problems, status_code=400,
+            )
 
         response = _redirect_with_flash(
             session=auth.session,

@@ -4,6 +4,7 @@
 {% block title %}API Tokens - Pychestrate{% endblock %}
 
 {% block content %}
+{% set form = form_data or {} %}
 <div class="page-header">
     <h1>API Tokens</h1>
     <p>
@@ -17,31 +18,36 @@
 
 <div class="card narrow mb">
     <h2 class="card-header">Create a token</h2>
+    {{ ui.error_summary(errors, error_labels) }}
     <form method="post" action="{{ url_for('config.account_api_token_create') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
         <div class="form-group">
-            <label for="token-name">Name *</label>
-            <input type="text" id="token-name" name="name" class="form-control" required
-                   maxlength="128" placeholder="e.g. laptop CLI">
-            <p class="form-text">What the token is for, so you can recognise it later.</p>
+            <label for="name">Name *</label>
+            <input type="text" id="name" name="name" class="form-control" required
+                   maxlength="128" placeholder="e.g. laptop CLI" value="{{ form.get('name', '') }}"{{ ui.invalid_attrs(errors, "name", "name-help") }}>
+            {{ ui.field_error(errors, "name") }}
+            <p class="form-text" id="name-help">What the token is for, so you can recognise it later.</p>
         </div>
 
         <div class="form-group">
-            <label for="token-expires">Expires after</label>
-            <select id="token-expires" name="expires_in_days" class="form-control">
+            <label for="expires_in_days">Expires after</label>
+            {% set chosen_days = (form.get('expires_in_days') or default_lifetime_days) | string %}
+            <select id="expires_in_days" name="expires_in_days" class="form-control"{{ ui.invalid_attrs(errors, "expires_in_days") }}>
                 {% for days in lifetime_choices %}
-                <option value="{{ days }}" {% if days == default_lifetime_days %}selected{% endif %}>{{ days }} days</option>
+                <option value="{{ days }}" {% if days | string == chosen_days %}selected{% endif %}>{{ days }} days</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, "expires_in_days") }}
         </div>
 
         <div class="form-group">
-            <label for="token-scope">Access</label>
-            <select id="token-scope" name="scope" class="form-control">
-                <option value="read-write" selected>Read and write (everything your roles allow)</option>
-                <option value="read-only">Read only (GET requests)</option>
+            <label for="scope">Access</label>
+            <select id="scope" name="scope" class="form-control"{{ ui.invalid_attrs(errors, "scope") }}>
+                <option value="read-write" {% if form.get('scope', 'read-write') != 'read-only' %}selected{% endif %}>Read and write (everything your roles allow)</option>
+                <option value="read-only" {% if form.get('scope') == 'read-only' %}selected{% endif %}>Read only (GET requests)</option>
             </select>
+            {{ ui.field_error(errors, "scope") }}
         </div>
 
         <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Create token</button>

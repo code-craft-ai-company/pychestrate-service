@@ -622,6 +622,7 @@ def _render_password_page(
         auth: _AuthResolution,
         user: Any,
         issued_link: Optional[Dict[str, Any]] = None,
+        errors: Optional[Dict[str, str]] = None,
         problems: Optional[List[str]] = None,
         just_created: bool = False,
         status_code: int = 200
@@ -641,6 +642,8 @@ def _render_password_page(
     context.update(password_policy_template_context())
     context["user"] = user
     context["issued_link"] = issued_link
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = form_errors.PASSWORD_FIELD_LABELS
     context["problems"] = problems if problems is not None else []
     context["just_created"] = just_created
     context["is_self"] = str(user.id) == str(auth.user_id)
@@ -1336,7 +1339,7 @@ def handle_user_password(request: Request) -> Response:
         if password != confirm:
             return _render_password_page(
                 auth=auth, user=user,
-                problems=["The passwords do not match."], status_code=400,
+                errors={"password_confirm": "The passwords do not match."}, status_code=400,
             )
 
         try:
@@ -1348,9 +1351,9 @@ def handle_user_password(request: Request) -> Response:
                 actor_user_id=auth.user_id,
             )
         except _password_error_classes() as exc:
-            problems = list(getattr(exc, "problems", [])) or [getattr(exc, "message", str(exc))]
+            errors, problems = form_errors.password_form_errors(exc)
             return _render_password_page(
-                auth=auth, user=user, problems=problems, status_code=400,
+                auth=auth, user=user, errors=errors, problems=problems, status_code=400,
             )
 
         if must_change is True:

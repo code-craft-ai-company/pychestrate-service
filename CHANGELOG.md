@@ -233,6 +233,16 @@ preview tag.
   Pychestrate End User License Agreement, not Apache-2.0, and
   `info.version` is `0.0.17-preview`.
 
+- **Forms show an error next to the field it is about.** A refused value
+  used to appear as one banner above the page, and several edit forms
+  threw away what was typed. Now the message sits under its input, which
+  is marked `aria-invalid` and described by it; a summary at the top of
+  the form links to each field; the form comes back with what was typed
+  and a 400. This covers the admin, resource, project and RPA forms, the
+  four password pages, API token and service account creation, and the
+  project member forms. An error about no single input (an inactive
+  account, a lock-out) stays a banner. Sign-in stays generic on purpose.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

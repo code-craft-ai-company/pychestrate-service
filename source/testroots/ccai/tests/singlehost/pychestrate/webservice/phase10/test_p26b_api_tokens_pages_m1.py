@@ -361,22 +361,23 @@ def test_issued_token_acts_as_the_signed_in_user():
     return
 
 
-def test_invalid_token_form_flashes_the_validation_message():
+def test_invalid_token_form_shows_the_validation_message_next_to_the_name():
     """
-    **Feature: API token pages (ORG-F02)**
-    **Property: a token form with no name redirects back with the
-    validation message and issues nothing.**
+    **Feature: API token pages (ORG-F02, ADM-11)**
+    **Property: a token form with no name answers 400 and renders the
+    page with the validation message as the name field's error (no
+    banner) and issues nothing.**
     """
     harness = _PageHarness(permission_predicate=_deny_everything)
     try:
         response = harness.call(
             method="POST", path="/account/api-tokens/create", form={"name": ""},
         )
-        flashes = str(_cookie_payload(response))
+        context = harness.page_context(template_name="config/tokens/account.html")
         testbase.assert_equal(
-            (response.status_code, "A token name is required." in flashes,
+            (response.status_code, context["errors"], context["flashes"],
              harness.session.query(AuthApiToken).count()),
-            (303, True, 0),
+            (400, {"name": "A token name is required."}, [], 0),
         )
     finally:
         harness.close()

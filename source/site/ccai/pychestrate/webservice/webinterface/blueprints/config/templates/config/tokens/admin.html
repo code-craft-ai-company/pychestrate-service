@@ -4,6 +4,7 @@
 {% block title %}API Tokens - Pychestrate Configuration{% endblock %}
 
 {% block content %}
+{% set form = form_data or {} %}
 <div class="page-header">
     <h1>API Tokens &amp; Service Accounts</h1>
     <p>
@@ -18,6 +19,8 @@
 
 {% include "config/tokens/_minted.html" %}
 
+{{ ui.error_summary(errors, error_labels) }}
+
 <h2>Service accounts</h2>
 
 {% if can_create_service_accounts %}
@@ -26,15 +29,18 @@
     <form method="post" action="{{ url_for('config.service_account_create') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
-            <label for="sa-login">Login name *</label>
-            <input type="text" id="sa-login" name="login_name" class="form-control" required
-                   pattern="[a-z0-9][a-z0-9._\-]{1,62}" placeholder="e.g. ci-nightly">
-            <p class="form-text">2-63 lower-case letters, digits, '.', '_' or '-'.</p>
+            <label for="login_name">Login name *</label>
+            <input type="text" id="login_name" name="login_name" class="form-control" required
+                   pattern="[a-z0-9][a-z0-9._\-]{1,62}" placeholder="e.g. ci-nightly"
+                   value="{{ form.get('login_name', '') if not issue_for else '' }}"{{ ui.invalid_attrs(errors, "login_name", "login_name-help") }}>
+            {{ ui.field_error(errors, "login_name") }}
+            <p class="form-text" id="login_name-help">2-63 lower-case letters, digits, '.', '_' or '-'.</p>
         </div>
         <div class="form-group">
-            <label for="sa-display">Display name</label>
-            <input type="text" id="sa-display" name="display_name" class="form-control"
-                   maxlength="256" placeholder="e.g. Nightly CI">
+            <label for="display_name">Display name</label>
+            <input type="text" id="display_name" name="display_name" class="form-control"
+                   maxlength="256" placeholder="e.g. Nightly CI" value="{{ form.get('display_name', '') if not issue_for else '' }}"{{ ui.invalid_attrs(errors, "display_name") }}>
+            {{ ui.field_error(errors, "display_name") }}
         </div>
         <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Create service account</button>
     </form>
@@ -55,6 +61,9 @@
     </thead>
     <tbody>
         {% for account in service_accounts %}
+        {% set uid = account.user_id | string %}
+        {% set mine = issue_for == uid %}
+        {% set chosen_days = ((form.get('expires_in_days') if mine else '') or default_lifetime_days) | string %}
         <tr>
             <td class="mono">{{ account.login_name }}</td>
             <td>{{ account.display_name }}</td>
@@ -63,25 +72,29 @@
             <td>{{ account.created_at | format_datetime }}</td>
             <td>
                 {% if can_manage_tokens and account.status == 'ACTIVE' %}
-                <details class="pyc-run-details">
+                <details class="pyc-run-details"{% if mine %} open{% endif %}>
                     <summary class="btn btn-sm btn-secondary">{{ ui.icon("add") }} Issue token</summary>
                     <form action="{{ url_for('config.service_account_token_create', user_id=account.user_id) }}"
                           method="post" class="pyc-run-form">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <label for="sa-token-name-{{ account.user_id }}">Token name</label>
-                        <input type="text" id="sa-token-name-{{ account.user_id }}" name="name"
-                               class="form-control" required maxlength="128" placeholder="e.g. nightly pipeline">
-                        <label for="sa-token-expires-{{ account.user_id }}">Expires after</label>
-                        <select id="sa-token-expires-{{ account.user_id }}" name="expires_in_days" class="form-control">
+                        <label for="sa-token-name-{{ uid }}">Token name</label>
+                        <input type="text" id="sa-token-name-{{ uid }}" name="name"
+                               class="form-control" required maxlength="128" placeholder="e.g. nightly pipeline"
+                               value="{{ form.get('name', '') if mine else '' }}"{{ ui.invalid_attrs(errors, "sa-token-name-" ~ uid) }}>
+                        {{ ui.field_error(errors, "sa-token-name-" ~ uid) }}
+                        <label for="sa-token-expires-{{ uid }}">Expires after</label>
+                        <select id="sa-token-expires-{{ uid }}" name="expires_in_days" class="form-control"{{ ui.invalid_attrs(errors, "sa-token-expires-" ~ uid) }}>
                             {% for days in lifetime_choices %}
-                            <option value="{{ days }}" {% if days == default_lifetime_days %}selected{% endif %}>{{ days }} days</option>
+                            <option value="{{ days }}" {% if days | string == chosen_days %}selected{% endif %}>{{ days }} days</option>
                             {% endfor %}
                         </select>
-                        <label for="sa-token-scope-{{ account.user_id }}">Access</label>
-                        <select id="sa-token-scope-{{ account.user_id }}" name="scope" class="form-control">
-                            <option value="read-write" selected>Read and write</option>
-                            <option value="read-only">Read only</option>
+                        {{ ui.field_error(errors, "sa-token-expires-" ~ uid) }}
+                        <label for="sa-token-scope-{{ uid }}">Access</label>
+                        <select id="sa-token-scope-{{ uid }}" name="scope" class="form-control"{{ ui.invalid_attrs(errors, "sa-token-scope-" ~ uid) }}>
+                            <option value="read-write" {% if not (mine and form.get('scope') == 'read-only') %}selected{% endif %}>Read and write</option>
+                            <option value="read-only" {% if mine and form.get('scope') == 'read-only' %}selected{% endif %}>Read only</option>
                         </select>
+                        {{ ui.field_error(errors, "sa-token-scope-" ~ uid) }}
                         <button type="submit" class="btn btn-sm btn-primary">Issue token</button>
                     </form>
                 </details>

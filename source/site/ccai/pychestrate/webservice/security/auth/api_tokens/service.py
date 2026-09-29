@@ -447,11 +447,12 @@ def _normalize_name(*, name: Any) -> str:
         :raises: ApiTokenValidationError
     """
     if not isinstance(name, str) or len(name.strip()) == 0:
-        raise ApiTokenValidationError("A token name is required.")
+        raise ApiTokenValidationError("A token name is required.", field="name")
     trimmed = name.strip()
     if len(trimmed) > MAX_TOKEN_NAME_LENGTH:
         raise ApiTokenValidationError(
-            "A token name may be at most {} characters.".format(MAX_TOKEN_NAME_LENGTH)
+            "A token name may be at most {} characters.".format(MAX_TOKEN_NAME_LENGTH),
+            field="name",
         )
     rtnval = trimmed
     return rtnval
@@ -470,16 +471,19 @@ def _normalize_lifetime_days(*, lifetime_days: Any) -> int:
     if lifetime_days is None:
         return DEFAULT_TOKEN_LIFETIME_DAYS
     if isinstance(lifetime_days, bool):
-        raise ApiTokenValidationError("expires_in_days must be a whole number of days.")
+        raise ApiTokenValidationError(
+            "expires_in_days must be a whole number of days.", field="expires_in_days",
+        )
     try:
         parsed = int(str(lifetime_days).strip())
     except (TypeError, ValueError):
         raise ApiTokenValidationError(
-            "expires_in_days must be a whole number of days."
+            "expires_in_days must be a whole number of days.", field="expires_in_days",
         ) from None
     if parsed < 1 or parsed > MAX_TOKEN_LIFETIME_DAYS:
         raise ApiTokenValidationError(
-            "expires_in_days must be between 1 and {}.".format(MAX_TOKEN_LIFETIME_DAYS)
+            "expires_in_days must be between 1 and {}.".format(MAX_TOKEN_LIFETIME_DAYS),
+            field="expires_in_days",
         )
     rtnval = parsed
     return rtnval
@@ -499,7 +503,8 @@ def _normalize_scope(*, scope: Any) -> str:
         return SCOPE_READ_WRITE
     if not isinstance(scope, str) or scope.strip() not in SUPPORTED_SCOPES:
         raise ApiTokenValidationError(
-            "scope must be one of: {}.".format(", ".join(SUPPORTED_SCOPES))
+            "scope must be one of: {}.".format(", ".join(SUPPORTED_SCOPES)),
+            field="scope",
         )
     rtnval = scope.strip()
     return rtnval
@@ -987,12 +992,15 @@ def create_service_account(
     )
 
     if not isinstance(login_name, str):
-        raise ApiTokenValidationError("A service account login name is required.")
+        raise ApiTokenValidationError(
+            "A service account login name is required.", field="login_name",
+        )
     normalized_login = login_name.strip().lower()
     if _SERVICE_ACCOUNT_LOGIN_PATTERN.match(normalized_login) is None:
         raise ApiTokenValidationError(
             "A service account login name is 2-63 characters of lower-case"
-            " letters, digits, '.', '_' or '-', starting with a letter or digit."
+            " letters, digits, '.', '_' or '-', starting with a letter or digit.",
+            field="login_name",
         )
     resolved_display_name = display_name.strip() if isinstance(display_name, str) else ""
     if len(resolved_display_name) == 0:
@@ -1012,7 +1020,8 @@ def create_service_account(
     except UserAlreadyExistsError:
         db_session.rollback()
         raise ApiTokenValidationError(
-            "An account named '{}' already exists.".format(normalized_login)
+            "An account named '{}' already exists.".format(normalized_login),
+            field="login_name",
         ) from None
     rtnval = user
     return rtnval

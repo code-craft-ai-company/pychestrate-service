@@ -37,27 +37,30 @@
     {% endif %}
     {% endif %}
 
+    {{ ui.error_summary(errors, error_labels) }}
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
         <div class="form-group">
             <label for="user_id">User *</label>
-            <select id="user_id" name="user_id" class="form-control" required>
+            <select id="user_id" name="user_id" class="form-control" required{{ ui.invalid_attrs(errors, "user_id") }}>
                 <option value="">Select a user...</option>
                 {% for user in available_users %}
                 <option value="{{ user.id }}" {% if form_data and form_data.user_id == user.id|string %}selected{% endif %}>{{ user.username }}{% if user.display_name %} ({{ user.display_name }}){% endif %}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, "user_id") }}
         </div>
         
         <div class="form-group">
             <label for="role">Role *</label>
-            <select id="role" name="role" class="form-control" required>
+            <select id="role" name="role" class="form-control" required{{ ui.invalid_attrs(errors, "role", "role-help") }}>
                 {% for role in roles %}
                 <option value="{{ role }}" {% if (form_data and form_data.role == role) or (not form_data and role == 'developer') %}selected{% endif %}>{{ role_descriptions[role] if role in role_descriptions else role }}</option>
                 {% endfor %}
             </select>
-            <div class="form-text">
+            {{ ui.field_error(errors, "role") }}
+            <div class="form-text" id="role-help">
                 The role applies to this project only. To give someone the same
                 access to every project, an administrator can assign the matching
                 global role (project-owner, project-editor or project-viewer) on

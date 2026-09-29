@@ -479,6 +479,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
 
     # Forms
     "form_data": _form_data,
+    "issue_for": _const(None),
+    "submitted_role": _const(None),
     "form_values": _form_values,
     "error": _by_mode("Invalid token. Re-read the token from the server.", None),
     "token_path": _const("/var/lib/pychestrate/unlock.token"),

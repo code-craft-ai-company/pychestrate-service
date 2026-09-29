@@ -45,6 +45,10 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     flash,
     url_for as _url_for_module,
 )
+from ccai.pychestrate.webservice.webinterface.foundation.form_errors import (
+    PASSWORD_FIELD_LABELS,
+    password_form_errors,
+)
 from ccai.pychestrate.webservice.webinterface.blueprints.config import routes as _config_routes
 from ccai.pychestrate.webservice.webinterface.htmlui.next_validator import (
     NextValidator,
@@ -128,6 +132,8 @@ def _render_page(
         csrf_token=_config_routes._ensure_session_csrf_token(session=session),
     )
     context.update(password_policy_template_context())
+    context["errors"] = {}
+    context["error_labels"] = PASSWORD_FIELD_LABELS
     context["problems"] = []
     context.update(context_values)
     response = _config_routes._render(
@@ -137,19 +143,6 @@ def _render_page(
         response._headers[name] = value
     _config_routes._attach_session_to_response(response=response, session=session)
     return response
-
-
-def _describe_problems(*, exc: Exception) -> List[str]:
-    """
-        The sentences to show for a refused password.
-    """
-    if isinstance(exc, PasswordPolicyError) is True:
-        return list(exc.problems)
-    message = getattr(exc, "message", None)
-    if message is None:
-        message = str(exc)
-    rtnval = [str(message)]
-    return rtnval
 
 
 def _sign_in(
@@ -310,7 +303,7 @@ def handle_password_link(request: Request) -> Response:
         confirm = str(form.get("password_confirm", ""))
         if new_password != confirm:
             values = dict(link_values)
-            values["problems"] = ["The passwords do not match."]
+            values["errors"] = {"password_confirm": "The passwords do not match."}
             response = _render_page(
                 template_name=template_name, session=session,
                 context_values=values, status_code=400,
@@ -333,7 +326,7 @@ def handle_password_link(request: Request) -> Response:
                 )
                 return response
             values = dict(link_values)
-            values["problems"] = _describe_problems(exc=exc)
+            values["errors"], values["problems"] = password_form_errors(exc)
             response = _render_page(
                 template_name=template_name, session=session,
                 context_values=values, status_code=400,
@@ -412,7 +405,7 @@ def handle_password_change_required(request: Request) -> Response:
     confirm = str(form.get("password_confirm", ""))
     if new_password != confirm:
         values = dict(page_values)
-        values["problems"] = ["The new passwords do not match."]
+        values["errors"] = {"password_confirm": "The new passwords do not match."}
         response = _render_page(
             template_name=template_name, session=session,
             context_values=values, status_code=400,
@@ -435,7 +428,7 @@ def handle_password_change_required(request: Request) -> Response:
         except (PasswordPolicyError, lifecycle.PasswordLifecycleError) as exc:
             db_session.rollback()
             values = dict(page_values)
-            values["problems"] = _describe_problems(exc=exc)
+            values["errors"], values["problems"] = password_form_errors(exc)
             response = _render_page(
                 template_name=template_name, session=session,
                 context_values=values, status_code=400,

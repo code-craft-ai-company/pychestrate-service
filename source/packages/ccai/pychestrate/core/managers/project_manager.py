@@ -232,9 +232,10 @@ class MemberNotFoundError(Exception):
 class DuplicateMemberError(Exception):
     """Exception raised when attempting to add a duplicate member."""
     
-    def __init__(self, message: str, error_code: str = "MEMBER_ALREADY_EXISTS"):
+    def __init__(self, message: str, error_code: str = "MEMBER_ALREADY_EXISTS", field: str = "user_id"):
         self.message = message
         self.error_code = error_code
+        self.field = field
         super().__init__(self.message)
 
 
