@@ -467,6 +467,76 @@ def _parse_csv_string(*, raw: str) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
+#: How many of a person's own addresses the pool list shows.
+MY_ALLOCATIONS_LIMIT: int = 50
+
+
+def _my_active_allocations(*, ip_pool_manager: Any, user_id: Any) -> List[Any]:
+    """
+        The addresses the signed-in person holds now, across every pool,
+        for the "Your IP addresses" card. A failure to read them leaves
+        the card out rather than the page.
+
+        :param ip_pool_manager: Already-built IPPoolManager.
+        :param user_id: The signed-in person.
+
+        :returns: Their active allocations, newest first as the manager
+                  orders them.
+    """
+    try:
+        listed = ip_pool_manager.list_allocations(
+            user_id=str(user_id), status="active", limit=MY_ALLOCATIONS_LIMIT,
+        )
+        rtnval = list(listed.allocations)
+    except Exception:
+        rtnval = []
+    return rtnval
+
+
+def _stage_ip_release_event(
+        *, db_session: Any, actor_user_id: Any, allocation: Any, reason: str
+    ) -> None:
+    """
+        Stage the audit event for a lab manager releasing an address
+        someone else holds. It is published when the release commits, so
+        a refused release leaves no record and an accepted one cannot
+        lack it.
+
+        :param db_session: The request's session.
+        :param actor_user_id: The manager.
+        :param allocation: The allocation being released.
+        :param reason: What the manager gave.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import new_uuid  # noqa: E402
+    from ccai.pychestrate.webservice.audit.extensions.ip_allocation_events import (  # noqa: E402
+        IP_FORCE_RELEASED_TOPIC,
+    )
+    from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent  # noqa: E402
+    from ccai.pychestrate.webservice.messaging.outbox import enqueue_event  # noqa: E402
+
+    payload = {
+        "allocation_id": int(allocation.id),
+        "pool_id": int(allocation.pool_id) if allocation.pool_id is not None else None,
+        "ip_address": str(allocation.ip_address),
+        "holder_user_id": str(allocation.user_id),
+        "reason": reason,
+        "actor_user_id": str(actor_user_id),
+    }
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(topic=IP_FORCE_RELEASED_TOPIC, payload=payload, source_event_id=new_uuid()),
+    )
+    return
+
+
+#: What a manager is told when they release someone else's address without a reason.
+RELEASE_FOR_OTHER_NEEDS_REASON: str = (
+    "Give a reason to release an address someone else holds; it is recorded in the audit log."
+)
+
+
 def handle_ip_pool_list(request: Request) -> Response:
     """
         ``GET /resources/ip-pools``.
@@ -503,6 +573,9 @@ def handle_ip_pool_list(request: Request) -> Response:
         )
         context.update(_resources_permission_flags(auth=auth))
         context["pools"] = pools
+        context["my_allocations"] = _my_active_allocations(
+            ip_pool_manager=ip_pool_manager, user_id=auth.user_id,
+        )
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
@@ -1192,15 +1265,38 @@ def handle_ip_pool_checkin(request: Request) -> Response:
         )
 
         ip_pool_manager = _build_ip_pool_manager(db_session=db_session)
+        # A lab manager may release an address someone else holds, giving
+        # a reason that goes into the audit log with the holder's name.
+        can_manage = _resources_permission_flags(auth=auth)["can_manage"] is True
+        typed_reason = str(single_form.get("reason", "") or "").strip()
+        override_reason = typed_reason if (can_manage is True and len(typed_reason) > 0) else None
         try:
             if allocation_id is not None:
-                ip_pool_manager.checkin_ip(
-                    allocation_id, auth.user_id
-                )
+                acted_for_other = False
+                if override_reason is not None:
+                    held = ip_pool_manager.get_allocation(allocation_id)
+                    if held is not None and str(held.user_id) != str(auth.user_id):
+                        acted_for_other = True
+                        _stage_ip_release_event(
+                            db_session=db_session, actor_user_id=auth.user_id,
+                            allocation=held, reason=override_reason,
+                        )
+                if acted_for_other is True:
+                    ip_pool_manager.checkin_ip(
+                        allocation_id, auth.user_id, override_reason=override_reason
+                    )
+                else:
+                    ip_pool_manager.checkin_ip(
+                        allocation_id, auth.user_id
+                    )
                 response = _redirect_with_flash(
                     session=auth.session,
                     url=redirect_url,
-                    message="IP checked in successfully.",
+                    message=(
+                        "IP released. Your reason was recorded in the audit log."
+                        if acted_for_other is True
+                        else "IP checked in successfully."
+                    ),
                     category=flash.CATEGORY_SUCCESS,
                 )
                 return response
@@ -1229,6 +1325,8 @@ def handle_ip_pool_checkin(request: Request) -> Response:
             return response
         except Exception as exc:
             message = _describe_ip_pool_error(exc=exc)
+            if can_manage is True and getattr(exc, "error_code", "") == "NOT_IP_ALLOCATION_OWNER":
+                message = RELEASE_FOR_OTHER_NEEDS_REASON
             if message is None:
                 _LOGGER.exception(
                     "Unexpected error checking in IP for pool %s",

@@ -92,6 +92,7 @@ _ACTIONS = {
     "audit.project.member_removed": "Removed project member",
     "audit.ui_profile.deployment_changed": "Changed the UI profile",
     "audit.reservation.overridden": "Acted on another person's reservation",
+    "audit.ip_allocation.force_released": "Released another person's IP address",
 }
 
 _DATA_VERBS = {
@@ -229,6 +230,14 @@ def _summary(*, kind: str, payload: Dict[str, Any], logins: Dict[str, str]) -> s
             parts.append("expires {}".format(expires))
         if payload.get("must_change", None) is True:
             parts.append("must change at next sign-in")
+        return " - ".join(parts)
+
+    if kind == "audit.ip_allocation.force_released":
+        parts.append(str(payload.get("ip_address", "")))
+        holder = _name_for(user_id=payload.get("holder_user_id"), logins=logins)
+        if holder is not None:
+            parts.append("held by {}".format(holder))
+        parts.append('reason: "{}"'.format(payload.get("reason", "")))
         return " - ".join(parts)
 
     if kind == "audit.reservation.overridden":

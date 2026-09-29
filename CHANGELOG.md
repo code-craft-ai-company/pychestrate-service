@@ -286,6 +286,15 @@ preview tag.
   refused as before. The owner is not notified: nothing in the product
   sends notifications yet.
 
+- **IP pools show who holds each address, and a manager can release it.**
+  The pool page's User column was always blank and the reason given at
+  check-out could not be read back. It now names the holder, shows the
+  reason and job, and marks a person's own addresses; the pool list has a
+  "Your IP addresses" card. A person with the resource-management
+  permission can release an address someone else holds by giving a reason
+  next to the button; it is audited with the holder's name. Anyone else
+  is refused as before, and the holder is not notified.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

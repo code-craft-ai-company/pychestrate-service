@@ -90,8 +90,9 @@
                 <thead>
                     <tr>
                         <th scope="col">IP Address</th>
-                        <th scope="col">User</th>
+                        <th scope="col">Held by</th>
                         <th scope="col">Job ID</th>
+                        <th scope="col">Reason</th>
                         <th scope="col">Checkout Time</th>
                         <th scope="col">Actions</th>
                     </tr>
@@ -100,15 +101,27 @@
                     {% for alloc in allocations %}
                     <tr>
                         <td><code>{{ alloc.ip_address }}</code></td>
-                        <td>{{ alloc.username or '-' }}</td>
+                        <td>{{ alloc.username or 'Unknown' }}{% if (alloc.user_id | string) == (current_user_id | string) %} <span class="muted">(you)</span>{% endif %}</td>
                         <td>{{ alloc.job_id or '-' }}</td>
+                        <td>{{ alloc.reason or '-' }}</td>
                         <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
                         <td>
+                            {% if (alloc.user_id | string) == (current_user_id | string) %}
                             <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
                                 <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Checkin</button>
                             </form>
+                            {% elif can_manage %}
+                            <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post" style="display:inline; white-space: nowrap;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
+                                <input type="text" name="reason" class="form-control" required
+                                       placeholder="Reason" aria-label="Reason for releasing this address"
+                                       style="width: 140px; display: inline-block; padding: 4px 8px;">
+                                <button type="submit" class="btn btn-sm btn-danger" data-confirm="Release this address for {{ alloc.username or 'its holder' }}? Your reason is recorded in the audit log; they are not notified.">Release</button>
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

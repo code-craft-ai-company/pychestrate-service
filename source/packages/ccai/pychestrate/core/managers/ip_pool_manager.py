@@ -109,6 +109,7 @@ class IPAllocationResponse:
     status: str
     checkout_time: datetime
     expected_checkin: Optional[datetime]
+    reason: Optional[str] = None
 
 
 @dataclass
@@ -1339,14 +1340,19 @@ class IPPoolManager:
     # IP Checkin Operations
     # =========================================================================
     
-    def checkin_ip(self, allocation_id: int, user_id: str) -> None:
+    def checkin_ip(self, allocation_id: int, user_id: str, override_reason: Optional[str] = None) -> None:
         """
         Release a single IP allocation.
         
         :param allocation_id: The allocation's unique identifier
         :param user_id: The ID of the user checking in the IP
+        :param override_reason: Why someone other than the holder is
+                                releasing it. The caller passes it only
+                                for a person allowed to act for others
+                                (a lab manager).
         :raises IPAllocationNotFoundError: If allocation is not found
-        :raises NotIPAllocationOwnerError: If user is not the owner
+        :raises NotIPAllocationOwnerError: If user is not the owner and
+                                           gave no override reason
         
         Validates: Requirements 4A.1
         """
@@ -1359,11 +1365,14 @@ class IPPoolManager:
         if not allocation:
             raise IPAllocationNotFoundError(f"IP allocation with ID '{allocation_id}' not found")
         
-        # Check ownership
+        # Check ownership; a manager may release for the holder with a reason
+        override = None
         if str(allocation.user_id) != str(user_id):
-            raise NotIPAllocationOwnerError(
-                f"User '{user_id}' is not the owner of allocation '{allocation_id}'"
-            )
+            override = (override_reason or "").strip()
+            if len(override) == 0:
+                raise NotIPAllocationOwnerError(
+                    f"User '{user_id}' is not the owner of allocation '{allocation_id}'"
+                )
         
         # Check if already released
         if allocation.status != IPAllocationStatus.ACTIVE.value:
@@ -1377,14 +1386,18 @@ class IPPoolManager:
         
         # Log the checkin event
         if self._audit_logger:
+            details = {
+                "allocation_id": allocation.id,
+                "pool_id": allocation.pool_id,
+                "ip_address": allocation.ip_address
+            }
+            if override is not None:
+                details["released_for_holder_user_id"] = str(allocation.user_id)
+                details["override_reason"] = override
             self._audit_logger.log_event(
                 event_type='ip_checkin',
                 user_id=str(user_id) if user_id else None,
-                details={
-                    "allocation_id": allocation.id,
-                    "pool_id": allocation.pool_id,
-                    "ip_address": allocation.ip_address
-                }
+                details=details
             )
     
     def checkin_ips(self, allocation_ids: List[int], user_id: str) -> int:
@@ -1707,6 +1720,12 @@ class IPPoolManager:
         :param pool: The IPPool ORM object
         :returns: IPAllocationResponse dataclass
         """
+        from ccai.pychestrate.core.orm import User
+
+        holder = self._db_session.query(User).filter(
+            User.id == allocation.user_id
+        ).first()
+
         return IPAllocationResponse(
             id=allocation.id,
             pool_id=allocation.pool_id,
@@ -1716,9 +1735,10 @@ class IPPoolManager:
             gateway=pool.gateway if pool else None,
             dns_servers=pool.dns_servers if pool else [],
             user_id=str(allocation.user_id),
-            username=None,  # Would need to join with User table
+            username=holder.login if holder else None,
             job_id=allocation.job_id,
             status=allocation.status,
             checkout_time=allocation.checkout_time,
-            expected_checkin=allocation.expected_checkin
+            expected_checkin=allocation.expected_checkin,
+            reason=getattr(allocation, "reason", None),
         )

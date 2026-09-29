@@ -69,4 +69,39 @@
 </table></div>
 
 {{ ui.pagination('resources.ip_pool_list', page, total_pages, {'per_page': per_page}, total=None) }}
+
+{% if my_allocations %}
+<h2 class="mt">Your IP addresses</h2>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <caption class="visually-hidden">IP addresses you have checked out</caption>
+    <thead>
+        <tr>
+            <th scope="col">IP Address</th>
+            <th scope="col">Pool</th>
+            <th scope="col">Job ID</th>
+            <th scope="col">Reason</th>
+            <th scope="col">Checked out</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alloc in my_allocations %}
+        <tr>
+            <td><code>{{ alloc.ip_address }}</code></td>
+            <td><a href="{{ url_for('resources.ip_pool_detail', pool_id=alloc.pool_id) }}">{{ alloc.pool_name }}</a></td>
+            <td>{{ alloc.job_id or '-' }}</td>
+            <td>{{ alloc.reason or '-' }}</td>
+            <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+            <td>
+                <form action="{{ url_for('resources.ip_pool_checkin', pool_id=alloc.pool_id) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
+                    <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Checkin</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% endif %}
 {% endblock %}
