@@ -871,39 +871,49 @@ var PycPipelinesList = class extends HTMLElement {
     table.rowClass = "pyc-pipelines__row";
     table.columns = [
       {
-        key: "pipeline_id",
+        // The name leads; the short id follows for anyone who must quote it (ORC-37).
+        key: "name",
         label: "Pipeline",
-        width: "12rem",
+        width: "18rem",
         render: (pipeline) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-pipelines__pipeline-link");
           link.setAttribute(
             "href",
             build_pipeline_detail_link(pipeline.project_id, pipeline.pipeline_id)
           );
-          link.textContent = short_id(pipeline.pipeline_id);
+          const name = typeof pipeline.name === "string" ? pipeline.name.trim() : "";
+          link.textContent = name.length > 0 ? name : short_id(pipeline.pipeline_id);
           link.title = pipeline.pipeline_id;
-          return link;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-pipelines__pipeline-id");
+          id.textContent = " " + short_id(pipeline.pipeline_id);
+          cell.appendChild(id);
+          return cell;
         }
       },
-      { key: "name", label: "Name", width: "16rem" },
       {
-        key: "digest",
-        label: "Digest",
-        width: "12rem",
+        // Where the definition came from. The column called "Digest" showed the
+        // pipeline's id again; the id is the digest.
+        key: "filename",
+        label: "Source",
+        width: "20rem",
         sortable: false,
         render: (pipeline) => {
-          const digest = document.createElement("span");
-          digest.classList.add("pyc-pipelines__digest");
-          digest.textContent = short_id(pipeline.pipeline_id);
-          digest.title = pipeline.pipeline_id;
-          return digest;
+          const file = typeof pipeline.filename === "string" ? pipeline.filename : "";
+          const commit = typeof pipeline.commit_sha === "string" ? pipeline.commit_sha.slice(0, 7) : "";
+          if (file.length > 0 && commit.length > 0) {
+            return file + " @ " + commit;
+          }
+          return file.length > 0 ? file : commit.length > 0 ? commit : "\u2014";
         }
       },
       {
         key: "stages",
         label: "Stages",
-        width: "8rem",
+        width: "7rem",
         render: (pipeline) => {
           const stage_count = Array.isArray(pipeline.stages) ? pipeline.stages.length : 0;
           const rtnval = String(stage_count);
@@ -912,8 +922,8 @@ var PycPipelinesList = class extends HTMLElement {
       },
       {
         key: "cached_at",
-        label: "Cached",
-        width: "14rem",
+        label: "Saved",
+        width: "12rem",
         render: (pipeline) => format_timestamp(pipeline.cached_at)
       }
     ];

@@ -414,3 +414,10 @@ pyc-pipeline-detail {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-pipelines-fg-muted);
 }
+
+/* The short id after a row's name: there to be quoted, not to lead (ORC-37). */
+.pyc-pipelines__pipeline-id {
+    color: var(--pyc-pipelines-fg-muted);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    font-variant-numeric: tabular-nums;
+}

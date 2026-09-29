@@ -325,6 +325,13 @@ preview tag.
   nothing matched anywhere. Users, resources and runs by name or partial id are
   not searched yet.
 
+- The Pipelines list leads with the name and shows the source (ORC-37). Its
+  "Digest" column showed the pipeline's id a second time (the id is the digest);
+  it is now "Source" ("ci.yaml @ 1a2b3c4", the file and the commit the
+  definition came from), the row leads with the pipeline's name and the short id
+  follows in a muted style, and "Cached" reads "Saved". Arrowheads on the DAG
+  edges are not done.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

@@ -209,3 +209,41 @@ def test_the_provisioning_list_leads_with_the_action_and_driver(browser: Browser
         (["Run", "State", "Started", "Duration"], "apply · terraform ffffffff", "12m 3s"),
     )
     return
+
+
+def test_the_pipelines_list_leads_with_the_name_and_shows_the_source_not_the_id_twice(browser: Browser):
+    """
+    **Feature: run lists say what ran (ORC-37)**
+    **Property: each pipeline row starts with its name followed by the short id,
+    shows where the definition came from ("ci.yaml @ 1a2b3c4") instead of a
+    "Digest" column that repeated the id, and its time column is "Saved", not
+    "Cached".**
+    """
+    pipelines = {
+        "items": [
+            {"pipeline_id": "12345678-abcd-4000-8000-000000000001", "project_id": PROJECT_ID, "name": "nightly", "schema_version": 1,
+             "commit_sha": "1a2b3c4d5e6f", "filename": "ci.yaml", "stages": [{"name": "build"}, {"name": "test"}], "cached_at": "2026-09-29T10:00:00+00:00"},
+            {"pipeline_id": "87654321-abcd-4000-8000-000000000002", "project_id": PROJECT_ID, "name": "", "schema_version": 1,
+             "commit_sha": "", "filename": "", "stages": [], "cached_at": "2026-09-29T09:00:00+00:00"},
+        ],
+        "meta": {"page": 1, "per_page": 25, "total": 2},
+    }
+    page = open_shell_page(
+        browser, path="/pipelines?project_id=" + PROJECT_ID, bundle_names=["pyc-site-shell", "pyc-pipelines-bundle"],
+        api_stubs={"/api/v1/projects": PROJECTS, "/api/v1/projects/{}/pipelines".format(PROJECT_ID): pipelines}, **DESKTOP,
+    )
+    try:
+        page.wait_for_selector("mj-data-table")
+        page.wait_for_timeout(600)
+        text = _cells_text(page, "mj-data-table")
+        headers = page.evaluate("() => [...document.querySelector('mj-data-table').columns].map((c) => c.label)")
+        fits = _last_column_in_view(page, "mj-data-table")
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (fits, headers, [row[:2] for row in text]),
+        (True, ["Pipeline", "Source", "Stages", "Saved"], [["nightly 12345678", "ci.yaml @ 1a2b3c4"], ["87654321 87654321", "—"]]),
+    )
+    return
+
