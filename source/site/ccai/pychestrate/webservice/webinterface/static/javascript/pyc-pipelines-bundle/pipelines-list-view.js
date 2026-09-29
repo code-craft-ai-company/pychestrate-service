@@ -1,3 +1,4 @@
+import { message_with_detail, problem_detail_of_body } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -905,6 +906,7 @@ class PycPipelinesList extends HTMLElement {
     let stage_count = 0;
     let topological_order = [];
     let issues = [];
+    let detail = "";
     try {
       const url = build_pipelines_validate_url(this._state.projectId);
       const response = await fetch(url, {
@@ -918,6 +920,9 @@ class PycPipelinesList extends HTMLElement {
       });
       status = response.status;
       const body = await response.json().catch(() => null);
+      if (response.ok === false) {
+        detail = problem_detail_of_body(body);
+      }
       if (body !== null && typeof body === "object") {
         const record = body;
         if (typeof record.valid === "boolean") {
@@ -956,7 +961,7 @@ class PycPipelinesList extends HTMLElement {
       stageCount: stage_count,
       topologicalOrder: topological_order,
       issues,
-      message: validate_message_for_status(status, valid)
+      message: message_with_detail("Pipeline not validated", detail, validate_message_for_status(status, valid))
     };
     return rtnval;
   }

@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   build_environments_query_url,
   format_timestamp,
@@ -850,6 +851,7 @@ class PycProvisioningList extends HTMLElement {
     };
     let status = 0;
     let run_id = "";
+    let detail = "";
     try {
       const url = build_provisioning_collection_url(
         this._state.projectId
@@ -864,6 +866,7 @@ class PycProvisioningList extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const run = body;
@@ -889,7 +892,7 @@ class PycProvisioningList extends HTMLElement {
       ok,
       status,
       runId: run_id,
-      message: trigger_message_for_status(status)
+      message: message_with_detail("Provisioning run not started", detail, trigger_message_for_status(status))
     };
     return rtnval;
   }

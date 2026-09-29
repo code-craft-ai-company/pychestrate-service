@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -1045,6 +1046,7 @@ class PycTestCatalog extends HTMLElement {
     const url = build_test_runs_url(entry.project_id);
     let status = 0;
     let run_id = "";
+    let detail = "";
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -1056,6 +1058,7 @@ class PycTestCatalog extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const triggered = body;
@@ -1088,7 +1091,7 @@ class PycTestCatalog extends HTMLElement {
       ok,
       status,
       runId: run_id,
-      message: trigger_message_for_status(status)
+      message: message_with_detail("Test run not started", detail, trigger_message_for_status(status))
     };
     this._show_toast(outcome);
     return outcome;

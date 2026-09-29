@@ -1,3 +1,45 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
@@ -1041,6 +1083,7 @@ var PycTestCatalog = class extends HTMLElement {
     const url = build_test_runs_url(entry.project_id);
     let status = 0;
     let run_id = "";
+    let detail = "";
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -1052,6 +1095,7 @@ var PycTestCatalog = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const triggered = body;
@@ -1084,7 +1128,7 @@ var PycTestCatalog = class extends HTMLElement {
       ok,
       status,
       runId: run_id,
-      message: trigger_message_for_status(status)
+      message: message_with_detail("Test run not started", detail, trigger_message_for_status(status))
     };
     this._show_toast(outcome);
     return outcome;

@@ -1,3 +1,35 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
@@ -930,6 +962,7 @@ var PycPipelinesList = class extends HTMLElement {
     let stage_count = 0;
     let topological_order = [];
     let issues = [];
+    let detail = "";
     try {
       const url = build_pipelines_validate_url(this._state.projectId);
       const response = await fetch(url, {
@@ -943,6 +976,9 @@ var PycPipelinesList = class extends HTMLElement {
       });
       status = response.status;
       const body = await response.json().catch(() => null);
+      if (response.ok === false) {
+        detail = problem_detail_of_body(body);
+      }
       if (body !== null && typeof body === "object") {
         const record = body;
         if (typeof record.valid === "boolean") {
@@ -981,7 +1017,7 @@ var PycPipelinesList = class extends HTMLElement {
       stageCount: stage_count,
       topologicalOrder: topological_order,
       issues,
-      message: validate_message_for_status(status, valid)
+      message: message_with_detail("Pipeline not validated", detail, validate_message_for_status(status, valid))
     };
     return rtnval;
   }

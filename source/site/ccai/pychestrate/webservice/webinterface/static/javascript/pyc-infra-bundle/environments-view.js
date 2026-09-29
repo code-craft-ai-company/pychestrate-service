@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const ENVIRONMENT_STATES = [
   "active",
@@ -966,6 +967,7 @@ class PycEnvironments extends HTMLElement {
     }
     let status = 0;
     let report = null;
+    let detail = "";
     try {
       const url = build_drift_check_url(
         this._state.projectId,
@@ -977,6 +979,7 @@ class PycEnvironments extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const parsed = body;
@@ -1002,7 +1005,7 @@ class PycEnvironments extends HTMLElement {
       ok,
       status,
       report,
-      message: drift_check_message_for_status(status)
+      message: message_with_detail("Drift check not started", detail, drift_check_message_for_status(status))
     };
     return rtnval;
   }
@@ -1214,6 +1217,7 @@ class PycEnvironments extends HTMLElement {
     };
     let status = 0;
     let environment_id = "";
+    let detail = "";
     try {
       const url = build_environments_collection_url(
         this._state.projectId
@@ -1228,6 +1232,7 @@ class PycEnvironments extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const environment = body;
@@ -1253,7 +1258,7 @@ class PycEnvironments extends HTMLElement {
       ok,
       status,
       environmentId: environment_id,
-      message: register_message_for_status(status)
+      message: message_with_detail("Environment not registered", detail, register_message_for_status(status))
     };
     return rtnval;
   }

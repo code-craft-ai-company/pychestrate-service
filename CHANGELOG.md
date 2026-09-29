@@ -542,6 +542,18 @@ preview tag.
 
 ### Fixed
 
+- Bundle views show the server's reason when it refuses a request (ORC-08). A
+  run refused because no pod was enrolled said "The environment cannot accept
+  this action right now", and validating a pipeline without a commit said
+  "not a valid DAG": the views mapped the status to a fixed sentence and dropped
+  the problem document's `detail`. A shared reader (`shared/problem-detail.js`)
+  now lets the provisioning, environments (register and drift check), catalog
+  (test run) and pipelines (validate) views show "Provisioning run not started:
+  No enrolled pod can take this run" and keep their sentence as the fallback
+  when the server gives no reason (or only repeats "Not Found"). The builds,
+  guards, SLOs, alert-rule, dashboard-editor and release-channel views already
+  did this.
+
 - Every bundle page shows the "session expired" notice when the session has
   ended (XC-12). Only some views turned a 401 from the API into the shell's
   notice (`/runs` did; creating a secret after the session ended said "Failed

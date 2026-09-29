@@ -1,3 +1,45 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
@@ -991,6 +1033,7 @@ var PycEnvironments = class extends HTMLElement {
     }
     let status = 0;
     let report = null;
+    let detail = "";
     try {
       const url = build_drift_check_url(
         this._state.projectId,
@@ -1002,6 +1045,7 @@ var PycEnvironments = class extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const parsed = body;
@@ -1027,7 +1071,7 @@ var PycEnvironments = class extends HTMLElement {
       ok,
       status,
       report,
-      message: drift_check_message_for_status(status)
+      message: message_with_detail("Drift check not started", detail, drift_check_message_for_status(status))
     };
     return rtnval;
   }
@@ -1238,6 +1282,7 @@ var PycEnvironments = class extends HTMLElement {
     };
     let status = 0;
     let environment_id = "";
+    let detail = "";
     try {
       const url = build_environments_collection_url(
         this._state.projectId
@@ -1252,6 +1297,7 @@ var PycEnvironments = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const environment = body;
@@ -1277,7 +1323,7 @@ var PycEnvironments = class extends HTMLElement {
       ok,
       status,
       environmentId: environment_id,
-      message: register_message_for_status(status)
+      message: message_with_detail("Environment not registered", detail, register_message_for_status(status))
     };
     return rtnval;
   }
@@ -2625,6 +2671,7 @@ var PycProvisioningList = class extends HTMLElement {
     };
     let status = 0;
     let run_id = "";
+    let detail = "";
     try {
       const url = build_provisioning_collection_url(
         this._state.projectId
@@ -2639,6 +2686,7 @@ var PycProvisioningList = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const run = body;
@@ -2664,7 +2712,7 @@ var PycProvisioningList = class extends HTMLElement {
       ok,
       status,
       runId: run_id,
-      message: trigger_message_for_status(status)
+      message: message_with_detail("Provisioning run not started", detail, trigger_message_for_status(status))
     };
     return rtnval;
   }
