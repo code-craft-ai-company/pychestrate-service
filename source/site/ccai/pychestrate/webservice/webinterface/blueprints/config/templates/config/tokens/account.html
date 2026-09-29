@@ -83,7 +83,7 @@
                 <form action="{{ url_for('config.account_api_token_revoke', token_id=token.token_id) }}"
                       method="post" data-confirm="Revoke token '{{ token.name }}'? Anything using it stops working.">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                    <button type="submit" class="btn btn-sm btn-quiet-danger">Revoke</button>
                 </form>
                 {% else %}
                 <span class="muted">&mdash;</span>

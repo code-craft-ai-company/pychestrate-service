@@ -829,6 +829,39 @@
     margin: 0;
 }
 
+/* A group of checkboxes with a name and a description each (UI Profile,
+   Preferences): the box beside the text, not on a line of its own above it
+   (ADM-42). */
+.pyc-admin-page-fragment .pyc-choice-group {
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem 0.6rem;
+}
+
+.pyc-admin-page-fragment .pyc-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.5rem 0;
+}
+
+.pyc-admin-page-fragment .pyc-choice + .pyc-choice {
+    border-top: 1px solid var(--pyc-color-divider, var(--pyc-color-border));
+}
+
+.pyc-admin-page-fragment .pyc-choice input[type="checkbox"] {
+    flex: none;
+    margin: 0.25rem 0 0;
+}
+
+.pyc-admin-page-fragment .pyc-choice label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin: 0;
+    font-weight: 400;
+}
+
 .pyc-admin-page-fragment [aria-busy="true"] button[type="submit"] {
     opacity: 0.7;
     cursor: progress;

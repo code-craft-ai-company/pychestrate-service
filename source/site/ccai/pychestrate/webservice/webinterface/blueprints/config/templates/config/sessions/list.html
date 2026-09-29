@@ -121,9 +121,9 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     {{ list_state_fields() }}
                     {% if session.is_current %}
-                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Sign out</button>
+                    <button type="submit" class="btn btn-sm btn-quiet-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Sign out</button>
                     {% else %}
-                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="Terminate this session?">Terminate</button>
+                    <button type="submit" class="btn btn-sm btn-quiet-danger" data-confirm="Terminate this session?">Terminate</button>
                     {% endif %}
                 </form>
             </td>

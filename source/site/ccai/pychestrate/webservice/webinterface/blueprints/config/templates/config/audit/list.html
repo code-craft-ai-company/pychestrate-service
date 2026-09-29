@@ -14,6 +14,11 @@
     .pyc-audit-filters .form-group {
         margin: 0;
     }
+    /* One height for the select and the inputs, so the labels above them share a line (ADM-42). */
+    .pyc-audit-filters .form-control {
+        box-sizing: border-box;
+        height: 2.625rem;
+    }
     .pyc-audit-paging {
         display: flex;
         flex-wrap: wrap;

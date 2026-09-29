@@ -138,7 +138,7 @@
                 <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"
                       method="post" data-confirm="Revoke this token?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger">
+                    <button type="submit" class="btn btn-sm btn-quiet-danger">
                         Revoke
                     </button>
                 </form>

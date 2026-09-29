@@ -50,12 +50,14 @@
             <td>{{ variable.description or '-' }}</td>
             <td>{% if variable.updated_at %}{{ variable.updated_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>
-                <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
-                <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                </form>
+                <div class="row-actions">
+                    <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
+                    <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
+                    <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-sm btn-quiet-danger">Delete</button>
+                    </form>
+                </div>
             </td>
         </tr>
         {% else %}

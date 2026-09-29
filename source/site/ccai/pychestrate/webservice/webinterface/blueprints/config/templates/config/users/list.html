@@ -52,20 +52,22 @@
             </td>
             <td>{{ user.roles | join(', ') }}</td>
             <td>
-                <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                {% if user.id == current_user_id %}
-                <span class="muted">(you)</span>
-                {% elif user.is_active %}
-                <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate {{ user.username }}? They are signed out everywhere and cannot sign in until reactivated.">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
-                </form>
-                {% elif user.status == 'inactive' %}
-                <form action="{{ url_for('config.user_reactivate', user_id=user.id) }}" method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-secondary">Reactivate</button>
-                </form>
-                {% endif %}
+                <div class="row-actions">
+                    <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                    {% if user.id == current_user_id %}
+                    <span class="muted">(you)</span>
+                    {% elif user.is_active %}
+                    <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate {{ user.username }}? They are signed out everywhere and cannot sign in until reactivated.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-sm btn-quiet-danger">Deactivate</button>
+                    </form>
+                    {% elif user.status == 'inactive' %}
+                    <form action="{{ url_for('config.user_reactivate', user_id=user.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-sm btn-secondary">Reactivate</button>
+                    </form>
+                    {% endif %}
+                </div>
             </td>
         </tr>
         {% else %}

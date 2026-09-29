@@ -41,15 +41,17 @@
             <td>{{ role.permissions | length }} permissions</td>
             <td>{{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }}</td>
             <td>
-                {% if not role.is_system %}
-                <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">Delete</button>
-                </form>
-                {% else %}
-                <span class="muted">Built-in role</span>
-                {% endif %}
+                <div class="row-actions">
+                    {% if not role.is_system %}
+                    <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                    <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-sm btn-quiet-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">Delete</button>
+                    </form>
+                    {% else %}
+                    <span class="muted">Built-in role</span>
+                    {% endif %}
+                </div>
             </td>
         </tr>
         {% else %}

@@ -537,6 +537,16 @@ preview tag.
 
 ### Fixed
 
+- Admin lists are compact and their forms line up (ADM-42). Edit and
+  Delete/Deactivate sit side by side in the users, variables, roles, secrets
+  and secret-scope lists instead of one over the other, and the per-row
+  destructive buttons (those, plus tokens, enrollment tokens and sessions)
+  are outlined instead of solid red; the bulk "Terminate all" stays filled.
+  The checkboxes of the UI Profile and Preferences pages are beside their
+  labels (they sat on a line of their own; the `pyc-choice` class had no
+  styling), and the audit filter's controls share one height so their labels
+  share a line. A browser test renders the real templates and measures them.
+
 - Empty tables no longer carry a phantom empty row (ADM-44). `ui.empty_state`
   with a `colspan` writes a whole `<tr>`, and 21 templates wrapped it in a
   `<tr>` of their own, which browsers repair by closing the outer row and
