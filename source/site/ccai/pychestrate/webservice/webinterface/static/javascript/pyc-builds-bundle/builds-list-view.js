@@ -801,7 +801,7 @@ class PycBuildsList extends HTMLElement {
       },
       {
         key: "repro_digest_sha256",
-        label: "Repro digest",
+        label: "Inputs digest",
         width: "12rem",
         render: (build) => {
           const digest = document.createElement("span");

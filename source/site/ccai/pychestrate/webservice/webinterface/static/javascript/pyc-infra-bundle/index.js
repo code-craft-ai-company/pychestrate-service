@@ -3026,7 +3026,7 @@ var PycProvisioningDetail = class extends HTMLElement {
     );
     const layer5 = run.layer5_run_id;
     if (layer5 !== void 0 && layer5 !== null && layer5.length > 0) {
-      this._append_field(grid, "Layer-5 run", layer5);
+      this._append_field(grid, "Run", layer5, { href: "/runs/" + encodeURIComponent(layer5) });
     }
     const reason = run.final_state_reason;
     if (reason !== void 0 && reason !== null && reason.length > 0) {
@@ -3042,13 +3042,23 @@ var PycProvisioningDetail = class extends HTMLElement {
    * @param label The field's display label.
    * @param value The field's display value.
    */
-  _append_field(grid, label, value) {
+  _append_field(grid, label, value, options) {
     const field = document.createElement("div");
     field.classList.add("pyc-provisioning-detail__field");
     const term = document.createElement("dt");
     term.textContent = label;
     const def = document.createElement("dd");
-    def.textContent = value;
+    if (options !== void 0 && typeof options.href === "string") {
+      const link = document.createElement("a");
+      link.href = options.href;
+      link.textContent = value;
+      def.appendChild(link);
+    } else {
+      def.textContent = value;
+    }
+    if (options !== void 0 && typeof options.title === "string") {
+      term.title = options.title;
+    }
     field.appendChild(term);
     field.appendChild(def);
     grid.appendChild(field);

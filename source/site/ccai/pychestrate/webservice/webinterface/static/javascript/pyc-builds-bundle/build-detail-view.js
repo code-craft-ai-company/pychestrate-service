@@ -482,12 +482,14 @@ class PycBuildDetail extends HTMLElement {
     grid.classList.add("pyc-build-detail__grid");
     this._append_field(grid, "Project", build.project_id);
     this._append_field(grid, "Runner kind", build.runner_kind);
-    this._append_field(grid, "Repro digest", build.repro_digest_sha256);
+    this._append_field(grid, "Inputs digest", build.repro_digest_sha256, {
+      title: "SHA-256 of the build's input files, toolchain and environment. Two builds with the same digest were made from the same inputs."
+    });
     this._append_field(grid, "Started", format_timestamp(build.started_at));
     this._append_field(grid, "Finished", format_timestamp(build.finished_at));
     const layer5 = build.layer5_run_id;
     if (layer5 !== void 0 && layer5 !== null && layer5.length > 0) {
-      this._append_field(grid, "Layer-5 run", layer5);
+      this._append_field(grid, "Run", layer5, { href: "/runs/" + encodeURIComponent(layer5) });
     }
     const reason = build.final_state_reason;
     if (reason !== void 0 && reason !== null && reason.length > 0) {
@@ -503,13 +505,24 @@ class PycBuildDetail extends HTMLElement {
    * @param label The field's display label.
    * @param value The field's display value.
    */
-  _append_field(grid, label, value) {
+  _append_field(grid, label, value, options) {
     const field = document.createElement("div");
     field.classList.add("pyc-build-detail__field");
     const term = document.createElement("dt");
     term.textContent = label;
     const def = document.createElement("dd");
-    def.textContent = value;
+    if (options !== void 0 && typeof options.href === "string") {
+      // A reference to another page is a link, not a bare id.
+      const link = document.createElement("a");
+      link.href = options.href;
+      link.textContent = value;
+      def.appendChild(link);
+    } else {
+      def.textContent = value;
+    }
+    if (options !== void 0 && typeof options.title === "string") {
+      term.title = options.title;
+    }
     field.appendChild(term);
     field.appendChild(def);
     grid.appendChild(field);

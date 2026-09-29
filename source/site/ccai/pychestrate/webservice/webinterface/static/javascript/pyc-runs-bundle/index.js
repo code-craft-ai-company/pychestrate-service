@@ -1036,7 +1036,7 @@ function manifest_artifacts(manifest) {
   }
   const stream_path = manifest.results_stream_artifact_path;
   if (stream_path !== null && stream_path !== void 0 && stream_path.length > 0) {
-    rtnval.push({ label: "Results stream (JSOS)", path: stream_path });
+    rtnval.push({ label: "Raw results stream", path: stream_path });
   }
   const files = manifest.files;
   if (Array.isArray(files) === true) {

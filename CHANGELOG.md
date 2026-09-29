@@ -542,6 +542,13 @@ preview tag.
 
 ### Fixed
 
+- Plain words on the run pages (ORC-38). The build and provisioning-run detail
+  pages said "Layer-5 run" beside a bare UUID; they now say "Run" and the id
+  links to the run's page. "Repro digest" (builds list and detail) is "Inputs
+  digest", with a tooltip saying it covers the input files, toolchain and
+  environment, and the run's artifact "Results stream (JSOS)" is "Raw results
+  stream".
+
 - SLO and test-rate percentages never read better than they are (ORC-36). An
   objective of 99.95% was shown as "100.0%" (every SLO ratio was rounded to
   0.1%), and a 99.6% pass rate as "100%" (whole percents). SLO ratios now keep
