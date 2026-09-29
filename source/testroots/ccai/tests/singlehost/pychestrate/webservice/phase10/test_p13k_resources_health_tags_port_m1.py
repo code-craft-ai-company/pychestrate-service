@@ -21,10 +21,8 @@ Tests cover:
 * health_detail -- happy + 404 + pagination.
 * health_config -- GET form, POST happy + admin-denied + 404.
 * health_update -- happy + admin-denied.
-* health_run_check -- happy passing + happy failing (warning) +
-  manager-error.
+* health_run_check -- queues the check (never probes) + already queued.
 * tag_list -- happy + anonymous redirect.
-* _group_resources_by_health_status helper.
 * Legacy flask scaffold gone:
   ``webinterface.blueprints.resources.endpoints`` no longer
   importable; ``register_web_blueprints`` no longer registers
@@ -281,11 +279,21 @@ class _FakeResourceManager:
 
     def list_resources(self, **kwargs: Any) -> Any:
         from types import SimpleNamespace
+        matching = self.list_resources_response
+        wanted = kwargs.get("health_status", None)
+        if wanted is not None:
+            matching = [
+                resource for resource in matching
+                if getattr(getattr(resource, "health_status", None), "value",
+                           getattr(resource, "health_status", None)) == wanted
+            ]
+        offset = kwargs.get("offset", 0)
+        limit = kwargs.get("limit", len(matching))
         return SimpleNamespace(
-            resources=self.list_resources_response,
-            total=len(self.list_resources_response),
-            offset=0,
-            limit=len(self.list_resources_response),
+            resources=matching[offset:offset + limit],
+            total=len(matching),
+            offset=offset,
+            limit=limit,
         )
 
     def get_resource(self, resource_id: int) -> Optional[_FakeResource]:
@@ -335,8 +343,14 @@ class _FakeHealthMonitor:
         self.configure_calls: List[Any] = []
         self.configure_raises: Optional[Exception] = None
         self.run_check_calls: List[Any] = []
+        self.request_calls: List[Any] = []
+        self.request_response: bool = True
         _FakeHealthMonitor.last_instance = self
         return
+
+    def request_health_check(self, resource_id: int) -> bool:
+        self.request_calls.append(resource_id)
+        return self.request_response
 
     def get_health_history(
             self, resource_id: int, *, offset: int, limit: int
@@ -586,31 +600,6 @@ def test_register_tags_routes_attaches_documented_routes():
 # ===========================================================================
 # Helpers
 # ===========================================================================
-
-
-def test_group_resources_by_health_status_buckets_values():
-    """
-    **Feature: E4 helpers T8.3**
-    **Property: Resources are grouped by ``health_status``
-    value into the four documented status keys; unknown
-    statuses are dropped.**
-    """
-    helper = resources_routes_health._group_resources_by_health_status
-    resources = [
-        _FakeResource(resource_id=1, health_status_value="online"),
-        _FakeResource(resource_id=2, health_status_value="online"),
-        _FakeResource(resource_id=3, health_status_value="degraded"),
-        _FakeResource(
-            resource_id=4, health_status_value="maintenance"
-        ),
-        _FakeResource(resource_id=5, health_status_value="unknown"),
-    ]
-    groups = helper(resources=resources)
-    testbase.assert_equal(len(groups["online"]), 2)
-    testbase.assert_equal(len(groups["degraded"]), 1)
-    testbase.assert_equal(len(groups["maintenance"]), 1)
-    testbase.assert_equal(len(groups["offline"]), 0)
-    return
 
 
 # ===========================================================================
@@ -944,12 +933,10 @@ def test_handle_health_update_passes_status_and_reason_to_monitor():
     return
 
 
-def test_handle_health_run_check_passing_flash_is_success():
+def _post_run_check(*, configure: Callable[[Any], None]) -> Any:
     """
-    **Feature: webworks resources port T8.8 (E4)**
-    **Property: run_health_check returning True yields a
-    success-category "Health check passed" flash; redirect
-    to /resources/health/{id}.**
+        POST the run-check form for resource 7 against a fake monitor
+        set up by ``configure``; returns ``(response, monitor)``.
     """
     _reset_global_state()
     sm_patch = None
@@ -960,82 +947,57 @@ def test_handle_health_run_check_passing_flash_is_success():
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeHealthMonitor) -> None:
-            instance.run_check_response = True
-            return
-
-        hm_patch = _patch_health_monitor(configure=_seed)
+        hm_patch = _patch_health_monitor(configure=configure)
 
         cookie_value = _build_authenticated_cookie()
-        body = b"csrf_token=csrf-fresh"
         request = _FakeRequest(
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
+            body=b"csrf_token=csrf-fresh",
             path_params={"resource_id": "7"},
         )
         response = resources_routes_health.handle_health_run_check(
             request
         )
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/resources/health/7"
-        )
-        hm = _FakeHealthMonitor.last_instance
-        testbase.assert_equal(hm.run_check_calls, [7])
+        return (response, _FakeHealthMonitor.last_instance)
     finally:
         for p in (hm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
+
+
+def test_handle_health_run_check_queues_the_check_and_does_not_probe():
+    """
+    **Feature: resources health (RES-39)**
+    **Property: POST /resources/health/{id}/check asks the monitor to
+    queue the check and redirects to /resources/health/{id}; it never
+    runs the probe in the request.**
+    """
+    response, monitor = _post_run_check(configure=lambda instance: None)
+
+    testbase.assert_equal(isinstance(response, RedirectResponse), True)
+    testbase.assert_equal(response.headers["Location"], "/resources/health/7")
+    testbase.assert_equal(monitor.request_calls, [7])
+    testbase.assert_equal(monitor.run_check_calls, [])
     return
 
 
-def test_handle_health_run_check_failing_flash_is_warning():
+def test_handle_health_run_check_when_one_is_already_queued_still_redirects():
     """
-    **Feature: webworks resources port T8.8 (E4)**
-    **Property: run_health_check returning False yields a
-    warning-category "Health check failed" flash (not error;
-    matches the legacy semantics).**
+    **Feature: resources health (RES-39)**
+    **Property: asking again while a check is already queued redirects
+    to the health page as well and probes nothing.**
     """
-    _reset_global_state()
-    sm_patch = None
-    hm_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
+    def _seed(instance: _FakeHealthMonitor) -> None:
+        instance.request_response = False
+        return
 
-        def _seed(instance: _FakeHealthMonitor) -> None:
-            instance.run_check_response = False
-            return
+    response, monitor = _post_run_check(configure=_seed)
 
-        hm_patch = _patch_health_monitor(configure=_seed)
-
-        cookie_value = _build_authenticated_cookie()
-        body = b"csrf_token=csrf-fresh"
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-            path_params={"resource_id": "7"},
-        )
-        response = resources_routes_health.handle_health_run_check(
-            request
-        )
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-    finally:
-        for p in (hm_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
+    testbase.assert_equal(isinstance(response, RedirectResponse), True)
+    testbase.assert_equal(response.headers["Location"], "/resources/health/7")
+    testbase.assert_equal(monitor.run_check_calls, [])
     return
 
 

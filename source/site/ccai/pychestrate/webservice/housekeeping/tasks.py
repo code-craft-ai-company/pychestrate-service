@@ -104,7 +104,10 @@ class HousekeepingConfig:
                                               looks for due health
                                               checks; each check still
                                               runs on its own configured
-                                              interval.
+                                              interval. It is also how
+                                              long a person's "Run
+                                              Health Check" waits before
+                                              the worker picks it up.
         :param health_check_time_budget_seconds: How long one run may
                                                  keep starting probes;
                                                  checks left over wait
@@ -114,7 +117,7 @@ class HousekeepingConfig:
     reservation_activation_interval_seconds: float = 30.0
     allocation_expiry_interval_seconds: float = 60.0
     ip_allocation_expiry_interval_seconds: float = 60.0
-    health_check_interval_seconds: float = 15.0
+    health_check_interval_seconds: float = 5.0
     health_check_time_budget_seconds: float = 60.0
 
 

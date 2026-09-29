@@ -156,9 +156,19 @@ To have the service watch a device, choose **Configure Health Check** and set:
   mark the device unhealthy, and how many hits mark it healthy again. The
   defaults are 60, 10, 3 and 1.
 
-**Run Health Check** probes the device now instead of waiting for the interval.
+**Run Health Check** asks the service to probe the device now instead of waiting
+for the interval. The check is queued and runs in the background within a few
+seconds, so the button returns at once even when the device is slow. Refresh the
+device's health page to see when it was checked and whether it passed; when it
+failed, the page says why (the status the device answered with, no answer in
+time, or not reachable). A check that is switched off, or has no probe URL, is
+refused with a message saying what to configure. If a queued check is still
+waiting after two minutes, the page says the housekeeping worker is not picking
+it up.
+
 The health dashboard (**Resources**, **Health Status**) counts devices in each
-state.
+state and lists the first twenty of each. **View all** opens one state, a page
+at a time.
 
 
 Removing things

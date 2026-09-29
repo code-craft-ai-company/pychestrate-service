@@ -1405,6 +1405,10 @@ class HealthCheckConfig(PychestrateModelBase, SerializableModel):
                              doc="Timestamp of the last health check")
     last_check_result = Column('hcc_last_check_result', Boolean, nullable=True,
                                doc="Result of the last health check (True=healthy)")
+    check_requested_at = Column('hcc_check_requested_at', UtcDateTime(timezone=True), nullable=True,
+                                doc="When a person asked for a check to run now; the housekeeping worker runs it and clears this")
+    last_check_message = Column('hcc_last_check_message', VARCHAR(512), nullable=True,
+                                doc="Why the last check failed or was not run (None when it passed)")
     enabled = Column('hcc_enabled', Boolean, default=True, nullable=False,
                      doc="Flag indicating if health checks are enabled")
 

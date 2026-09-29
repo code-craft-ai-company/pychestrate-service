@@ -333,6 +333,28 @@ preview tag.
   in their own way, and two shared windows do not clash. The checkout
   card names the reservation up front.
 
+- **Run Health Check no longer probes inside the web request.** A probe
+  that took four seconds held the request four seconds, and a few slow
+  devices could use up the server's threads. The button now queues the
+  check and returns at once; the housekeeping worker runs it ahead of the
+  scheduled checks (it looks every 5 seconds, down from 15), and the
+  device's health page shows when it was checked, whether it passed,
+  and, when it failed, why: the HTTP status the device answered with, that
+  it did not answer in time, or that it could not be reached. Asking again
+  while a check waits says one is already queued, and a check the worker
+  has not picked up after two minutes is flagged. A check that is switched
+  off or has no probe URL is refused with advice instead of reported as a
+  failed check. A target the server may not call is no longer retried on
+  every scheduler tick; it waits for its interval like any other check.
+  The probe timeout was already capped at 30 seconds.
+
+- **The health dashboard is paged.** It loaded a thousand resources to
+  fill four tables and cut each group off with no way to see the rest.
+  The overview now loads twenty per group, in name order, says how many
+  there are, and "View all" opens one status a page at a time. Resource
+  lists are now returned in a fixed order, so pages never repeat or skip a
+  device.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder
@@ -491,6 +513,10 @@ preview tag.
 - **Anonymous REST access is refused.** Scripts that read `/api/v1/*`
   without signing in (for example `/api/v1/flags` as a health probe)
   now get 401.
+- **Queued health checks.** Run `alembic upgrade head` (the deploy script
+  does): it adds two columns to the health check table. "Run Health
+  Check" now needs the housekeeping worker to be running, because the
+  worker runs the check.
 - **Namespace rename.** Code that imports `automojo.*` must import
   `ccai.*`.
 - **CI secret rename.** The workflows read the dependency token from the

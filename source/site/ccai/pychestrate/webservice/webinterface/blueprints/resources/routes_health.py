@@ -197,32 +197,39 @@ def _coerce_int_with_default(*, raw: Any, default: int) -> int:
     return parsed
 
 
-def _group_resources_by_health_status(
-        *, resources: List[Any]
-    ) -> Dict[str, List[Any]]:
-    """
-        Bucket resources by ``health_status`` value into the
-        four documented status groups. Resources with unknown
-        statuses are silently dropped from the dashboard --
-        matches the legacy handler.
+# The dashboard's status groups, in the order they are shown (the ones
+# that need attention first).
+DASHBOARD_STATUSES = ("offline", "degraded", "maintenance", "online")
 
-        :returns: Dict with keys 'online', 'degraded',
-                  'maintenance', 'offline' -- always present so
-                  the template can index unconditionally.
+# Rows each group shows on the overview; "View all" opens the whole group,
+# a page at a time. The overview used to load a thousand resources to fill
+# four tables.
+DASHBOARD_GROUP_LIMIT = 20
+DASHBOARD_DEFAULT_PER_PAGE = 25
+
+
+# A queued check normally runs within a few seconds. One that has waited
+# this long means the housekeeping worker is not picking requests up.
+QUEUED_CHECK_STALE_SECONDS = 120
+
+
+def _check_waited_too_long(*, config: Any) -> bool:
     """
-    rtnval: Dict[str, List[Any]] = {
-        "online": [],
-        "degraded": [],
-        "maintenance": [],
-        "offline": [],
-    }
-    for resource in resources:
-        status = getattr(resource, "health_status", None)
-        if status is None:
-            continue
-        status_value = getattr(status, "value", status)
-        if isinstance(status_value, str) and status_value in rtnval:
-            rtnval[status_value].append(resource)
+        Whether a person's queued health check has waited longer than the
+        worker should ever leave it.
+
+        :param config: The resource's health check configuration, or None.
+
+        :returns: True when a request is queued and older than
+                  ``QUEUED_CHECK_STALE_SECONDS``.
+    """
+    requested_at = getattr(config, "check_requested_at", None)
+    if requested_at is None or getattr(config, "enabled", True) is not True:
+        return False
+    from ccai.pychestrate.core.defaults import ensure_utc, utc_now  # noqa: E402
+
+    waited = ensure_utc(utc_now()) - ensure_utc(requested_at)
+    rtnval = waited.total_seconds() > QUEUED_CHECK_STALE_SECONDS
     return rtnval
 
 
@@ -324,9 +331,26 @@ def _status_form_errors(*, exc: BaseException) -> Dict[str, str]:
     return rtnval
 
 
+HEALTH_CHECK_QUEUED_MESSAGE = (
+    "Health check queued. It runs in the background within a few seconds;"
+    " refresh this page to see the result."
+)
+HEALTH_CHECK_ALREADY_QUEUED_MESSAGE = (
+    "A health check is already queued for this resource. Refresh this"
+    " page in a few seconds to see the result."
+)
+
 # User-facing copy for typed HealthMonitor errors, by error code (the
 # managers' own messages stay in the log).
 _HEALTH_ERROR_COPY: Dict[str, str] = {
+    "HEALTH_CHECK_DISABLED": (
+        "Health checks are switched off for this resource. Enable them"
+        " under Configure Health Check first."
+    ),
+    "HEALTH_CHECK_HAS_NO_PROBE_URL": (
+        "This health check has no probe URL, so there is nothing to run."
+        " Configure one first."
+    ),
     "HEALTH_CHECK_CONFIG_NOT_FOUND": (
         "This resource has no health check yet. Configure one first."
     ),
@@ -361,15 +385,52 @@ def handle_health_dashboard(request: Request) -> Response:
     db_session = auth.db_session
     try:
         resource_manager = _build_resource_manager(db_session=db_session)
-        # The stat cards use a dedicated aggregate count query so
-        # they stay honest past the grouped-table fetch limit; the
-        # per-status tables below are bounded and the template
-        # shows a "Showing N of M" note when a group is truncated.
+        # The stat cards use a dedicated aggregate count query so they
+        # stay honest however many resources there are; each group below
+        # loads only the rows it shows.
         health_counts = resource_manager.count_resources_by_health_status()
-        resources = resource_manager.list_resources(limit=1000).resources
-        health_groups = _group_resources_by_health_status(
-            resources=resources
+
+        selected_status = str(
+            request.query_params.get("status", "") or ""
+        ).strip().lower()
+        if selected_status not in DASHBOARD_STATUSES:
+            selected_status = ""
+        page = _coerce_int_with_default(
+            raw=request.query_params.get("page", None), default=1
         )
+        if page < 1:
+            page = 1
+        per_page = _coerce_int_with_default(
+            raw=request.query_params.get("per_page", None),
+            default=DASHBOARD_DEFAULT_PER_PAGE,
+        )
+        if per_page < 1:
+            per_page = DASHBOARD_DEFAULT_PER_PAGE
+        if per_page > RESOURCES_MAX_PER_PAGE:
+            per_page = RESOURCES_MAX_PER_PAGE
+
+        health_groups: Dict[str, List[Any]] = {
+            status: [] for status in DASHBOARD_STATUSES
+        }
+        total_pages = 1
+        if selected_status == "":
+            for status in DASHBOARD_STATUSES:
+                health_groups[status] = resource_manager.list_resources(
+                    health_status=status,
+                    limit=DASHBOARD_GROUP_LIMIT,
+                    order_by="name",
+                ).resources
+        else:
+            listed = resource_manager.list_resources(
+                health_status=selected_status,
+                offset=(page - 1) * per_page,
+                limit=per_page,
+                order_by="name",
+            )
+            health_groups[selected_status] = listed.resources
+            total_pages = _calculate_total_pages(
+                total=listed.total, per_page=per_page
+            )
 
         total_count = 0
         for status_count in health_counts.values():
@@ -386,6 +447,10 @@ def handle_health_dashboard(request: Request) -> Response:
         context["health_groups"] = health_groups
         context["health_counts"] = health_counts
         context["total_count"] = total_count
+        context["selected_status"] = selected_status
+        context["page"] = page
+        context["per_page"] = per_page
+        context["total_pages"] = total_pages
 
         response = _render(
             template_name="resources/health/dashboard.html",
@@ -459,6 +524,7 @@ def handle_health_detail(request: Request) -> Response:
             resource_id, offset=offset, limit=per_page
         )
         config = health_monitor.get_health_check_config(resource_id)
+        check_queue_stale = _check_waited_too_long(config=config)
 
         total_pages = _calculate_total_pages(
             total=history.total, per_page=per_page
@@ -478,6 +544,7 @@ def handle_health_detail(request: Request) -> Response:
         context["resource"] = resource
         context["history"] = history.transitions
         context["config"] = config
+        context["check_queue_stale"] = check_queue_stale
         context["page"] = page
         context["per_page"] = per_page
         context["total_pages"] = total_pages
@@ -800,8 +867,9 @@ def handle_health_update(request: Request) -> Response:
 
 def handle_health_run_check(request: Request) -> Response:
     """
-        ``POST /resources/health/{resource_id}/check`` -- run a
-        one-shot health check (admin-gated).
+        ``POST /resources/health/{resource_id}/check`` -- queue a
+        one-shot health check for the background worker (admin-gated).
+        The probe itself never runs in this request.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -851,46 +919,35 @@ def handle_health_run_check(request: Request) -> Response:
 
         health_monitor = _build_health_monitor(db_session=db_session)
         try:
-            # run_health_check returns a HealthCheckResult -- the
-            # outcome is the ``healthy`` flag, and ``error_message``
-            # carries the probe failure reason when present.
-            result = health_monitor.run_health_check(resource_id)
-            if result.healthy is True:
-                msg_parts = ["Health check passed."]
-                category = flash.CATEGORY_SUCCESS
+            # The probe is not run here: it would hold this request
+            # (and one of the server's few threads) for as long as the
+            # device takes to answer. The request is queued and the
+            # housekeeping worker runs it, ahead of the scheduled
+            # checks; the health page shows the outcome.
+            newly_queued = health_monitor.request_health_check(resource_id)
+            if newly_queued is True:
+                message = HEALTH_CHECK_QUEUED_MESSAGE
             else:
-                msg_parts = ["Health check failed."]
-                if result.error_message is not None:
-                    msg_parts.append(
-                        "Reason: {}.".format(result.error_message)
-                    )
-                category = flash.CATEGORY_WARNING
-            if result.status_changed is True:
-                msg_parts.append(
-                    "Status changed from {} to {}.".format(
-                        result.old_status, result.new_status
-                    )
-                )
-            message = " ".join(msg_parts)
+                message = HEALTH_CHECK_ALREADY_QUEUED_MESSAGE
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.health_detail", resource_id=resource_id
                 ),
                 message=message,
-                category=category,
+                category=flash.CATEGORY_INFO,
             )
             return response
         except Exception as exc:
             message = _describe_health_monitor_error(exc=exc)
             if message is None:
                 _LOGGER.exception(
-                    "Unexpected error running health check for"
+                    "Unexpected error queuing health check for"
                     " resource %s",
                     resource_id,
                 )
                 message = (
-                    "An unexpected error occurred while running the"
+                    "An unexpected error occurred while queuing the"
                     " health check. The problem has been logged."
                 )
             response = _redirect_with_flash(

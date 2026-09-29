@@ -19,7 +19,7 @@ import urllib.error
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session as DbSession
@@ -45,6 +45,11 @@ COMMAND_PROBES_UNSUPPORTED_MESSAGE = (
     "server, not on the device. Configure a URL probe that targets the "
     "device instead."
 )
+
+HEALTH_CHECK_DISABLED_MESSAGE = "Health check is disabled"
+
+# ``health_check_configs.hcc_last_check_message`` is this wide.
+LAST_CHECK_MESSAGE_LIMIT = 512
 
 PROBE_URL_SCHEMES = ('http', 'https')
 
@@ -99,6 +104,8 @@ class HealthCheckConfigResponse:
     last_check_time: Optional[datetime]
     last_check_result: Optional[bool]
     enabled: bool
+    check_requested_at: Optional[datetime] = None
+    last_check_message: Optional[str] = None
 
 
 @dataclass
@@ -209,6 +216,22 @@ class ProbeTargetRejectedError(HealthMonitorError):
     """Exception raised when a probe URL targets an address the server must not call."""
 
     def __init__(self, message: str, error_code: str = "PROBE_TARGET_REJECTED"):
+        super().__init__(message, error_code)
+
+
+def _clip_message(message: Optional[str]) -> Optional[str]:
+    """Fit a probe failure text into the column that keeps it (None stays None)."""
+    if message is None:
+        return None
+    if len(message) <= LAST_CHECK_MESSAGE_LIMIT:
+        return message
+    return message[:LAST_CHECK_MESSAGE_LIMIT - 1] + "\u2026"
+
+
+class ProbeFailedError(HealthMonitorError):
+    """Exception raised when a probe ran and the device did not pass it; the message says why."""
+
+    def __init__(self, message: str, error_code: str = "PROBE_FAILED"):
         super().__init__(message, error_code)
 
 
@@ -613,6 +636,8 @@ class HealthMonitor:
             existing_config.failure_threshold = config.failure_threshold
             existing_config.success_threshold = config.success_threshold
             existing_config.enabled = config.enabled
+            if not config.enabled:
+                existing_config.check_requested_at = None
             
             self._db_session.commit()
             
@@ -745,6 +770,7 @@ class HealthMonitor:
             )
         
         if not config.enabled:
+            self._settle_without_probe(config, HEALTH_CHECK_DISABLED_MESSAGE)
             return HealthCheckResult(
                 resource_id=resource_id,
                 resource_name=resource.name,
@@ -752,13 +778,14 @@ class HealthMonitor:
                 old_status=resource.health_status,
                 new_status=resource.health_status,
                 status_changed=False,
-                error_message="Health check is disabled"
+                error_message=HEALTH_CHECK_DISABLED_MESSAGE
             )
         
         # Configurations saved before command probes were withdrawn are
         # never executed; the resource keeps its status and the result
         # explains how to reconfigure it.
         if not config.probe_url:
+            self._settle_without_probe(config, COMMAND_PROBES_UNSUPPORTED_MESSAGE)
             return HealthCheckResult(
                 resource_id=resource_id,
                 resource_name=resource.name,
@@ -780,6 +807,7 @@ class HealthMonitor:
         except ProbeTargetRejectedError as rejected:
             # A target the server may not call is a configuration
             # problem, not evidence about the device's health.
+            self._settle_without_probe(config, str(rejected))
             return HealthCheckResult(
                 resource_id=resource_id,
                 resource_name=resource.name,
@@ -823,6 +851,8 @@ class HealthMonitor:
         
         config.last_check_time = now
         config.last_check_result = check_passed
+        config.check_requested_at = None
+        config.last_check_message = None if check_passed else _clip_message(error_message)
         
         # Update status if changed
         if status_changed:
@@ -902,11 +932,71 @@ class HealthMonitor:
             results=results
         )
     
+    def _settle_without_probe(self, config: Any, message: str) -> None:
+        """
+        Record that a check was asked for (or came due) and could not run,
+        and why, so the request does not stay queued and a bad
+        configuration is not retried on every scheduler tick.
+        """
+        config.last_check_time = utc_now()
+        config.last_check_result = None
+        config.check_requested_at = None
+        config.last_check_message = _clip_message(message)
+        self._db_session.commit()
+        return
+
+    def request_health_check(self, resource_id: int, now: Optional[datetime] = None) -> bool:
+        """
+        Queue a health check to run as soon as the background worker is
+        free, without probing anything here. The probe used to run inside
+        the web request and held one of the server's few threads for as
+        long as the device took to answer (up to the timeout).
+
+        :param resource_id: The resource's unique identifier
+        :param now: The time to record (defaults to now, UTC)
+        :returns: True when the request was queued, False when one was
+            already waiting for this resource
+        :raises ResourceNotFoundError: If the resource is not found
+        :raises HealthCheckConfigNotFoundError: If no health check is configured
+        :raises InvalidHealthCheckConfigError: If the check is disabled or
+            has no probe URL (the worker would never run it)
+        """
+        from ccai.pychestrate.core.orm import Resource, HealthCheckConfig
+
+        resource = self._db_session.query(Resource).filter(Resource.id == resource_id).first()
+        if not resource:
+            raise ResourceNotFoundError(f"Resource with ID '{resource_id}' not found")
+
+        config = self._db_session.query(HealthCheckConfig).filter(
+            HealthCheckConfig.resource_id == resource_id
+        ).first()
+        if not config:
+            raise HealthCheckConfigNotFoundError(
+                f"Health check not configured for resource '{resource_id}'"
+            )
+        if not config.enabled:
+            raise InvalidHealthCheckConfigError(
+                HEALTH_CHECK_DISABLED_MESSAGE, error_code="HEALTH_CHECK_DISABLED"
+            )
+        if not config.probe_url:
+            raise InvalidHealthCheckConfigError(
+                COMMAND_PROBES_UNSUPPORTED_MESSAGE, error_code="HEALTH_CHECK_HAS_NO_PROBE_URL",
+                field="probe_url"
+            )
+        if config.check_requested_at is not None:
+            return False
+
+        config.check_requested_at = ensure_utc(utc_now() if now is None else now)
+        self._db_session.commit()
+        return True
+
     def due_health_check_resource_ids(self, now: Optional[datetime] = None) -> List[int]:
         """
         List the resources whose health check is due: enabled, with a
         probe URL, and never run or last run at least ``interval_seconds``
-        ago. Never-checked resources come first, then the longest-waiting.
+        ago, or that a person asked to run now. Requested checks come
+        first (the one asked for longest ago first), then never-checked
+        resources, then the longest-waiting.
 
         :param now: The time to judge against (defaults to now, UTC)
         :returns: Resource IDs in the order their checks should run
@@ -915,7 +1005,7 @@ class HealthMonitor:
         """
         from ccai.pychestrate.core.orm import HealthCheckConfig
 
-        now = utc_now() if now is None else ensure_utc(now)
+        now = ensure_utc(utc_now() if now is None else now)
 
         configs = self._db_session.query(HealthCheckConfig).filter(
             HealthCheckConfig.enabled == True,
@@ -924,14 +1014,17 @@ class HealthMonitor:
 
         waiting = []
         for config in configs:
+            if config.check_requested_at is not None:
+                waiting.append((0, ensure_utc(config.check_requested_at), config.resource_id))
+                continue
             last_check_time = config.last_check_time
             if last_check_time is None:
-                waiting.append((0, now, config.resource_id))
+                waiting.append((1, now, config.resource_id))
                 continue
             last_check_time = ensure_utc(last_check_time)
             interval = timedelta(seconds=max(config.interval_seconds or 0, 1))
             if last_check_time + interval <= now:
-                waiting.append((1, last_check_time, config.resource_id))
+                waiting.append((2, last_check_time, config.resource_id))
 
         waiting.sort()
         return [resource_id for _, _, resource_id in waiting]
@@ -1003,8 +1096,10 @@ class HealthMonitor:
 
         :param url: URL to probe
         :param timeout_seconds: Timeout in seconds
-        :returns: True if probe succeeded (HTTP 2xx), False otherwise
+        :returns: True when the probe succeeded (HTTP 2xx)
         :raises ProbeTargetRejectedError: If the target may not be called
+        :raises ProbeFailedError: When the probe failed; the message says
+            why (an HTTP status, no answer in time, not reachable)
         """
         problem = validate_probe_url(url, resolve=True)
         if problem is not None:
@@ -1014,13 +1109,29 @@ class HealthMonitor:
         try:
             request = urllib.request.Request(url, method='GET')
             with opener.open(request, timeout=timeout_seconds) as response:
-                return 200 <= response.status < 300
-        except ProbeTargetRejectedError:
+                if 200 <= response.status < 300:
+                    return True
+                raise ProbeFailedError(
+                    "The device answered with HTTP status {}.".format(response.status)
+                )
+        except (ProbeTargetRejectedError, ProbeFailedError):
             raise
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-            return False
-        except Exception:
-            return False
+        except urllib.error.HTTPError as answered:
+            raise ProbeFailedError(
+                "The device answered with HTTP status {}.".format(answered.code)
+            )
+        except urllib.error.URLError as unreachable:
+            if isinstance(unreachable.reason, (socket.timeout, TimeoutError)):
+                raise ProbeFailedError(
+                    "The device did not answer within {} seconds.".format(timeout_seconds)
+                )
+            raise ProbeFailedError("The device could not be reached: {}.".format(unreachable.reason))
+        except (socket.timeout, TimeoutError):
+            raise ProbeFailedError(
+                "The device did not answer within {} seconds.".format(timeout_seconds)
+            )
+        except Exception as failure:
+            raise ProbeFailedError("The probe failed: {}.".format(failure))
 
 
     # =========================================================================
@@ -1129,6 +1240,8 @@ class HealthMonitor:
             consecutive_successes=config.consecutive_successes,
             last_check_time=config.last_check_time,
             last_check_result=config.last_check_result,
-            enabled=config.enabled
+            enabled=config.enabled,
+            check_requested_at=config.check_requested_at,
+            last_check_message=config.last_check_message
         )
 

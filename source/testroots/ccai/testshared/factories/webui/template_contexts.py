@@ -462,6 +462,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "variable_name": _const("ui.profile.surfaces"),
     "selected_event_type": _by_mode("release", ""),
     "selected_health_status": _by_mode("online", ""),
+    "selected_status": _by_mode("", "offline"),
+    "check_queue_stale": _by_mode(True, False),
     "selected_resource_type": _by_mode("device", ""),
     "selected_tags": _by_mode(["tag-a"], []),
     "selector_pool_id": _by_mode(7, None),

@@ -76,6 +76,38 @@
                 </tr>
                 {% endif %}
                 <tr>
+                    <th scope="row">Last check</th>
+                    <td>
+                        {% if config.last_check_time %}
+                        {{ config.last_check_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}
+                        {% if config.last_check_result == true %}
+                        <span class="badge badge-success" data-role="last-check-result">Passed</span>
+                        {% elif config.last_check_result == false %}
+                        <span class="badge badge-danger" data-role="last-check-result">Failed</span>
+                        {% else %}
+                        <span class="badge badge-secondary" data-role="last-check-result">Not run</span>
+                        {% endif %}
+                        {% if config.last_check_message %}
+                        <div class="muted" data-role="last-check-message">{{ config.last_check_message }}</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="muted">Not checked yet</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if config.enabled and config.check_requested_at %}
+                <tr>
+                    <th scope="row">Queued check</th>
+                    <td data-role="queued-check">
+                        A check was requested at {{ config.check_requested_at | format_datetime('%Y-%m-%d %H:%M:%S', '-') }} and is waiting for the background worker.
+                        <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">Refresh</a> to see the result.
+                        {% if check_queue_stale %}
+                        <div class="text-danger" data-role="queued-check-stale">It has waited longer than expected. Check that the housekeeping worker is running.</div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                <tr>
                     <th scope="row">Interval</th>
                     <td>{{ config.interval_seconds }} seconds</td>
                 </tr>
@@ -187,7 +219,7 @@
                 <a href="{{ url_for('resources.health_config', resource_id=resource.id) }}" class="btn btn-secondary">
                     {{ ui.icon("settings") }} Configure Health Check
                 </a>
-                <form method="post" action="{{ url_for('resources.health_run_check', resource_id=resource.id) }}" data-busy-label="Running health check&hellip;">
+                <form method="post" action="{{ url_for('resources.health_run_check', resource_id=resource.id) }}" data-busy-label="Queuing health check&hellip;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-secondary btn-block">
                         {{ ui.icon("play_arrow") }} Run Health Check

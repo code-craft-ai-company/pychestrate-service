@@ -723,7 +723,8 @@ class ResourceManager:
         offset: int = 0,
         limit: int = 50,
         search: str = None,
-        availability: str = None
+        availability: str = None,
+        order_by: str = "id"
     ) -> ResourceListResponse:
         """
         List resources with filtering and pagination.
@@ -745,6 +746,10 @@ class ResourceManager:
                              capacity left) or ``"in_use"`` for resources
                              with every slot taken. Applied before paging,
                              so the total and the pages are right.
+        :param order_by: ``"id"`` (the default, oldest first) or ``"name"``
+                         (alphabetical, case-insensitive). Either way the
+                         order is total, so pages never repeat or skip a
+                         resource.
         :returns: ResourceListResponse with paginated resource list
 
         Validates: Requirements 1.5
@@ -825,7 +830,12 @@ class ResourceManager:
         # Get total count before pagination
         total = query.count()
         
-        # Apply pagination
+        # Apply pagination, in an order that cannot repeat or skip a row
+        # between pages
+        if order_by == "name":
+            query = query.order_by(func.lower(Resource.name), Resource.id)
+        else:
+            query = query.order_by(Resource.id)
         resources = query.offset(offset).limit(limit).all()
         
         return ResourceListResponse(

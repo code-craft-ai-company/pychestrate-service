@@ -4,10 +4,18 @@
 {% block title %}Health Dashboard - Pychestrate Resources{% endblock %}
 
 {% block content %}
+{% macro group_footer(status, shown, count, noun) -%}
+{%- if selected_status == '' and count > shown %}
+    <p class="muted mt-sm">Showing {{ shown }} of {{ count }} {{ noun }}. <a href="{{ url_for('resources.health_dashboard', status=status) }}" data-role="view-all-{{ status }}">View all {{ count }}</a></p>
+{%- endif %}
+{%- endmacro %}
 <div class="page-header">
     <h1>Health Dashboard</h1>
     <p>Resource health status overview</p>
 </div>
+{% if selected_status %}
+<p><a href="{{ url_for('resources.health_dashboard') }}" data-role="all-statuses">&laquo; All statuses</a></p>
+{% endif %}
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: 20px; margin-bottom: 30px;">
     <div class="stat-card">
@@ -55,9 +63,7 @@
             {% endfor %}
         </tbody>
     </table></div>
-    {% if health_counts.offline > health_groups.offline | length %}
-    <p class="muted mt-sm">Showing {{ health_groups.offline | length }} of {{ health_counts.offline }} resources</p>
-    {% endif %}
+    {{ group_footer('offline', health_groups.offline | length, health_counts.offline, 'resources') }}
 </div>
 {% endif %}
 
@@ -84,9 +90,7 @@
             {% endfor %}
         </tbody>
     </table></div>
-    {% if health_counts.degraded > health_groups.degraded | length %}
-    <p class="muted mt-sm">Showing {{ health_groups.degraded | length }} of {{ health_counts.degraded }} resources</p>
-    {% endif %}
+    {{ group_footer('degraded', health_groups.degraded | length, health_counts.degraded, 'resources') }}
 </div>
 {% endif %}
 
@@ -113,12 +117,11 @@
             {% endfor %}
         </tbody>
     </table></div>
-    {% if health_counts.maintenance > health_groups.maintenance | length %}
-    <p class="muted mt-sm">Showing {{ health_groups.maintenance | length }} of {{ health_counts.maintenance }} resources</p>
-    {% endif %}
+    {{ group_footer('maintenance', health_groups.maintenance | length, health_counts.maintenance, 'resources') }}
 </div>
 {% endif %}
 
+{% if selected_status == '' or selected_status == 'online' %}
 <div class="card">
     <div class="card-header text-success">
         {{ ui.icon("check_circle") }} Online Resources ({{ health_counts.online }})
@@ -134,7 +137,7 @@
             </tr>
         </thead>
         <tbody>
-            {% for resource in health_groups.online[:20] %}
+            {% for resource in health_groups.online %}
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
                 <td>{{ resource.resource_type }}</td>
@@ -144,11 +147,18 @@
             {% endfor %}
         </tbody>
     </table></div>
-    {% if health_counts.online > 20 %}
-    <p class="muted mt-sm">Showing 20 of {{ health_counts.online }} online resources</p>
-    {% endif %}
+    {{ group_footer('online', health_groups.online | length, health_counts.online, 'online resources') }}
     {% else %}
     <p class="muted">No online resources</p>
     {% endif %}
 </div>
+{% endif %}
+
+{% if selected_status and not health_groups[selected_status] %}
+<p class="muted" data-role="empty-status">No {{ selected_status }} resources{% if page > 1 %} on this page{% endif %}.</p>
+{% endif %}
+
+{% if selected_status %}
+{{ ui.pagination('resources.health_dashboard', page, total_pages, {'status': selected_status, 'per_page': per_page}, health_counts[selected_status]) }}
+{% endif %}
 {% endblock %}
