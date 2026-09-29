@@ -627,7 +627,7 @@ class PycSlos extends HTMLElement {
       {
         key: "name",
         label: "SLO",
-        width: "16rem",
+        width: "12rem",
         render: (slo) => {
           const name = document.createElement("span");
           name.textContent = slo.name;
@@ -638,25 +638,25 @@ class PycSlos extends HTMLElement {
       {
         key: "kind",
         label: "Kind",
-        width: "10rem",
+        width: "9rem",
         render: (slo) => slo.kind
       },
       {
         key: "target",
         label: "Target",
-        width: "8rem",
+        width: "7rem",
         render: (slo) => format_ratio(slo.target)
       },
       {
         key: "window",
         label: "Window",
-        width: "8rem",
+        width: "7rem",
         render: (slo) => format_window(slo.window_seconds)
       },
       {
         key: "burn",
         label: "Achieved",
-        width: "12rem",
+        width: "11rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
           burn_badge.classList.add("pyc-metrics__badge");
@@ -673,11 +673,16 @@ class PycSlos extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
-        width: "16rem",
+        width: "18rem",
         sortable: false,
         render: (slo) => {
+          // Table cells render inside the table's shadow root, out of reach of
+          // the bundle stylesheet, so the layout is set on the element itself.
           const actions = document.createElement("span");
           actions.classList.add("pyc-metrics__row-actions");
+          actions.style.display = "inline-flex";
+          actions.style.flexWrap = "wrap";
+          actions.style.gap = "0.5rem";
           const status_button = document.createElement("mj-button");
           status_button.classList.add("pyc-metrics__button");
           status_button.setAttribute("type", "button");

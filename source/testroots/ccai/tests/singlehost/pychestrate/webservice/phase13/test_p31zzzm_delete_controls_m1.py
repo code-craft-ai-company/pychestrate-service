@@ -319,3 +319,29 @@ def test_the_confirm_helper_uses_the_browsers_box_only_when_nothing_answers(brow
         (True, False, ["Really?", "Really?"], 2, (True, False), 2),
     )
     return
+
+
+def test_the_slo_row_actions_sit_apart_and_the_table_does_not_scroll_sideways(browser: Browser):
+    """
+    **Feature: delete controls (ORC-26)**
+    **Property: at a desktop width the two row actions have a gap between them and
+    the whole SLO table fits without a horizontal scrollbar, so no column
+    (the name first) is cut off.**
+    """
+    page = _slo_page(browser)
+    try:
+        status = page.locator('[data-role="load-status"]').bounding_box()
+        delete = page.locator('[data-role="delete-slo"]').bounding_box()
+        table = page.locator('[data-role="slos-table"]').bounding_box()
+        overflowing = page.locator('[data-role="slos-table"]').evaluate(
+            """(host) => [host, ...(host.shadowRoot ? host.shadowRoot.querySelectorAll('*') : [])].filter((el) => el.scrollWidth > el.clientWidth + 1).length"""
+        )
+        boxes = {"gap": delete["x"] - (status["x"] + status["width"]), "delete_right": delete["x"] + delete["width"], "table_right": table["x"] + table["width"], "overflowing": overflowing}
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (boxes["gap"] >= 4, boxes["delete_right"] <= boxes["table_right"], boxes["overflowing"]),
+        (True, True, 0),
+    )
+    return
