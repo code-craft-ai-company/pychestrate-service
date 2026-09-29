@@ -249,7 +249,7 @@
 {% macro permission_picker(permissions, selected=[]) -%}
 <div class="pyc-permissions" data-role="permission-picker">
     <div class="pyc-permissions__toolbar">
-        <input type="search" class="form-control w-md" data-role="permission-filter" placeholder="Filter, for example builds or secrets" aria-label="Filter permissions">
+        <input type="search" class="form-control w-md" data-role="permission-filter" placeholder="Filter permissions" aria-label="Filter permissions">
         <span class="muted" data-role="permission-count" role="status" aria-live="polite"></span>
     </div>
     <div class="pyc-permissions__groups">
@@ -259,8 +259,10 @@
             {%- for item in group["items"] %}
             <label class="pyc-permissions__item regular" title="{{ item.permission.name }}" data-permission-text="{{ (group.label ~ ' ' ~ item.label ~ ' ' ~ item.description ~ ' ' ~ item.permission.name) | lower }}">
                 <input type="checkbox" name="permission_keys" value="{{ item.permission.id }}"{% if item.permission.id in selected %} checked{% endif %}>
-                <span class="pyc-permissions__name">{{ item.label }}</span>
-                {%- if item.description %}<span class="muted pyc-permissions__description">{{ item.description }}</span>{% endif %}
+                <span class="pyc-permissions__text">
+                    <span class="pyc-permissions__name">{{ item.label }}</span>
+                    {%- if item.description %}<span class="muted pyc-permissions__description">{{ item.description }}</span>{% endif %}
+                </span>
             </label>
             {%- endfor %}
         </fieldset>

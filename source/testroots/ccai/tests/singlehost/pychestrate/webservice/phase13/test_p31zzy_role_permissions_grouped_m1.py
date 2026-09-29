@@ -178,3 +178,30 @@ def test_the_filter_narrows_the_list_by_words_and_the_count_follows_the_ticks(br
         (73, "0 of 73 selected", True, ["Project secrets", "Secrets"], True, 73, "2 of 73 selected"),
     )
     return
+
+
+
+def test_an_actions_name_sits_above_its_description_not_run_into_it(browser: Browser):
+    """
+    **Feature: roles built by area (ADM-06)**
+    **Property: in a permission row the action's name and its description are on
+    separate lines (the description starts below the name), so "View" and "Read
+    build runs" do not read as one word.**
+    """
+    stylesheet = '<link rel="stylesheet" href="/static/styles/pyc-tokens.css"><link rel="stylesheet" href="/static/styles/pyc-fragment.css">'
+    page = open_fixture_page(browser, body_html=stylesheet + '<section class="pyc-admin-page-fragment"><form>' + _picker_html([]) + "</form></section>", **DESKTOP)
+    try:
+        page.wait_for_timeout(500)
+        boxes = page.evaluate(
+            """() => {
+                const row = document.querySelector('[data-permission-text*="builds"]');
+                const name = row.querySelector('.pyc-permissions__name').getBoundingClientRect();
+                const description = row.querySelector('.pyc-permissions__description').getBoundingClientRect();
+                return {name_bottom: name.bottom, description_top: description.top};
+            }"""
+        )
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(boxes["description_top"] >= boxes["name_bottom"] - 1, True)
+    return

@@ -1192,11 +1192,10 @@
 }
 
 .pyc-admin-page-fragment .pyc-permissions__item {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    column-gap: 0.5rem;
-    align-items: start;
-    padding: 0.25rem 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
 }
 
 .pyc-admin-page-fragment .pyc-permissions__item[hidden] {
@@ -1204,11 +1203,22 @@
 }
 
 .pyc-admin-page-fragment .pyc-permissions__item input {
-    margin-top: 0.2rem;
+    margin-top: 0.25rem;
+    flex: none;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__text {
+    display: block;
+    min-width: 0;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__name {
+    display: block;
+    font-weight: 600;
 }
 
 .pyc-admin-page-fragment .pyc-permissions__description {
-    grid-column: 2;
+    display: block;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
