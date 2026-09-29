@@ -62,6 +62,7 @@ What follows the profile
 * The sidebar and the palette: both are built from the navigation
   manifest, which the service filters by your effective surfaces.
 * The home view's link grid, built from the same manifest.
-* The project sub-navigation tabs (Builds, Infrastructure, Tests, RPA).
+* The project sub-navigation tabs (Builds, Runs, Pipelines, Test catalog,
+  RPA).
   The tab for the page you are on always stays visible.
 * The hidden-surface notice on pages that belong to a hidden surface.

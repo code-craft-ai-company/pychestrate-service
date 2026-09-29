@@ -73,14 +73,26 @@
                     {{ ui.icon("build") }} Builds
                 </a></li>
                 {% endif %}
-                {% if ui_profile.is_enabled('infra') or request_endpoint.startswith('projects.infra_') %}
-                <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.infra_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("cloud") }} Infrastructure (preview)
+                {#- Runs, Pipelines and the Test catalog are where this project's
+                    work is defined and listed; they open the site-wide pages
+                    filtered to the project. The project model's own Infrastructure,
+                    Tests, Pipelines, Channels, Schedules and Calendar sections
+                    cannot hold data (nothing creates it), so they are not listed
+                    here; their addresses still open, with a Preview notice
+                    (PRJ-08). #}
+                {% if ui_profile.is_enabled('build') or ui_profile.is_enabled('testing') or ui_profile.is_enabled('rpa') %}
+                <li><a href="{{ url_for('projects.project_workspace_link', project_id=project.id, destination='runs') }}">
+                    {{ ui.icon("play_circle") }} Runs
                 </a></li>
                 {% endif %}
-                {% if ui_profile.is_enabled('testing') or request_endpoint.startswith('projects.test_') %}
-                <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.test_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("science") }} Tests (preview)
+                {% if ui_profile.is_enabled('build') %}
+                <li><a href="{{ url_for('projects.project_workspace_link', project_id=project.id, destination='pipelines') }}">
+                    {{ ui.icon("account_tree") }} Pipelines
+                </a></li>
+                {% endif %}
+                {% if ui_profile.is_enabled('testing') %}
+                <li><a href="{{ url_for('projects.project_workspace_link', project_id=project.id, destination='test-catalog') }}">
+                    {{ ui.icon("science") }} Test catalog
                 </a></li>
                 {% endif %}
 
@@ -88,22 +100,8 @@
                 <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" {% if request_endpoint in ('projects.release_list', 'projects.release_detail') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("new_releases") }} Releases
                 </a></li>
-                <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.pipeline_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("account_tree") }} Pipelines (preview)
-                </a></li>
-                <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" {% if request_endpoint == 'projects.channel_list' %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("rss_feed") }} Channels (preview)
-                </a></li>
-                <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" {% if request_endpoint == 'projects.schedule_list' %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("schedule") }} Schedules (preview)
-                </a></li>
                 <li><a href="{{ url_for('projects.release_template_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.release_template_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("layers") }} Release Templates
-                </a></li>
-
-                <li class="pyc-subnav__section">Planning</li>
-                <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" {% if request_endpoint in ('projects.calendar_view', 'projects.release_event_list', 'projects.release_event_detail') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("calendar_today") }} Calendar (preview)
                 </a></li>
 
                 <li class="pyc-subnav__section">Automation</li>

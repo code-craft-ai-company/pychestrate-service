@@ -174,15 +174,19 @@ def test_project_schedules_page_does_not_point_to_a_missing_api():
     return
 
 
-def test_project_subnav_labels_channels_and_schedules_as_preview():
+def test_project_subnav_no_longer_lists_channels_and_schedules():
     """
-    **Feature: honest surfaces -- audit ORG-F14**
-    **Property: the project sub-navigation labels the Channels and
-    Schedules tabs as previews.**
+    **Feature: honest surfaces -- audit ORG-F14, PRJ-08**
+    **Property: the project sub-navigation does not list the Channels and
+    Schedules tabs (nothing can fill them; the pages still open, with the
+    preview notice tested above), so it has no "(preview)" tab to label.**
     """
     rendered = _render_empty(template_name=CHANNELS_TEMPLATE)
     testbase.assert_equal(
-        ("Channels (preview)" in rendered, "Schedules (preview)" in rendered),
-        (True, True),
+        (
+            "Channels (preview)" in rendered, "Schedules (preview)" in rendered,
+            "pyc-subnav__section\">Releases" in rendered,
+        ),
+        (False, False, True),
     )
     return

@@ -109,6 +109,11 @@ _ROUTE_TABLE = (
     ("projects.project_create", "/create", ("GET", "POST")),
     ("projects.project_detail", "/{project_id}", ("GET",)),
     (
+        "projects.project_workspace_link",
+        "/{project_id}/open/{destination}",
+        ("GET",),
+    ),
+    (
         "projects.project_edit",
         "/{project_id}/edit",
         ("GET", "POST"),
@@ -954,6 +959,81 @@ def handle_project_create(request: Request) -> Response:
         return _render_project_create_form(
             auth=auth, form_data=form_view, status_code=400, errors=errors
         )
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+#: The working pages a project's sidebar links to, by the name used in
+#: ``/projects/{id}/open/{destination}``. Each opens the site-wide page
+#: filtered to the project, so a person in a project reaches the pages
+#: that can hold its data (PRJ-08) without knowing the registry's ids.
+WORKSPACE_LINK_PATHS: Dict[str, str] = {
+    "runs": "/runs",
+    "pipelines": "/pipelines",
+    "test-catalog": "/test-catalog",
+}
+
+
+def handle_project_workspace_link(request: Request) -> Response:
+    """
+        ``GET /projects/{project_id}/open/{destination}`` -- send the
+        person to the site-wide Runs, Pipelines or Test catalog page
+        filtered to this project. ``view``-permission gated; a project with
+        no registry link opens the unfiltered page.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        destination = str(request.path_params.get("destination", "")).strip()
+        target_path = WORKSPACE_LINK_PATHS.get(destination, None)
+        raw_project_ref = request.path_params.get("project_id", None)
+        project_id = _coerce_int(raw=raw_project_ref)
+        if project_id is None:
+            project_id = _legacy_id_for_registry_ref(db_session=db_session, ref=raw_project_ref)
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        if target_path is None:
+            rtnval = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("projects.project_detail", project_id=project_id),
+                message="That page does not exist.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return rtnval
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="view",
+            deny_redirect_url=_url_for_module.url_for("projects.project_list"),
+            deny_message="You do not have permission to view this project.",
+        )
+        if deny_response is not None:
+            return deny_response
+
+        registry_project = _registry_project_for_legacy(
+            db_session=db_session, legacy_proj_id=project_id,
+        )
+        location = target_path
+        if registry_project is not None:
+            location = target_path + "?project_id=" + str(registry_project.project_id)
+        rtnval = RedirectResponse(url=location, status_code=302)
+        _attach_session_to_response(response=rtnval, session=auth.session)
+        return rtnval
     finally:
         try:
             db_session.close()
@@ -2242,6 +2322,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "projects.project_list": handle_project_list,
     "projects.project_create": handle_project_create,
     "projects.project_detail": handle_project_detail,
+    "projects.project_workspace_link": handle_project_workspace_link,
     "projects.project_edit": handle_project_edit,
     "projects.project_delete": handle_project_delete,
     "projects.member_list": handle_member_list,

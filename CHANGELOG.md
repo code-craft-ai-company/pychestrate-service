@@ -194,6 +194,19 @@ preview tag.
 
 ### Changed
 
+- A project's sidebar lists only sections that can hold data (PRJ-08).
+  Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
+  gone from it: nothing creates a test or infrastructure specification, a
+  release pipeline, a channel, a schedule or a calendar event in the web-UI
+  project model, so eight of its sixteen entries led to lists that stayed
+  empty. In their place, CI/CD lists Runs, Pipelines and Test catalog (each
+  follows the same interface surface setting as the site-wide entry), and
+  they open the site-wide page filtered to the project through
+  `/projects/{id}/open/{runs|pipelines|test-catalog}`. The old addresses
+  still open, with their Preview notice. The Overview's Recent Tests card
+  links to Runs, and the Releases list no longer offers Pipelines and
+  Channels buttons.
+
 - A destructive action asks in the site's own dialog (XC-15). Every
   `data-confirm` form (delete a project, a resource, a user, a variable;
   deactivate; revoke) asked through the browser's own confirm box, which a page

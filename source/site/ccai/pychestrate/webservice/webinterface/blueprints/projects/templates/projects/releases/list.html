@@ -41,14 +41,6 @@
         <a href="{{ url_for(request_endpoint, project_id=project.id) }}" class="btn btn-secondary">Clear</a>
     </form>
     
-    <div class="actions-row">
-        <a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" class="btn btn-secondary">
-            {{ ui.icon("account_tree") }} Pipelines
-        </a>
-        <a href="{{ url_for('projects.channel_list', project_id=project.id) }}" class="btn btn-secondary">
-            {{ ui.icon("rss_feed") }} Channels
-        </a>
-    </div>
 </div>
 
 <div class="table-scroll" tabindex="0"><table class="data-table">

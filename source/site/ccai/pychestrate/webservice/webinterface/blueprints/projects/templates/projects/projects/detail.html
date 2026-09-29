@@ -98,7 +98,10 @@
     <div class="card">
         <div class="card-header split">
             <span>Recent Tests</span>
-            <a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" class="btn btn-sm btn-secondary">View All</a>
+            <span class="pyc-card-links">
+                {% if recent_tests %}<a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" class="btn btn-sm btn-secondary">View All</a>{% endif %}
+                <a href="{{ url_for('projects.project_workspace_link', project_id=project.id, destination='runs') }}" class="btn btn-sm btn-secondary">All runs</a>
+            </span>
         </div>
         {% if recent_tests %}
         <div class="table-scroll" tabindex="0"><table class="data-table">
@@ -119,7 +122,7 @@
             </tbody>
         </table></div>
         {% else %}
-        {{ ui.empty_state("No tests yet") }}
+        {{ ui.empty_state("No test jobs here. Test runs started from the Test catalog are listed under Runs.") }}
         {% endif %}
     </div>
 </div>

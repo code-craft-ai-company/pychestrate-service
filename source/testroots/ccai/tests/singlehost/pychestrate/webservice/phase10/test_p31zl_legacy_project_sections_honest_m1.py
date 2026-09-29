@@ -11,9 +11,9 @@ no page or API creates them. Their empty states said "managed via the API",
 "configured via the API" and "triggered by watches, pipelines, or the API",
 which sent people looking for something that does not exist. They now carry
 the same "Preview" notice the release channels and schedules already had
-(ORG-F14), the sub-navigation labels them "(preview)", and Tests and
-Pipelines point to the places where those things do work (the Test catalog,
-Runs, Pipelines). The Releases list is not permanently empty (a release is
+(ORG-F14), and Tests and Pipelines point to the places where those things do
+work (the Test catalog, Runs, Pipelines). The sub-navigation first labelled
+them "(preview)" and then stopped listing them (``test_p31zzj``). The Releases list is not permanently empty (a release is
 created from a release template), so its empty state points there.
 """
 
@@ -116,19 +116,19 @@ def test_the_releases_list_points_to_release_templates_not_to_pipelines():
     return
 
 
-def test_the_project_sub_navigation_labels_the_four_dead_ends_as_preview():
+def test_the_project_sub_navigation_labels_nothing_preview_because_it_lists_no_dead_end():
     """
     **Feature: honest project sections (PRJ-08)**
-    **Property: the sub-navigation labels Infrastructure, Tests, Pipelines
-    and Calendar "(preview)", as it already did Channels and Schedules, and
-    leaves the working sections (Builds, Releases, Release Templates, RPA,
-    Watches) unlabelled.**
+    **Property: the sub-navigation no longer lists the sections nothing can
+    fill (see ``test_p31zzj``), so it carries no "(preview)" label, and the
+    working sections (Builds, Releases, Release Templates, Watches) are
+    unlabelled.**
     """
     rendered = _render_empty("projects/releases/pipeline_list.html")
     labelled = sorted(set(re.findall(r"\s(\w+) \(preview\)", rendered)))
     plain = [label for label in ("Builds", "Releases", "Release Templates", "Watches") if "{} (preview)".format(label) in rendered]
 
-    testbase.assert_equal((labelled, plain), (["Calendar", "Channels", "Infrastructure", "Pipelines", "Schedules", "Tests"], []))
+    testbase.assert_equal((labelled, plain), ([], []))
     return
 
 

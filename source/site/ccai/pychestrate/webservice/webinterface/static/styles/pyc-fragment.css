@@ -1044,6 +1044,7 @@
 .pyc-admin-page-fragment .my-sm { margin: 0.3rem 0; }
 .pyc-admin-page-fragment .stack { display: flex; flex-direction: column; gap: 0.6rem; }
 .pyc-admin-page-fragment .split { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.pyc-admin-page-fragment .pyc-card-links { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; }
 .pyc-admin-page-fragment .truncate { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pyc-admin-page-fragment .text-danger { color: var(--pyc-color-on-error-surface); }
 .pyc-admin-page-fragment .text-success { color: var(--pyc-color-on-success-surface); }
