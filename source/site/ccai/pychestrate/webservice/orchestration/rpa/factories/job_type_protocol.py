@@ -56,7 +56,7 @@ class RpaJobTypeProtocol(FactoryProtocolBase):
     factory_protocol_name: str = RPA_JOB_TYPE_PROTOCOL
     protocol_schema_version: int = 1
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/rpa_job_type"
+    published_docs_url: str = "/docs/extensions/protocols/rpa_job_type.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.orchestration.rpa.factories.job_type_protocol"
         ".ProcessJobType"

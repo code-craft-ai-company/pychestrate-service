@@ -49,7 +49,7 @@ class ConfigDocumentFormatProtocol(FactoryProtocolBase):
     # to True in the same change.
     is_published: bool = False
     published_docs_url: str = (
-        "https://docs.pychestrate.io/plugin-api/config_document_format"
+        "/docs/extensions/protocols/config_document_format.html"
     )
     published_reference: str = (
         "ccai.pychestrate.webservice.configdocs.formats.codecraftai_landscape"

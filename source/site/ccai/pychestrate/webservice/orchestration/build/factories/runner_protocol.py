@@ -27,7 +27,7 @@ class BuildRunnerKindProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/build_runner_kind"
+    published_docs_url: str = "/docs/extensions/protocols/build_runner_kind.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.orchestration.build.factories.makefile_runner_kind"
         ".MakefileRunnerKind"

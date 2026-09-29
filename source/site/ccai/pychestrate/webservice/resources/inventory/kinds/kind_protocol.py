@@ -40,7 +40,7 @@ class ResourceKindProtocol(FactoryProtocolBase):
     # implementation under ``factory: resource_kind``; the spec
     # naming will be reconciled in a future doc pass.
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/resource_kind"
+    published_docs_url: str = "/docs/extensions/protocols/resource_kind.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.resources.inventory.kinds.device_kind"
         ".DeviceResourceKind"

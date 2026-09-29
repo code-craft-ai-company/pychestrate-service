@@ -43,7 +43,7 @@ class NotificationChannelProtocol(FactoryProtocolBase):
 
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (
-        "https://docs.pychestrate.io/plugin-api/notification_channel"
+        "/docs/extensions/protocols/notification_channel.html"
     )
     published_reference: ClassVar[str] = (
         "ccai.pychestrate.webservice.notifications.factories.smtp_email"

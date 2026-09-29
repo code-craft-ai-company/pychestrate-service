@@ -21,7 +21,7 @@ POETRY      ?= poetry
 # Python path for running code and tests straight from the source tree.
 SOURCE_PYTHONPATH := source/site:source/packages:source/testroots
 
-.PHONY: help setup dev dev-up test lint docs docs-html docs-clean \
+.PHONY: help setup dev dev-up test lint docs docs-html docs-into-service docs-clean \
         openapi-validate serve-prod serve-prod-gunicorn serve-staging-gunicorn \
         db-upgrade db-downgrade db-current db-history db-revision-autogen \
         dist-clean dist-build dist-publish
@@ -120,8 +120,17 @@ docs: docs-html ## Same as docs-html
 docs-html: ## Build the whole site (manual, REST API reference, plugin catalog) into .output/docs/site
 	$(SPHINXBUILD) -W --keep-going -t reference -b html userguide .output/docs/site
 
-docs-clean: ## Remove the built site and the pages generated for it
-	rm -fr .output/docs/site userguide/extensions userguide/_reference
+# Where the service serves the built user guide from (/docs): a directory beside
+# its other static assets, kept out of git and carried by the deploy's rsync.
+DOCS_INSTALL_DIR := source/site/ccai/pychestrate/webservice/webinterface/static/docs
+
+docs-into-service: docs-html ## Build the user guide and install it where the service serves it (/docs)
+	rm -fr $(DOCS_INSTALL_DIR)
+	mkdir -p $(DOCS_INSTALL_DIR)
+	cp -a .output/docs/site/. $(DOCS_INSTALL_DIR)/
+
+docs-clean: ## Remove the built site, its installed copy and the pages generated for it
+	rm -fr .output/docs/site $(DOCS_INSTALL_DIR) userguide/extensions userguide/_reference
 
 # ---------------------------------------------------------------------------
 # Service runtime targets

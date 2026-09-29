@@ -41,7 +41,7 @@ class ProgressParserProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/progress_parser"
+    published_docs_url: str = "/docs/extensions/protocols/progress_parser.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.ingest.progress.factories.testbase_v1"
         ".TestBaseProgressParser"

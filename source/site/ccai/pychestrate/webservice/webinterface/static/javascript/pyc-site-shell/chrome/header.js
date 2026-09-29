@@ -151,6 +151,11 @@ function build_account_menu(options, display_name) {
         {text: "API reference", href: "/api/docs", css: "pyc-site-shell__api-reference-link"},
         {text: "Error types", href: "/errors", css: "pyc-site-shell__error-types-link"},
     ];
+    // The user guide the service serves (DOC-20), only when it is installed.
+    const user_guide_url = typeof options.user_guide_url === "string" ? options.user_guide_url : "";
+    if (user_guide_url.length > 0) {
+        help_links.unshift({text: "User guide", href: user_guide_url, css: "pyc-site-shell__user-guide-link"});
+    }
     help_links.forEach((entry) => {
         const link = document.createElement("a");
         link.href = entry.href;

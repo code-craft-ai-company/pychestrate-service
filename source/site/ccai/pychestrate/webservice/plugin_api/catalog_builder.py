@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Type
 
 from ccai.pychestrate.webservice.extensions.factory_protocol import FactoryProtocolBase
+from ccai.pychestrate.webservice.public_endpoint import public_docs_url
 from ccai.pychestrate.webservice.extensions.resource_extension import ResourceExtension
 from ccai.pychestrate.webservice.plugin_api.annotations import (
     PublishedSurfaceMetadata,
@@ -177,7 +178,7 @@ def _entry_to_dict(*, entry: CatalogEntry) -> Dict:
         "status": entry.metadata.status,
         "deprecation_date": entry.metadata.deprecation_date,
         "sunset_date": entry.metadata.sunset_date,
-        "docs_url": entry.metadata.docs_url,
+        "docs_url": public_docs_url(entry.metadata.docs_url),
         "reference": entry.metadata.reference,
         "declaring_class": entry.declaring_class_qualname,
     }

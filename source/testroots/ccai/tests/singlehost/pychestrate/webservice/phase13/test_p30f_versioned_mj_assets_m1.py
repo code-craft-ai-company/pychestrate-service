@@ -56,6 +56,7 @@ def _render_shell_document() -> str:
         user_display_name="",
         user_login_name="",
         service_version="",
+        user_guide_url="",
     )
     return rtnval
 

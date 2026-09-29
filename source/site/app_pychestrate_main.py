@@ -251,6 +251,9 @@ from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import 
 from ccai.pychestrate.webservice.webinterface.site_shell.catchall_route import (
     register_shell_catchall,
 )
+from ccai.pychestrate.webservice.webinterface.site_shell.user_guide_route import (
+    register_user_guide_routes,
+)
 from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
     get_shell_template_search_path,
 )
@@ -549,6 +552,9 @@ def register_service_extensions() -> None:
         static_root=SITE_DIRECTORIES.DIR_STATIC,
     )
     configure_static_url_root(static_root=SITE_DIRECTORIES.DIR_STATIC)
+    # The user guide this release shipped with, served from the service
+    # itself at /docs (DOC-20); absent when the built site is not installed.
+    register_user_guide_routes(app=app)
     register_favicon_route(
         app=app,
         favicon_path=os.path.join(SITE_DIRECTORIES.DIR_STATIC, "favicon.svg"),

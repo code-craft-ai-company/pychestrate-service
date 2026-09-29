@@ -290,6 +290,18 @@ ssh myron@tc-app-server.local sudo nginx -t          # validate config
 ssh myron@tc-app-server.local sudo systemctl reload nginx
 ```
 
+### The user guide at `/docs`
+
+The service serves the user guide it shipped with at `/docs/`, and the account
+menu links to it, so the guide always matches the running release and opens
+where the internet does not. The deploy script builds it on the machine that
+runs the deploy (Sphinx, from the dev environment: `make docs-into-service`)
+and the rsync carries it up; a guide that fails to build is skipped with a
+warning and the menu then has no "User guide" link. To install it on a host
+that is not deployed with the script, run `make docs-into-service` in the
+checkout before starting the service (the service reads the guide at start).
+The guide is public, like `/api/docs`.
+
 ### First-login: the initial-setup wizard
 
 A fresh deploy lands with **no admin user**. The first time you

@@ -90,7 +90,7 @@ class MFAMethodExtension(ResourceExtension):
 
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (
-        "https://docs.pychestrate.io/plugin-api/MFAMethodExtension"
+        "/docs/extensions/resources/MFAMethodExtension.html"
     )
     published_reference: ClassVar[str] = (
         "ccai.pychestrate.webservice.security.auth.extensions.totp_method"

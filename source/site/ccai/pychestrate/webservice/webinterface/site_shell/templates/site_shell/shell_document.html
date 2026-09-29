@@ -57,6 +57,9 @@
         {%- if service_version %}
         service-version="{{ service_version }}"
         {%- endif %}
+        {%- if user_guide_url %}
+        user-guide-url="{{ user_guide_url }}"
+        {%- endif %}
         brand-label="Pychestrate">
         {%- if content_html %}
         {{ content_html|safe }}

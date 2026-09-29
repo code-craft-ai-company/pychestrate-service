@@ -101,7 +101,7 @@ class ScmProviderProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/scm_provider"
+    published_docs_url: str = "/docs/extensions/protocols/scm_provider.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.orchestration.source.factories.github_provider"
         ".GithubScmProvider"

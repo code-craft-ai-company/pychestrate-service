@@ -49,7 +49,7 @@ class MetricDefinitionExtension(ResourceExtension):
 
     is_published: bool = True
     published_docs_url: str = (
-        "https://docs.pychestrate.io/plugin-api/MetricDefinitionExtension"
+        "/docs/extensions/resources/MetricDefinitionExtension.html"
     )
     published_reference: str = (
         "ccai.pychestrate.webservice.metrics.ingest.extensions.reservation_granted_counter"

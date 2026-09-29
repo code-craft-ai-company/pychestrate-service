@@ -35,7 +35,7 @@ class RpaExecutionModeProtocol(FactoryProtocolBase):
     factory_protocol_name: str = RPA_EXECUTION_MODE_PROTOCOL
     protocol_schema_version: int = 1
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/rpa_execution_mode"
+    published_docs_url: str = "/docs/extensions/protocols/rpa_execution_mode.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.orchestration.rpa.factories.process_execution_mode"
         ".ProcessExecutionMode"

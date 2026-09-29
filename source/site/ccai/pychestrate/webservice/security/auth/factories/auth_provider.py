@@ -72,7 +72,7 @@ class AuthProviderProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/auth_provider"
+    published_docs_url: str = "/docs/extensions/protocols/auth_provider.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.security.auth.factories.local_provider"
         ".LocalCredentialAuthProvider"

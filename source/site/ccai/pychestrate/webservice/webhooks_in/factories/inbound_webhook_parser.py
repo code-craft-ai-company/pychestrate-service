@@ -42,7 +42,7 @@ class InboundWebhookParserProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/inbound_webhook_parser"
+    published_docs_url: str = "/docs/extensions/protocols/inbound_webhook_parser.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.webhooks_in.factories.generic_hmac_parser"
         ".GenericHmacWebhookParser"

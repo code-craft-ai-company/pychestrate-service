@@ -36,7 +36,7 @@ class TestRunnerKindProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/test_runner_kind"
+    published_docs_url: str = "/docs/extensions/protocols/test_runner_kind.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.orchestration.test.factories.testbase_runner"
         ".TestbaseRunnerKind"

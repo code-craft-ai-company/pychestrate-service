@@ -250,6 +250,19 @@ preview tag.
   newer set is. They are still two sets: merging them is step 3 of
   `specs/model-convergence.md`.
 
+- The service serves its own user guide (DOC-20). The account menu now links
+  to "User guide" (`/docs/`), between API tokens and API reference, and the
+  plugin catalog's 23 documentation addresses point at the guide's own catalog
+  pages (`/docs/extensions/protocols/<name>.html`, `/docs/extensions/resources/<name>.html`;
+  they named `docs.pychestrate.io`, a host nothing publishes) and become
+  absolute when `PYCHESTRATE_PUBLIC_BASE_URL` is set. `make docs-into-service`
+  builds the Sphinx site and installs it beside the static assets; the deploy
+  script runs it (a guide that does not build is skipped with a warning) and
+  the app mounts the directory at `/docs`, with the files' safe path handling,
+  gzip and ETags of the other static assets. Without a built guide the link
+  is absent and `/docs` says the guide is not installed. The catalog pages no
+  longer carry a "Documentation" line that would link to themselves.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

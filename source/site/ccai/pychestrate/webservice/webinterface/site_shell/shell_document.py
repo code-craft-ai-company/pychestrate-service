@@ -199,12 +199,27 @@ def render_shell_document(
         "user_display_name": session_view.get("display_name", session_view.get("username", "")),
         "user_login_name": session_view.get("username", ""),
         "service_version": _service_version_for_shell(),
+        "user_guide_url": _user_guide_url_for_shell(),
     }
     rtnval = render_template_response(
         template_name=SHELL_TEMPLATE_NAME,
         context=context,
     )
     return rtnval
+
+
+def _user_guide_url_for_shell() -> str:
+    """
+        The address of the user guide the service serves, for the account
+        menu, or an empty string when the built guide is not installed (the
+        shell then shows no link, so it never leads nowhere).
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.user_guide_route import user_guide_url  # noqa: E402
+
+    try:
+        return user_guide_url()
+    except Exception:  # noqa: BLE001 -- a missing guide must never stop a page rendering
+        return ""
 
 
 def _service_version_for_shell() -> str:

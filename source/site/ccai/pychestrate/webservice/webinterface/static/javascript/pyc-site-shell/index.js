@@ -178,6 +178,10 @@ function build_account_menu(options, display_name) {
     { text: "API reference", href: "/api/docs", css: "pyc-site-shell__api-reference-link" },
     { text: "Error types", href: "/errors", css: "pyc-site-shell__error-types-link" }
   ];
+  const user_guide_url = typeof options.user_guide_url === "string" ? options.user_guide_url : "";
+  if (user_guide_url.length > 0) {
+    help_links.unshift({ text: "User guide", href: user_guide_url, css: "pyc-site-shell__user-guide-link" });
+  }
   help_links.forEach((entry) => {
     const link = document.createElement("a");
     link.href = entry.href;
@@ -3758,6 +3762,7 @@ var PycSiteShell = class extends HTMLElement {
       user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       service_version: this._read_optional_attribute("service-version"),
+      user_guide_url: this._read_optional_attribute("user-guide-url"),
       on_theme_toggle: () => {
         this._toggle_theme();
       },

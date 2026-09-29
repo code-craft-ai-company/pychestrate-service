@@ -286,6 +286,7 @@ class PycSiteShell extends HTMLElement {
       user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       service_version: this._read_optional_attribute("service-version"),
+      user_guide_url: this._read_optional_attribute("user-guide-url"),
       on_theme_toggle: () => {
         this._toggle_theme();
       },

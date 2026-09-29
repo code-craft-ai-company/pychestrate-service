@@ -86,6 +86,29 @@ def _configured_public_base_url() -> str:
     return rtnval
 
 
+def public_docs_url(address: str) -> str:
+    """
+        A documentation address as the catalog should publish it: a
+        service-relative path (``/docs/extensions/...``) becomes absolute when
+        the service knows its public address, so a caller outside a browser
+        (``pyc plugin api``, a script) gets a link that opens. Anything else
+        (an extension's own external address, an empty value) is unchanged.
+
+        :param address: The ``docs_url`` a protocol or extension declares.
+
+        :returns: The address to publish.
+    """
+    if not address.startswith("/"):
+        return address
+    try:
+        base = resolve_public_base_url()
+    except Exception:  # noqa: BLE001 -- the catalog must build without a base URL
+        base = None
+    if base is None:
+        return address
+    return base + address
+
+
 def resolve_public_base_url() -> Optional[str]:
     """
         The configured public base URL without a trailing slash, e.g.
@@ -195,6 +218,7 @@ def run_forwarding_info(*, run_id: str):
 __all__ = [
     "DEFAULT_ISSUER_NAME",
     "ENV_PUBLIC_BASE_URL",
+    "public_docs_url",
     "resolve_public_base_url",
     "run_forwarding_info",
     "run_forwarding_urls",

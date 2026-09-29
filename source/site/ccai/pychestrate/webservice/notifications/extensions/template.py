@@ -48,7 +48,7 @@ class NotificationTemplateExtension(ResourceExtension):
 
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (
-        "https://docs.pychestrate.io/plugin-api/NotificationTemplateExtension"
+        "/docs/extensions/resources/NotificationTemplateExtension.html"
     )
     published_reference: ClassVar[str] = (
         "ccai.pychestrate.webservice.notifications.extensions.run_failed_template"

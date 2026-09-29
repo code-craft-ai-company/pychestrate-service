@@ -93,7 +93,7 @@ class CLISubcommandExtension(ResourceExtension):
 
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (
-        "https://docs.pychestrate.io/plugin-api/CLISubcommandExtension"
+        "/docs/extensions/resources/CLISubcommandExtension.html"
     )
     published_reference: ClassVar[str] = (
         "ccai.pychestrate.cli.extensions.example_subcommand"

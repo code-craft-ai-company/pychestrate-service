@@ -18,8 +18,11 @@
 # Drives the existing repository-setup + development bootstrap chain
 # remotely:
 #
-#   1. rsync the working tree to ``<remote>:~/pychestrate-service``
-#      (excludes the venv, output, cache, .claude, .git).
+#   1. build the consumer-UI bundles and the user guide locally (steps 1a
+#      and 1b), then rsync the working tree to
+#      ``<remote>:~/pychestrate-service`` (excludes the venv, output,
+#      cache, .claude, .git). The service serves the built guide at
+#      ``/docs``; a guide that fails to build is skipped with a warning.
 #   2. ``repository-setup/setup-debian-machine``    -- system apt
 #      packages (build tools, python, pipx, poetry, nginx, tmux).
 #      Requires sudo on the remote; the user is prompted
@@ -411,6 +414,23 @@ echo
 # ---------------------------------------------------------------------------
 echo "==> Step 1a: build consumer-UI bundles locally (esbuild)"
 run bash "${REPO_ROOT}/development/build-frontend.sh"
+echo
+
+# ---------------------------------------------------------------------------
+# Step 1b -- build the user guide the service serves at /docs (DOC-20)
+#
+# The service serves its own guide, so it always matches the running release
+# and works where the internet does not. ``make docs-into-service`` builds the
+# Sphinx site (warnings are errors) and installs it beside the static assets,
+# which the rsync below carries up. A build failure does not stop the deploy:
+# the stale copy is removed so an old guide is never served against a new
+# release, and the shell then shows no "User guide" link.
+# ---------------------------------------------------------------------------
+echo "==> Step 1b: build the user guide (make docs-into-service)"
+if ! run make -C "${REPO_ROOT}" docs-into-service; then
+    echo "    WARNING: the user guide did not build; deploying without it (no /docs, no User guide link)."
+    run make -C "${REPO_ROOT}" docs-clean || true
+fi
 echo
 
 # ---------------------------------------------------------------------------

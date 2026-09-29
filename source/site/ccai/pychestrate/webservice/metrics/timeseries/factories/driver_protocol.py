@@ -32,7 +32,7 @@ class TimeseriesDriverProtocol(FactoryProtocolBase):
     protocol_schema_version: int = 1
 
     is_published: bool = True
-    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/timeseries_driver"
+    published_docs_url: str = "/docs/extensions/protocols/timeseries_driver.html"
     published_reference: str = (
         "ccai.pychestrate.webservice.metrics.timeseries.factories.native_pg_driver"
         ".NativePgTimeseriesDriver"

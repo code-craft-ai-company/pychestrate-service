@@ -69,6 +69,9 @@ SHELL_USER_LOGIN_NAME: str = "admin"
 #: The release the test shell document reports (the account menu shows it).
 SHELL_SERVICE_VERSION: str = "9.9.9-test"
 
+#: Where the test shell document says the user guide is (the account menu links to it).
+SHELL_USER_GUIDE_URL: str = "/docs/"
+
 #: Dict of API path -> JSON-serializable body (or callable(query) -> body).
 ApiStubs = Dict[str, Any]
 
@@ -152,6 +155,7 @@ def render_shell_html(*, path: str, bundle_names: List[str]) -> str:
         "user_display_name": SHELL_USER_DISPLAY_NAME,
         "user_login_name": SHELL_USER_LOGIN_NAME,
         "service_version": SHELL_SERVICE_VERSION,
+        "user_guide_url": SHELL_USER_GUIDE_URL,
     }
     rtnval = template.render(**context)
     return rtnval

@@ -85,9 +85,10 @@ def user_guide_url(*, docs_root: Optional[str] = None) -> str:
 def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> None:
     """
         Mount the user guide at ``/docs`` and send ``/docs`` and ``/docs/`` to
-        its first page. Registered even when the guide is not installed, so
-        an address someone bookmarked answers the site's own 404 instead of
-        the shell.
+        its first page. The two redirect routes are registered even when the
+        guide is not installed, so a bookmarked address answers the site's own
+        "not installed" page; the files are mounted only when the directory
+        exists (the guide is installed before the service starts).
 
         :param app: WebWorks application.
         :param docs_root: Directory holding the built site (default:
@@ -106,8 +107,8 @@ def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> 
                 title="The user guide is not installed",
                 message=(
                     "This deployment was set up without the built user guide. "
-                    "An administrator can install it with `make docs-into-service` "
-                    "and a deploy."
+                    "An administrator can build and install it (make docs-into-service) "
+                    "and deploy again."
                 ),
             )
             return rtnval
@@ -118,7 +119,11 @@ def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> 
 
     app.attach_route(USER_GUIDE_URL_PREFIX, methods=["GET"])(_redirect_to_first_page)
     app.attach_route(USER_GUIDE_URL_PREFIX + "/", methods=["GET"])(_redirect_to_first_page)
-    register_static_routes(app=app, url_prefix=USER_GUIDE_URL_PREFIX, static_root=root)
+    # The files are mounted only when the guide is there: the static registrar
+    # refuses a directory that does not exist, and building the guide itself
+    # boots this app before the guide exists.
+    if os.path.isdir(root) is True:
+        register_static_routes(app=app, url_prefix=USER_GUIDE_URL_PREFIX, static_root=root)
     return
 
 

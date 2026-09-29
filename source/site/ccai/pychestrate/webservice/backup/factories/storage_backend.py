@@ -60,7 +60,7 @@ class BackupStorageBackendProtocol(FactoryProtocolBase):
 
     is_published: bool = True
     published_docs_url: str = (
-        "https://docs.pychestrate.io/plugin-api/backup_storage_backend"
+        "/docs/extensions/protocols/backup_storage_backend.html"
     )
     published_reference: str = (
         "ccai.pychestrate.webservice.backup.factories.local_backend"
