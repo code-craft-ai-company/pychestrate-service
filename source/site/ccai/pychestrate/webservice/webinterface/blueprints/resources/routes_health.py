@@ -67,6 +67,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
     _as_sentence,
+    _denial_message,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -516,6 +517,7 @@ def handle_health_config(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="configure a health check"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
@@ -697,6 +699,7 @@ def handle_health_update(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="change a device's health status"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
@@ -809,6 +812,7 @@ def handle_health_run_check(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="run a health check"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),

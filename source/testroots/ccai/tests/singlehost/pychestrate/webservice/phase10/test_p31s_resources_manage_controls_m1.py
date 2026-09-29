@@ -34,6 +34,7 @@ from ccai.tests.singlehost.pychestrate.webservice.phase10._adm_helpers import (
     admin_cookies,
     app,
     get,
+    merge_cookies,
     post_form,
     unique_name,
 )
@@ -298,4 +299,31 @@ def test_the_projects_list_offers_edit_only_on_projects_the_person_may_edit():
         (view in viewer_page, edit in viewer_page, edit in admin_page),
         (True, False, True),
     )
+    return
+
+
+def test_a_refused_action_says_what_was_tried():
+    """
+    **Feature: manage controls (RES-10)**
+    **Property: when someone without the permission posts to a manager
+    handler anyway, the message names the action ("to delete a resource
+    pool"), not a page they cannot open; the pool is still there.**
+    """
+    lab = _lab()
+    tried = [
+        ("/resources/pools/{}/delete".format(lab["pool"]), {}, "delete a resource pool"),
+        ("/resources/health/{}/update".format(lab["device"]), {"status": "offline", "reason": "no permission"},
+         "change a device's health status"),
+        ("/resources/allocations/{}/force-checkin".format(lab["admin_allocation"]), {"reason": "no permission"},
+         "force check in someone else's allocation"),
+    ]
+    findings: List[Tuple[int, bool]] = []
+    for path, fields, action in tried:
+        response = post_form(path=path, fields=fields, cookies=lab["viewer"])
+        followed = get(path=response.header("Location") or "/", cookies=merge_cookies(cookies=lab["viewer"], response=response))
+        text = followed.text.replace("&#39;", "'")
+        findings.append((response.status_code, "You need the resource-management permission to {}.".format(action) in text))
+    still_there = get(path="/resources/pools/{}".format(lab["pool"]), cookies=lab["admin"]).status_code
+
+    testbase.assert_equal((findings, still_there), ([(302, True)] * 3, 200), str(findings))
     return

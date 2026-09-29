@@ -274,7 +274,9 @@ preview tag.
   pages and be turned away with "You do not have permission" when they
   used one. The pages now show those only to managers, and editing or
   cancelling a reservation only to its owner; the projects list shows
-  Edit only on projects the person may edit.
+  Edit only on projects the person may edit. A refusal names what was
+  tried ("You need the resource-management permission to delete a
+  resource pool.") instead of a page they cannot open.
 
 ### Removed
 

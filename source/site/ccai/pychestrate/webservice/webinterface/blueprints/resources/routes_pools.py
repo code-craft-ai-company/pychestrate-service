@@ -59,6 +59,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _denial_message,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -241,6 +242,7 @@ def handle_pool_create(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="create a resource pool"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
@@ -451,6 +453,7 @@ def handle_pool_delete(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="delete a resource pool"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),

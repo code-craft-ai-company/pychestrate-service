@@ -192,6 +192,20 @@ _FUTURE_ENDPOINT_PATTERNS: tuple = ()
 _ADMIN_PERMISSION = "system:resources.manage"
 
 
+def _denial_message(*, action: str) -> str:
+    """
+        The sentence shown when someone without the resource-management
+        permission reaches a handler that needs it, naming what they
+        tried instead of a page they cannot open.
+
+        :param action: What they tried, e.g. ``"delete a resource pool"``.
+
+        :returns: The message.
+    """
+    rtnval = "You need the resource-management permission to {}.".format(action)
+    return rtnval
+
+
 def _resources_permission_flags(*, auth: Any) -> Dict[str, Any]:
     """
         Template flags for the resources pages: ``can_manage`` is the
@@ -1071,6 +1085,7 @@ def handle_resource_create(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="add a device or resource"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
@@ -1283,6 +1298,7 @@ def handle_resource_edit(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="edit a device or resource"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
@@ -1471,6 +1487,7 @@ def handle_resource_delete(request: Request) -> Response:
         deny_response = _require_permission_or_redirect(
             auth=auth,
             permission=_ADMIN_PERMISSION,
+            deny_message=_denial_message(action="delete a device or resource"),
             deny_redirect_url=_url_for_module.url_for(
                 "resources.dashboard"
             ),
