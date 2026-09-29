@@ -1,6 +1,6 @@
 {% extends "config/chromeless_base.html" %}
 
-{% block title %}Login - Pychestrate Configuration{% endblock %}
+{% block title %}Sign in · Pychestrate{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -16,9 +16,22 @@
         text-align: center;
         margin-bottom: 30px;
     }
-    .login-header h2 {
+    .login-brand {
+        margin: 0 0 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--pyc-color-on-surface-muted);
+    }
+    .login-header h1 {
         margin: 0 0 10px;
+        font-size: 1.5rem;
         color: var(--pyc-color-on-surface);
+    }
+    .login-container .alert {
+        max-width: none;
+        margin: 0 0 20px;
     }
     .login-header p {
         color: var(--pyc-color-on-surface-muted);
@@ -35,13 +48,23 @@
 </style>
 {% endblock %}
 
+{% block flashes %}{% endblock %}
+
 {% block content %}
 <div class="login-container">
     <div class="login-header">
-        <h2>Welcome Back</h2>
-        <p>Sign in to access the configuration panel</p>
+        <p class="login-brand">Pychestrate</p>
+        <h1>Sign in to Pychestrate</h1>
+        <p>Enter your username and password.</p>
     </div>
-    
+
+    {% if flashes %}
+    {#- The error sits in the card, where the eye is, and is announced at once. #}
+    {% for category, message in flashes %}
+    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+
     <form method="post" action="/login" class="login-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% if next_target %}
@@ -50,13 +73,14 @@
         <div class="form-group">
             <label for="username">Username</label>
             <input type="text" id="username" name="username" class="form-control"
-                   required autofocus autocomplete="username" placeholder="Enter your username">
+                   required {% if not username %}autofocus{% endif %} autocomplete="username" placeholder="Enter your username"
+                   value="{{ username }}">
         </div>
         
         <div class="form-group">
             <label for="password">Password</label>
             <input type="password" id="password" name="password" class="form-control"
-                   required autocomplete="current-password" placeholder="Enter your password">
+                   required {% if username %}autofocus{% endif %} autocomplete="current-password" placeholder="Enter your password">
         </div>
         
         <button type="submit" class="btn btn-primary">Sign In</button>

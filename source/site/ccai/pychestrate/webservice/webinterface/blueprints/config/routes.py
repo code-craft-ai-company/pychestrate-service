@@ -977,6 +977,14 @@ def handle_login_form(request: Request) -> Response:
     next_candidate = _read_login_next_candidate(request=request)
     next_target = _resolve_safe_login_next(candidate=next_candidate)
 
+    # Someone who is already signed in has no use for the form (ADM-35):
+    # send them where they were going, or home.
+    from ccai.pychestrate.webservice.webinterface.site_shell.catchall_route import (  # noqa: E402
+        _is_request_authenticated,
+    )
+    if _is_request_authenticated(request=request) is True:
+        return RedirectResponse(url=next_target if next_target else "/", status_code=303)
+
     context = _build_default_template_context(
         session=session,
         request_endpoint="config.login",
@@ -984,6 +992,7 @@ def handle_login_form(request: Request) -> Response:
         csrf_token=_ensure_session_csrf_token(session=session),
     )
     context["next_target"] = next_target
+    context["username"] = ""
     response = _render(
         template_name="config/login.html",
         context=context,
@@ -1053,6 +1062,7 @@ def handle_login_submit(request: Request) -> Response:
         context["next_target"] = _resolve_safe_login_next(
             candidate=next_candidate
         )
+        context["username"] = username
         response = _render(
             template_name="config/login.html",
             context=context,
@@ -1114,6 +1124,7 @@ def handle_login_submit(request: Request) -> Response:
             context["next_target"] = _resolve_safe_login_next(
                 candidate=next_candidate
             )
+            context["username"] = username
             response = _render(
                 template_name="config/login.html",
                 context=context,

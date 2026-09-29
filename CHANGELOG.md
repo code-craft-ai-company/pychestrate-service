@@ -537,6 +537,16 @@ preview tag.
 
 ### Fixed
 
+- The sign-in page is a sign-in page (XC-08, ADM-35). It has one heading,
+  "Sign in to Pychestrate", a neutral line ("Enter your username and
+  password.") instead of "Welcome Back ... the configuration panel", and the
+  tab says "Sign in · Pychestrate". After a failed attempt the username is
+  still in the form and the cursor is in the password field, and the error is
+  inside the card and announced at once instead of sitting above it. Someone
+  who is already signed in is sent on (to a safe `next`, else home) instead of
+  being shown the form again. The first administrator still has to type the
+  password they just chose after the setup wizard.
+
 - Browser tabs tell pages apart and use one separator (PRJ-39). The Projects
   dashboard and the project list were both "Projects", and an IP pool and a
   resource pool of the same name had the same title; they are now "Project
