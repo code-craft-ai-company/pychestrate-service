@@ -83,6 +83,15 @@ the source it came from (*main @ github.com/acme/widgets*), a provisioning run
 with its action and driver (*apply · terraform*). On a narrow screen the table
 scrolls sideways as one piece.
 
+**Download CSV**, beside Refresh, saves the whole list as the filters now
+show it (not just the page on screen) as a spreadsheet: run id, project, job
+name and type, state, outcome, when it was created, started and completed, how
+long it ran, and the pod. It holds at most 5,000 runs; a longer list is cut and
+the download says so in its ``X-Export-Truncated`` header. Cells that a
+spreadsheet could read as a formula are written as text. The same file is
+``GET /api/v1/runs?format=csv`` (with the same ``project_id`` and ``state``
+filters) for scripts.
+
 A run that has been sent to a pod that is not answering shows that it is
 waiting for that pod, and when the pod was last heard from. It starts when the
 pod comes back.

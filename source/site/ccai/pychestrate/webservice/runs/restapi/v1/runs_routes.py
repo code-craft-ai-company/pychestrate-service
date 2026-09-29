@@ -951,12 +951,69 @@ def _parse_positive_int(
     return rtnval
 
 
+#: Most rows a CSV export carries; beyond it the file is cut and says so
+#: (``X-Export-Truncated``).
+CSV_EXPORT_MAX_ROWS = 5000
+
+CSV_EXPORT_COLUMNS = (
+    "run_id", "project_id", "job_name", "job_type", "state", "terminal_outcome",
+    "created_at", "started_at", "completed_at", "duration_seconds", "pod_id",
+)
+
+
+def _duration_seconds(*, started: Optional[str], finished: Optional[str]) -> str:
+    """
+        Whole seconds between two ISO timestamps, or "" when either is missing.
+    """
+    if not started or not finished:
+        return ""
+    try:
+        began = datetime.fromisoformat(started)
+        ended = datetime.fromisoformat(finished)
+    except ValueError:
+        return ""
+    return str(max(0, int((ended - began).total_seconds())))
+
+
+def _runs_csv_response(*, db_session: Any, query: Any) -> Response:
+    """
+        The filtered runs as a CSV attachment, newest first, at most
+        :data:`CSV_EXPORT_MAX_ROWS` rows (paging does not apply: an export is
+        the whole filtered list).
+
+        :param db_session: Active SQLAlchemy session.
+        :param query: The run query with the request's filters applied.
+
+        :returns: A CSV download.
+    """
+    from ccai.pychestrate.webservice.csv_export import csv_response, render_csv  # noqa: E402
+
+    rows = (
+        query.order_by(Run.entered_state_at.desc())
+        .limit(CSV_EXPORT_MAX_ROWS + 1)
+        .all()
+    )
+    truncated = len(rows) > CSV_EXPORT_MAX_ROWS
+    records: List[Dict[str, Any]] = []
+    for row in rows[:CSV_EXPORT_MAX_ROWS]:
+        item = _run_to_dict(row=row, db_session=db_session)
+        item["duration_seconds"] = _duration_seconds(started=item.get("started_at"), finished=item.get("completed_at"))
+        records.append(item)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return csv_response(
+        filename="pychestrate-runs-{}.csv".format(stamp),
+        body=render_csv(columns=CSV_EXPORT_COLUMNS, rows=records),
+        truncated=truncated,
+    )
+
+
 def handle_list_runs(request: Request) -> Response:
     """
         ``GET /api/v1/runs`` -- list runs with optional filters.
 
         Query params: ``project_id``, ``pod_id``, ``state``,
-        ``page``, ``per_page``.
+        ``page``, ``per_page``, and ``format=csv`` to download the whole
+        filtered list (at most 5000 rows) as a spreadsheet-safe CSV instead.
 
         :param request: Incoming webworks request.
 
@@ -992,6 +1049,10 @@ def handle_list_runs(request: Request) -> Response:
             query = query.filter(Run.project_id == project_id)
         if state_filter is not None and len(state_filter) > 0:
             query = query.filter(Run.state == state_filter)
+
+        if str(request.query_params.get("format", "") or "").lower() == "csv":
+            rtnval_csv = _runs_csv_response(db_session=db_session, query=query)
+            return rtnval_csv
 
         total = query.count()
         offset = (page - 1) * per_page

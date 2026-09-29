@@ -528,3 +528,17 @@ pyc-run-detail {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     font-variant-numeric: tabular-nums;
 }
+
+/* The CSV download beside Refresh: a link that looks like the page's quiet buttons. */
+.pyc-runs-list__export-link {
+    align-self: center;
+    color: var(--pyc-runs-accent-on-surface, hsl(220, 75%, 40%));
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.pyc-runs-list__export-link:hover {
+    text-decoration: underline;
+}
+

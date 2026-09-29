@@ -360,6 +360,17 @@ preview tag.
   anonymising a user (a data-protection request) is not done: it needs decisions
   about the audit trail, tokens, sessions and project ownership first.
 
+- The runs list downloads as a spreadsheet (ORG-F22). There was no export
+  anywhere. `GET /api/v1/runs?format=csv` returns the whole filtered list (at
+  most 5,000 rows, paging does not apply) as a CSV attachment (run id, project,
+  job name and type, state, outcome, created/started/completed, duration, pod;
+  `X-Export-Truncated: true` when cut), and the Runs page has a "Download CSV"
+  link that follows its filters. Every cell is written so a spreadsheet cannot
+  read it as a formula (a job name is chosen by whoever wrote the job); the
+  helper (`csv_export.py`) is there for the other lists. Builds, resources,
+  users and a lab-utilization report are not done (the audit log already had
+  its own export).
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

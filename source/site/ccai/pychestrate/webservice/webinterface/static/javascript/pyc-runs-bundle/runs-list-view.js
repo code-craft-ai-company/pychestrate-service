@@ -189,6 +189,7 @@ class PycRunsList extends HTMLElement {
   _project_input;
   _projects_notice;
   _refresh_stamp;
+  _export_link;
   _last_refreshed_at;
   _poll_timer;
   _poll_enabled;
@@ -220,6 +221,7 @@ class PycRunsList extends HTMLElement {
     this._project_input = null;
     this._projects_notice = null;
     this._refresh_stamp = null;
+    this._export_link = null;
     this._last_refreshed_at = null;
     this._poll_timer = null;
     this._poll_enabled = false;
@@ -383,6 +385,15 @@ class PycRunsList extends HTMLElement {
       void this._refresh();
     });
     filters.appendChild(refresh_button);
+    // The filtered list as a spreadsheet: the whole list, not this page (ORG-F22).
+    const export_link = document.createElement("a");
+    export_link.classList.add("pyc-runs-list__export-link");
+    export_link.setAttribute("data-role", "export-csv");
+    export_link.setAttribute("download", "");
+    export_link.textContent = "Download CSV";
+    filters.appendChild(export_link);
+    this._export_link = export_link;
+    this._sync_export_link();
     const refresh_stamp = document.createElement("span");
     refresh_stamp.classList.add("pyc-runs-list__stamp");
     refresh_stamp.setAttribute("data-role", "refresh-stamp");
@@ -496,6 +507,7 @@ class PycRunsList extends HTMLElement {
         state: this._state.stateFilter,
         page: this._state.page > 1 ? String(this._state.page) : ""
       });
+      this._sync_export_link();
       this._state.loading = true;
       this._state.errored = false;
       this._state.errorStatus = 0;
@@ -693,6 +705,22 @@ class PycRunsList extends HTMLElement {
    * Update the "as of HH:MM:SS" stamp next to the refresh button
    * from the last successful fetch time.
    */
+  /* Point the CSV link at the list as filtered now. */
+  _sync_export_link() {
+    if (this._export_link === null) {
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("format", "csv");
+    if (this._state.projectFilter.length > 0) {
+      params.set("project_id", this._state.projectFilter);
+    }
+    if (this._state.stateFilter.length > 0) {
+      params.set("state", this._state.stateFilter);
+    }
+    this._export_link.setAttribute("href", RUNS_API_PATH + "?" + params.toString());
+    return;
+  }
   _render_refresh_stamp() {
     if (this._refresh_stamp === null) {
       return;

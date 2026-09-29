@@ -225,3 +225,29 @@ def test_back_to_the_list_from_a_detail_page_restores_the_filters(browser: Brows
         ("/runs/" + RUN_ID, "failed", PROJECT_ID, "/runs", ""),
     )
     return
+
+
+def test_the_runs_csv_link_follows_the_filters(browser: Browser):
+    """
+    **Feature: CSV export (ORG-F22)**
+    **Property: the Runs page has a "Download CSV" link whose address is
+    ``/api/v1/runs?format=csv`` plus the project and state currently chosen; it
+    follows a change of state.**
+    """
+    page, _seen = _open(browser, path="/runs?project_id=" + PROJECT_ID, bundle="pyc-runs-bundle", api_path="/api/v1/runs")
+    try:
+        before = page.locator('[data-role="export-csv"]').get_attribute("href")
+        _choose_state(page, "completed")
+        after = page.locator('[data-role="export-csv"]').get_attribute("href")
+    finally:
+        page.context.close()
+
+    def query_of(href: str) -> Dict[str, str]:
+        return dict(urllib.parse.parse_qsl(urllib.parse.urlparse(href).query))
+
+    testbase.assert_equal(
+        (urllib.parse.urlparse(before).path, query_of(before), query_of(after)),
+        ("/api/v1/runs", {"format": "csv", "project_id": PROJECT_ID}, {"format": "csv", "project_id": PROJECT_ID, "state": "completed"}),
+    )
+    return
+
