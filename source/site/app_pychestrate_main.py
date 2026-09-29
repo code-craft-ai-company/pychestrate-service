@@ -127,6 +127,7 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1.api_tokens_routes impo
 # The REST contract as JSON for the pyc CLI (/api/v1/_meta/openapi.json).
 from ccai.pychestrate.webservice.wsgi_dispatch import build_wsgi_compat_dispatch  # noqa: F401  (re-exported)
 from ccai.pychestrate.webservice.api.openapi_document import (
+    register_api_docs_routes,
     register_openapi_document_routes,
 )
 from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
@@ -537,6 +538,8 @@ def register_service_extensions() -> None:
     register_api_tokens_routes(app=app, version_prefix="/api/v1")
     # The REST contract as JSON for the pyc CLI.
     register_openapi_document_routes(app=app, version_prefix="/api/v1")
+    # The same document for people, rendered by ReDoc (/api/docs redirects).
+    register_api_docs_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",

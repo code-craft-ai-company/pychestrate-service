@@ -152,5 +152,8 @@ Where to go next
   <20-00-ui-profiles.rst>`_ -- task guides for two parts of the product.
 * The REST API is described by the OpenAPI document
   `specs/openapi/pychestrate.yaml <../specs/openapi/pychestrate.yaml>`_.
+  A running service shows it as a searchable reference at ``/api/docs``
+  (signed in) and serves the document itself at
+  ``/api/v1/_meta/openapi.json``.
 * `CONTRIBUTING.md <../CONTRIBUTING.md>`_ -- how to change Pychestrate
   and run its tests.

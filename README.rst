@@ -83,7 +83,7 @@ Documentation
   ``pyc``, the command line for the REST API, installable on its own
   (``pipx install ./packages/pychestrate-cli``).
 * `REST API <specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
-  contract for ``/api/v1``.
+  contract for ``/api/v1``. A running service renders it at ``/api/docs``.
 * `CONTRIBUTING.md <CONTRIBUTING.md>`_, `CHANGELOG.md <CHANGELOG.md>`_,
   and `ROADMAP.md <ROADMAP.md>`_.
 

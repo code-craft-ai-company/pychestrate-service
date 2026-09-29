@@ -153,6 +153,12 @@ preview tag.
   served at `/api/v1/_meta/openapi.json` names the service's version
   as `info.x-service-version`.
 
+- **A REST reference page.** `/api/v1/_meta/docs` renders the OpenAPI
+  document with the bundled ReDoc, searchable, from the service's own
+  origin, to any signed-in caller. `/api/docs` redirects to it. The page
+  sets its own Content-Security-Policy so its search worker runs and
+  nothing loads from another host.
+
 ### Changed
 
 - **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`
@@ -209,6 +215,23 @@ preview tag.
   row. The endpoint has always persisted a `PENDING` row with no
   Layer-5 handoff; the UI reported plain success for a check that would
   never resolve.
+
+- **The OpenAPI document matches the routes.** 77 operations the service
+  serves no longer carry `x-pychestrate-status: planned`. Eleven served
+  operations that were missing are described: release templates (list,
+  create, read, change, delete), setting and removing a run variable,
+  cancelling a run, the UI timing beacon, and the reference page. The
+  two pod-template parameter operations and the run artifact listing,
+  which no route serves, are flagged `planned`. The schemas of the most
+  used operations now say what the service answers: projects carry
+  `state` (`ACTIVE` or `ARCHIVED`), clients and audit records have their
+  real fields, and `GET /clients` and `GET /audit` return a bare array.
+  `POST /rbac/check` takes `principal_id` and `permission_key`, as the
+  route always read them. Twenty operations carry examples captured from
+  the running service. Tests compare the document with the registered
+  routes and hold every example to its schema. The licence is the
+  Pychestrate End User License Agreement, not Apache-2.0, and
+  `info.version` is `0.0.17-preview`.
 
 ### Removed
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.16-preview
+  version: 0.0.17-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -17,13 +17,11 @@ info:
 
     ## Scope
 
-    * Every endpoint currently implemented under
-      `source/site/ccai/pychestrate/webservice/**/restapi/v1/*_routes.py`
-      is described.
-    * Endpoints planned for the Phase 3 minimum-viable test-run slice
-      (runs, dispatch ack, progress, results, test catalog, artifacts,
-      SSE events) are also described — these are flagged with the
-      `x-pychestrate-status: planned` extension on the operation.
+    * Every endpoint the service registers under `/api/v1` is described. A
+      test compares this document with the routes the service registers, so
+      an endpoint cannot be added or removed without this file changing.
+    * An operation flagged `x-pychestrate-status: planned` is described but
+      the service does not serve it yet.
 
     The HTML admin / consumer UI surfaces under `/admin/*`, `/setup/*`,
     `/login`, and the projects / resources blueprints are **not** part of
@@ -46,10 +44,11 @@ info:
       `ccai.restclient.base.pagedlist.PagedList`.
   contact:
     name: Code Craft AI LLC
-    url: https://github.com/automationmojo/pychestrate-service
+    url: https://github.com/code-craft-ai-company/pychestrate-service
   license:
-    name: Apache-2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    # Proprietary: the repository's LICENSE.txt is the Pychestrate End
+    # User License Agreement. The document used to say Apache-2.0.
+    name: Pychestrate End User License Agreement
 
 servers:
   - url: https://{host}/api/v1
@@ -252,6 +251,47 @@ paths:
           description: Health document (full or restricted).
           content:
             application/json:
+              example:
+                status: ok
+                generated_at: '2026-09-28T23:58:25.920974+00:00'
+                subsystems:
+                - name: database
+                  label: Database
+                  status: ok
+                  detail: Request-scoped session attached.
+                - name: feature-flags
+                  label: Feature Flags
+                  status: ok
+                  detail: All feature-flag backends healthy.
+                  backends:
+                  - name: local-db
+                    status: ok
+                    reason: ''
+                - name: extension-routes
+                  label: Extension Routes
+                  status: ok
+                  detail: 1 extension route(s) discovered.
+                  route_count: 1
+                - name: job-loop
+                  label: Job Execution Loop
+                  status: ok
+                  detail: Pods can enroll, receive signed jobs and upload results.
+                  backends:
+                  - name: envelope-signing-key
+                    status: ok
+                    reason: Installed (key_id=dev-envelope-ed25519-1).
+                  - name: enrollment-ca
+                    status: ok
+                    reason: Installed (ca_id=dev-enrollment-ca-1, issuer CN=pychestrate-dev-enrollment-ca).
+                  - name: result-presign-secret
+                    status: ok
+                    reason: Configured (PYCHESTRATE_RESULT_PRESIGN_SECRET).
+                  - name: dispatch-transport
+                    status: ok
+                    reason: Long-poll queue active (http-long-poll).
+                  - name: client-certificate-proxies
+                    status: ok
+                    reason: 'Trusted for X-Client-Cert-CN / X-Client-Cert-Verify: 127.0.0.1/32, ::1/128.'
               schema: { $ref: '#/components/schemas/SystemHealth' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
@@ -273,6 +313,14 @@ paths:
           description: Effective permission snapshot.
           content:
             application/json:
+              example:
+                permissions:
+                - system:audit.read
+                - system:auth.admin
+                - system:auth.read
+                - system:backups.read
+                - system:backups.write
+                - system:builds.create
               schema:
                 $ref: '#/components/schemas/MePermissions'
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -326,6 +374,95 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /_meta/docs:
+    get:
+      tags: [meta]
+      summary: The API reference page, rendered from this document.
+      operationId: meta_get_api_docs
+      description: |
+        A browsable, searchable reference (ReDoc) built from
+        `/_meta/openapi.json`. Signed-in callers only. `/api/docs` on the
+        same host redirects here. The page sets its own
+        Content-Security-Policy: it loads nothing from another host and
+        allows the `blob:` worker its search needs.
+      responses:
+        '200':
+          description: The reference page.
+          content:
+            text/html:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /_meta/docs/assets/{filename}:
+    get:
+      tags: [meta]
+      summary: A script the reference page loads.
+      operationId: meta_get_api_docs_asset
+      description: |
+        Serves the bundled reference renderer to the page above. Only
+        the file names the page uses are served (`redoc.standalone.js`);
+        any other name is a 404.
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema: { type: string, enum: [redoc.standalone.js] }
+      responses:
+        '200':
+          description: The script.
+          content:
+            application/javascript:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /_metrics/ui:
+    post:
+      tags: [system]
+      summary: Receive a batch of page-timing measurements from the web UI.
+      operationId: system_ingest_ui_metrics
+      description: |
+        The web UI sends one batch per page view and one per 30 seconds on a
+        long-lived page. The whole batch is refused if any entry is
+        malformed. Batches from signed-in users are added to the
+        `pychestrate_ui_shell_*` series on `/metrics`; a batch without a
+        session is checked and acknowledged only. Limits: 200 entries a
+        batch, 16 labels an entry, names and label text up to 128
+        characters, 120 batches a minute for a signed-in user and 60 a
+        minute shared by every anonymous caller.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 200
+              items:
+                type: object
+                required: [metric, value, timestamp_ms]
+                properties:
+                  metric: { type: string, maxLength: 128, example: pychestrate_ui_shell_tti_seconds }
+                  value: { type: number, example: 0.187 }
+                  labels:
+                    type: object
+                    maxProperties: 16
+                    additionalProperties: { type: string, maxLength: 128 }
+                    example: { route: /admin/users }
+                  timestamp_ms: { type: number, example: 1710000000000 }
+      responses:
+        '200':
+          description: The batch was accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, distinct_metrics, recorded]
+                properties:
+                  accepted: { type: integer, description: Entries in the batch. }
+                  distinct_metrics: { type: integer, description: Different metric names in the batch. }
+                  recorded: { type: integer, description: Entries added to the aggregates (0 for a batch without a session). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   # =====================================================================
   # machine identity: /me, API tokens, service accounts
   # =====================================================================
@@ -345,6 +482,15 @@ paths:
           description: The caller's identity.
           content:
             application/json:
+              example:
+                user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                login_name: dev-admin
+                display_name: Test Admin
+                primary_email: admin@example.com
+                status: ACTIVE
+                account_kind: user
+                authentication:
+                  method: session
               schema:
                 $ref: '#/components/schemas/MeIdentity'
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -362,6 +508,22 @@ paths:
           description: The caller's tokens.
           content:
             application/json:
+              example:
+                items:
+                - token_id: 7b7022b4-e54b-4620-bec6-c7f8b1a75404
+                  user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                  login_name: dev-admin
+                  is_service_account: false
+                  name: ci-nightly
+                  token_hint: pyc_YcQlOP
+                  scope: read-only
+                  status: active
+                  created_at: '2026-09-28T23:58:26.016873+00:00'
+                  created_by_user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                  expires_at: '2026-10-28T23:58:26.016873+00:00'
+                  last_used_at: null
+                  revoked_at: null
+                total: 1
               schema:
                 $ref: '#/components/schemas/ApiTokenList'
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -380,6 +542,10 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              name: ci-nightly
+              expires_in_days: 30
+              scope: read-only
             schema:
               $ref: '#/components/schemas/ApiTokenCreateRequest'
       responses:
@@ -387,6 +553,21 @@ paths:
           description: Token issued; `token` is shown once.
           content:
             application/json:
+              example:
+                token_id: 7b7022b4-e54b-4620-bec6-c7f8b1a75404
+                user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                login_name: dev-admin
+                is_service_account: false
+                name: ci-nightly
+                token_hint: pyc_YcQlOP
+                scope: read-only
+                status: active
+                created_at: '2026-09-28T23:58:26.016873+00:00'
+                created_by_user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                expires_at: '2026-10-28T23:58:26.016873+00:00'
+                last_used_at: null
+                revoked_at: null
+                token: pyc_YcQlOPOjvCpADtUvhRmH8bTW1jthGh5c_EXAMPLE-ONLY
               schema:
                 $ref: '#/components/schemas/IssuedApiToken'
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -694,12 +875,18 @@ paths:
   /rbac/check:
     post:
       tags: [rbac]
-      summary: Check whether the actor has a permission in a scope.
+      summary: Check whether an account holds a permission.
       operationId: rbac_check_permission
+      description: >
+        Needs `system:rbac.read`. A missing or malformed `principal_id`
+        currently answers 500 rather than 400.
       requestBody:
         required: true
         content:
           application/json:
+            example:
+              principal_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+              permission_key: system:runs.read
             schema:
               $ref: '#/components/schemas/RbacCheckRequest'
       responses:
@@ -707,8 +894,14 @@ paths:
           description: Permission decision.
           content:
             application/json:
+              example:
+                allowed: true
+                reason: binding_allow
+                permission_key: system:runs.read
               schema: { $ref: '#/components/schemas/RbacCheckResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   # =====================================================================
   # audit
@@ -735,16 +928,34 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: Audit records (ordered by sequence_number ascending).
+          description: >-
+            Audit records ordered by sequence_number ascending, as a bare
+            array (no `items` / `meta` envelope).
           content:
             application/json:
+              example:
+                - sequence_number: 82
+                  record_id: 6c842fae-9ae6-46dd-91d0-0fe773e22f31
+                  kind: audit.api_token.created
+                  source_topic: entity.api_token.created
+                  actor_user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                  target_ref: api_token:7b7022b4-e54b-4620-bec6-c7f8b1a75404
+                  payload_json:
+                    token_id: 7b7022b4-e54b-4620-bec6-c7f8b1a75404
+                    user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                    login_name: dev-admin
+                    is_service_account: false
+                    name: ci-nightly
+                    scope: read-only
+                    expires_at: '2026-10-28T23:58:26.016873+00:00'
+                    created_at: '2026-09-28T23:58:26.016873+00:00'
+                    actor_user_id: 053d9ac7-3349-43fe-958c-f56a3ff01b98
+                    target_ref: api_token:7b7022b4-e54b-4620-bec6-c7f8b1a75404
+                  record_hash_hex: eb64525f3c36d1ab2bd6bf27828faf0e1e64ed10bf5dc2e89bde1c398301cd7b
+                  written_at: '2026-09-28T23:58:26.019837+00:00'
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/AuditRecord' }
+                type: array
+                items: { $ref: '#/components/schemas/AuditRecord' }
   /audit/{sequence_number}:
     parameters:
       - in: path
@@ -1393,6 +1604,25 @@ paths:
           description: Page of projects.
           content:
             application/json:
+              example:
+                items:
+                - project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                  slug: nightly-tests
+                  display_name: Nightly tests
+                  description: Regression suite that runs every night.
+                  state: ACTIVE
+                  owning_group_id: null
+                  template_id: null
+                  template_version: null
+                  extension_fields: {}
+                  created_at: '2026-09-28T23:58:25.931749+00:00'
+                  updated_at: '2026-09-28T23:58:25.931749+00:00'
+                  archived_at: null
+                meta:
+                  page: 1
+                  per_page: 50
+                  total: 1
+                  next_cursor: null
               schema: { $ref: '#/components/schemas/ProjectPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -1405,12 +1635,29 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              slug: nightly-tests
+              display_name: Nightly tests
+              description: Regression suite that runs every night.
             schema: { $ref: '#/components/schemas/ProjectCreateRequest' }
       responses:
         '201':
           description: Project created.
           content:
             application/json:
+              example:
+                project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                slug: nightly-tests
+                display_name: Nightly tests
+                description: Regression suite that runs every night.
+                state: ACTIVE
+                owning_group_id: null
+                template_id: null
+                template_version: null
+                extension_fields: {}
+                created_at: '2026-09-28T23:58:25.931749+00:00'
+                updated_at: '2026-09-28T23:58:25.931749+00:00'
+                archived_at: null
               schema: { $ref: '#/components/schemas/Project' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -1426,6 +1673,19 @@ paths:
           description: Project.
           content:
             application/json:
+              example:
+                project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                slug: nightly-tests
+                display_name: Nightly tests
+                description: Regression suite that runs every night.
+                state: ACTIVE
+                owning_group_id: null
+                template_id: null
+                template_version: null
+                extension_fields: {}
+                created_at: '2026-09-28T23:58:25.931749+00:00'
+                updated_at: '2026-09-28T23:58:25.931749+00:00'
+                archived_at: null
               schema: { $ref: '#/components/schemas/Project' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -1544,19 +1804,107 @@ paths:
         '204':
           description: Role binding removed.
         '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/release-templates:
+    parameters:
+      - $ref: '#/components/parameters/ReleaseProjectIdParam'
+    get:
+      tags: [projects]
+      summary: List a project's release templates.
+      description: Requires system:release_templates.read.
+      operationId: projects_list_release_templates
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of release templates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseTemplatePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [projects]
+      summary: Create a release template.
+      description: Requires system:release_templates.write.
+      operationId: projects_create_release_template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseTemplateWrite' }
+      responses:
+        '201':
+          description: Template created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseTemplate' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /projects/{project_id}/release-templates/{template_id}:
+    parameters:
+      - $ref: '#/components/parameters/ReleaseProjectIdParam'
+      - $ref: '#/components/parameters/ReleaseTemplateIdParam'
+    get:
+      tags: [projects]
+      summary: Read a release template.
+      description: Requires system:release_templates.read.
+      operationId: projects_get_release_template
+      responses:
+        '200':
+          description: The template.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseTemplate' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [projects]
+      summary: Change a release template.
+      description: >
+        Requires system:release_templates.write. Only the fields present in
+        the body are changed.
+      operationId: projects_update_release_template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseTemplateWrite' }
+      responses:
+        '200':
+          description: Template updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseTemplate' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [projects]
+      summary: Delete a release template.
+      description: Requires system:release_templates.write.
+      operationId: projects_delete_release_template
+      responses:
+        '204':
+          description: Template deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /projects/{project_id}/release-templates/{template_id}/create-release:
     parameters:
-      - in: path
-        name: project_id
-        required: true
-        description: >
-          Integer id of a project in the consumer web UI's project store
-          (the release-template routes key on it, not on a slug).
-        schema: { type: integer, minimum: 1 }
-      - in: path
-        name: template_id
-        required: true
-        schema: { type: integer, minimum: 1 }
+      - $ref: '#/components/parameters/ReleaseProjectIdParam'
+      - $ref: '#/components/parameters/ReleaseTemplateIdParam'
     post:
       tags: [projects]
       summary: Create a draft release from a release template.
@@ -1620,16 +1968,25 @@ paths:
         - $ref: '#/components/parameters/PerPageParam'
       responses:
         '200':
-          description: Clients.
+          description: Clients, as a bare array (no `items` / `meta` envelope).
           content:
             application/json:
+              example:
+                - client_id: a9a92aa7-af93-49fd-9a63-441071a2cb72
+                  project_id: 6bffbd8e-a12d-4e59-ab57-fc857dcde02a
+                  pod_name: docs-check-pod
+                  status: ACTIVE
+                  liveness_state: LOST
+                  enrolled_at: '2026-09-28T22:45:07.674534+00:00'
+                  last_seen: null
+                  last_agent_version: null
+                  transport_name: null
+                  degraded_at: '2026-09-28T22:46:53.095094+00:00'
+                  revision_token: 3f30d155-4c1d-49b6-9298-f6ee4d2a36ad
+                  attributes: {}
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/Client' }
+                type: array
+                items: { $ref: '#/components/schemas/Client' }
   /clients/{client_id}:
     parameters:
       - $ref: '#/components/parameters/ClientIdParam'
@@ -1642,6 +1999,19 @@ paths:
           description: Client.
           content:
             application/json:
+              example:
+                client_id: a9a92aa7-af93-49fd-9a63-441071a2cb72
+                project_id: 6bffbd8e-a12d-4e59-ab57-fc857dcde02a
+                pod_name: docs-check-pod
+                status: ACTIVE
+                liveness_state: LOST
+                enrolled_at: '2026-09-28T22:45:07.674534+00:00'
+                last_seen: null
+                last_agent_version: null
+                transport_name: null
+                degraded_at: '2026-09-28T22:46:53.095094+00:00'
+                revision_token: 3f30d155-4c1d-49b6-9298-f6ee4d2a36ad
+                attributes: {}
               schema: { $ref: '#/components/schemas/Client' }
         '404': { $ref: '#/components/responses/NotFound' }
   /clients/{client_id}/revoke:
@@ -1713,12 +2083,24 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+              pod_name: lab-rack-1
+              ttl_seconds: 900
             schema: { $ref: '#/components/schemas/EnrollmentTokenCreateRequest' }
       responses:
         '201':
           description: Token issued.
           content:
             application/json:
+              example:
+                token_id: 7e18bce4-933d-47b9-af40-54513fd3d859
+                secret: k7Q2vJ0mYw3n-EXAMPLE-ONLY-do-not-use
+                project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                pod_name: lab-rack-1
+                expires_at: '2026-09-29T00:13:26.008498+00:00'
+                algorithm_name: phase2-stdlib-hmac-sha256
+                warnings: []
               schema: { $ref: '#/components/schemas/EnrollmentTokenIssued' }
         '400': { $ref: '#/components/responses/BadRequest' }
   /enrollment-tokens/redeem:
@@ -1883,7 +2265,6 @@ paths:
       tags: [clients]
       summary: Long-poll for the next signed dispatch envelope.
       operationId: clients_dispatches_next
-      x-pychestrate-status: planned
       description: |
         Long-polling pull endpoint the pod-client calls to fetch
         the next signed envelope queued for it by the server
@@ -1931,7 +2312,6 @@ paths:
       tags: [clients]
       summary: Pod-client liveness ping.
       operationId: clients_heartbeat
-      x-pychestrate-status: planned
       description: |
         Lightweight ping the pod-client calls between long-poll
         cycles to keep its registry row `last_seen` current.
@@ -2220,6 +2600,7 @@ paths:
       tags: [pods]
       summary: Update template parameters.
       operationId: pods_update_template_parameters
+      x-pychestrate-status: planned
       requestBody:
         required: true
         content:
@@ -2235,9 +2616,76 @@ paths:
       tags: [pods]
       summary: Delete a pod template.
       operationId: pods_delete_template
+      x-pychestrate-status: planned
       responses:
         '204':
           description: Template deleted.
+
+  /projects/{project_id}/runs/{run_id}/variables/{name}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/RunIdParam'
+      - in: path
+        name: name
+        required: true
+        description: Variable name.
+        schema: { type: string }
+      - in: query
+        name: pod_id
+        required: true
+        description: The pod the variable is written for.
+        schema: { type: string, format: uuid }
+    put:
+      tags: [pods]
+      summary: Set a run-scoped variable.
+      description: Requires system:pods.write.
+      operationId: pods_set_run_variable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value: { description: 'Any JSON value.' }
+                value_schema:
+                  type: object
+                  description: JSON Schema the value must satisfy.
+                  additionalProperties: true
+                locked:
+                  type: boolean
+                  default: false
+                  description: A locked variable cannot be changed by the run.
+      responses:
+        '200':
+          description: The variable as stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variable_id, run_id, pod_id, name, locked]
+                properties:
+                  variable_id: { type: string, format: uuid }
+                  run_id: { type: string, format: uuid }
+                  pod_id: { type: string, format: uuid }
+                  name: { type: string }
+                  locked: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [pods]
+      summary: Remove a run-scoped variable.
+      description: >
+        Requires system:pods.write. Removing a variable that is not set is
+        not an error.
+      operationId: pods_delete_run_variable
+      responses:
+        '204':
+          description: Variable removed.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   # =====================================================================
   # plugin_api
@@ -2416,15 +2864,13 @@ paths:
         '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
-  # PLANNED — runs / test_runs / test_catalog / progress / dispatch /
-  #            results / artifacts
+  # runs / test_runs / test_catalog / progress / dispatch / results /
+  # artifacts
   #
-  # These endpoints are NOT yet implemented in the codebase. They are
-  # declared here so that:
-  #   1. The generated client surfaces them as soon as the spec lands.
-  #   2. Parallel implementation PRs target a stable, agreed-upon shape.
-  #
-  # Each operation carries `x-pychestrate-status: planned`.
+  # These were first declared ahead of their code and are all served now,
+  # except the operations that still carry `x-pychestrate-status: planned`
+  # (a spec-only operation is declared so that the generated client
+  # surfaces it as soon as the code lands).
   # =====================================================================
 
   /runs:
@@ -2432,7 +2878,6 @@ paths:
       tags: [runs]
       summary: List runs (with filters).
       operationId: runs_list
-      x-pychestrate-status: planned
       parameters:
         - in: query
           name: project_id
@@ -2450,6 +2895,43 @@ paths:
           description: Page of runs.
           content:
             application/json:
+              example:
+                items:
+                - run_id: f1d5f2b7-a841-4b69-a875-e0d1297b07a0
+                  project_id: e2643854-e231-4c49-9e4b-ed0545f61646
+                  pod_id: be445e81-b94c-4a85-9ca3-2b0d98cadc75
+                  client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                  job_id: 823e8e6f-2c4d-48c7-977b-bfb390a5a059
+                  job_name: 823e8e6f-2c4d-48c7-977b-bfb390a5a059
+                  job_type: testbase
+                  state: completed
+                  terminal_outcome: success
+                  outcome_reason: null
+                  assigned_client: null
+                  current_dispatch_attempt_id: 513ca8e9-52eb-46cc-8a48-a503efa4c1ed
+                  progress_summary:
+                    run_id: f1d5f2b7-a841-4b69-a875-e0d1297b07a0
+                    client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                    format_tag: testbase-v1
+                    tests_total: 6
+                    tests_passed: 6
+                    tests_failed: 0
+                    tests_skipped: 0
+                    tests_errored: 0
+                    percent_complete: null
+                    notes: null
+                    recorded_at: '2026-09-26T19:12:34.131581+00:00'
+                  result_manifest: null
+                  created_at: '2026-09-26T19:12:28.238741+00:00'
+                  dispatched_at: '2026-09-26T19:12:29.120623+00:00'
+                  started_at: '2026-09-26T19:12:34.276248+00:00'
+                  completed_at: '2026-09-26T19:12:34.386217+00:00'
+                  labels: {}
+                meta:
+                  page: 1
+                  per_page: 1
+                  total: 9
+                  next_cursor: null
               schema: { $ref: '#/components/schemas/RunPage' }
   /runs/{run_id}:
     parameters:
@@ -2458,14 +2940,143 @@ paths:
       tags: [runs]
       summary: Read a run.
       operationId: runs_get_by_id
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Run.
           content:
             application/json:
+              example:
+                run_id: e7690376-bdb1-461a-a6aa-4890b117f21e
+                project_id: e2643854-e231-4c49-9e4b-ed0545f61646
+                pod_id: be445e81-b94c-4a85-9ca3-2b0d98cadc75
+                client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                job_id: edd2c850-ea7d-4cd9-81a3-c2a16bd7b950
+                job_name: edd2c850-ea7d-4cd9-81a3-c2a16bd7b950
+                job_type: testbase
+                state: failed
+                terminal_outcome: failure
+                outcome_reason: testbase run exited with code 255.
+                assigned_client:
+                  client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                  pod_name: e2e-live-pod
+                  status: ACTIVE
+                  liveness_state: LOST
+                  last_seen: '2026-09-27T03:40:27.789054+00:00'
+                current_dispatch_attempt_id: 23c50c8f-613c-427e-bec8-5b550cfa7610
+                progress_summary:
+                  run_id: e7690376-bdb1-461a-a6aa-4890b117f21e
+                  client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                  format_tag: testbase-v1
+                  tests_total: 1
+                  tests_passed: 0
+                  tests_failed: 1
+                  tests_skipped: 0
+                  tests_errored: 0
+                  percent_complete: null
+                  notes: null
+                  recorded_at: '2026-09-26T17:50:17.681203+00:00'
+                result_manifest:
+                  run_id: e7690376-bdb1-461a-a6aa-4890b117f21e
+                  client_id: e86f6888-af1b-4108-80bd-48f272b0b0a3
+                  format_tag: testbase
+                  backend_key_prefix: orchestrate/results/2026/09/26/testbase/e7690376-bdb1-461a-a6aa-4890b117f21e
+                  completed_at: '2026-09-26T17:50:17.775980+00:00'
+                  terminal_outcome: failure
+                  failure_classification: null
+                  artifact_count: 3
+                  files:
+                  - relative_path: __pycache__/testrun_sequence.cpython-312.pyc
+                    size_bytes: 2767
+                    sha256: 18b1cab0d151301aebe716e9f11fa4ae9dc956898be66f0ab358727a9e4fe8d6
+                  - relative_path: catalog.json
+                    size_bytes: 196
+                    sha256: afba9c2564f2474ce2b107f46a59228992da9564f917fe7984e15e57fa3e5eae
+                  - relative_path: import_errors.jsos
+                    size_bytes: 0
+                    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                  summary_artifact_path: testrun_summary.json
+                  results_stream_artifact_path: testrun_results_stream.jsos
+                  results_artifact_path: testrun_results.json
+                  html_summary_artifact_path: testsummary.html
+                  tests_passed: 0
+                  tests_failed: 1
+                  tests_skipped: 0
+                  tests_errored: 0
+                  notes: testbase run exited with code 255.
+                created_at: '2026-09-26T17:50:12.502003+00:00'
+                dispatched_at: '2026-09-26T17:50:12.666530+00:00'
+                started_at: '2026-09-26T17:50:17.722073+00:00'
+                completed_at: '2026-09-26T17:50:17.819258+00:00'
+                labels: {}
               schema: { $ref: '#/components/schemas/Run' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /runs/{run_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    post:
+      tags: [runs]
+      summary: Request cancellation of a run.
+      operationId: runs_cancel
+      description: |
+        Needs `project:runs.cancel` in the run's project. The run moves to
+        `cancel_requested`. If a pod holds the job it is told to stop on its
+        next heartbeat and the run then moves through `cancelling` to
+        `cancelled`; a job that finishes first ends `completed` or `failed`
+        as the pod reports it. A run already in a terminal state answers
+        409.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            example:
+              reason: Superseded by a newer commit.
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Recorded on the run and in the audit trail.
+                  default: cancel requested via REST
+      responses:
+        '200':
+          description: Cancellation requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run_id, state, entered_state_at]
+                properties:
+                  run_id: { type: string, format: uuid }
+                  state: { $ref: '#/components/schemas/RunState' }
+                  prior_state:
+                    oneOf:
+                      - { $ref: '#/components/schemas/RunState' }
+                      - { type: 'null' }
+                  entered_state_at: { type: string, format: date-time }
+                  terminal_outcome: { type: [string, 'null'] }
+                  cancel_request_id:
+                    type: [string, 'null']
+                    description: Id of the cancel request queued for the pod; null when no pod holds the run.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Request conflicts with current resource state.
+          content:
+            application/problem+json:
+              example:
+                type: https://docs.pychestrate.io/errors/conflict
+                title: Conflict
+                status: 409
+                detail: |-
+                  Run is in a terminal state; no further transitions permitted.
+                  RUN_ID: aedfdade-df6a-4895-adf6-873903e2972e
+                  CURRENT_STATE: completed
+                  REJECTED_EVENT: cancel_requested
+                instance: /api/v1/runs/aedfdade-df6a-4895-adf6-873903e2972e/cancel
+                run_id: aedfdade-df6a-4895-adf6-873903e2972e
+                reason: run is already in a terminal state
+              schema: { $ref: '#/components/schemas/Problem' }
   /runs/{run_id}/events:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'
@@ -2473,7 +3084,6 @@ paths:
       tags: [runs]
       summary: Subscribe to run events via Server-Sent Events.
       operationId: runs_subscribe_events
-      x-pychestrate-status: planned
       description: |
         Long-lived response stream encoded as `text/event-stream`
         (Server-Sent Events). Each SSE frame's `data:` payload is a
@@ -2498,7 +3108,6 @@ paths:
       tags: [dispatch]
       summary: Client agent acknowledges receipt of a dispatched envelope.
       operationId: dispatch_ack_run
-      x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS after it has accepted
         a dispatch and minted a local run identifier. Signals that the
@@ -2539,7 +3148,6 @@ paths:
       tags: [progress]
       summary: Ingest a live-progress frame for a run.
       operationId: progress_post_frame
-      x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS at intervals during the
         run. Payload shape matches the `codecraftai-testbase`
@@ -2571,7 +3179,6 @@ paths:
       tags: [results]
       summary: Signal that the result tree for a run is fully uploaded.
       operationId: results_post_complete
-      x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS once it has finished
         writing a run's result tree to the shared results backend.
@@ -2621,7 +3228,6 @@ paths:
       tags: [dispatch]
       summary: List the Ed25519 public keys used to sign job envelopes.
       operationId: envelope_signing_keys_list
-      x-pychestrate-status: planned
       description: |
         A JWKS-style public-key distribution endpoint. The pod-client
         agent calls this to obtain the Ed25519 public key(s) it must
@@ -2656,7 +3262,6 @@ paths:
       tags: [dispatch]
       summary: Publish the envelope-signing public keys as an RFC 7517 JWK Set.
       operationId: envelope_signing_keys_jwks
-      x-pychestrate-status: planned
       description: |
         The standards-shaped rendering of the same key material
         `GET /envelope-signing-keys` returns: an RFC 7517 JWK Set
@@ -2761,7 +3366,6 @@ paths:
       tags: [artifacts]
       summary: Download one stored artifact from the run's result tree.
       operationId: artifacts_get_entry
-      x-pychestrate-status: planned
       description: |
         Streams the stored artifact bytes from the run's allocated
         result tree on the shared results backend. Requires the
@@ -2803,7 +3407,6 @@ paths:
       tags: [results]
       summary: Mint presigned PUT URLs for a run's result-tree upload.
       operationId: artifacts_presign_upload
-      x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS to obtain
         short-lived presigned PUT URLs for the relative artifact
@@ -2871,7 +3474,6 @@ paths:
       tags: [results]
       summary: Upload sink for the local-filesystem presign fallback.
       operationId: artifacts_local_upload
-      x-pychestrate-status: planned
       description: |
         The upload sink the `:presign` operation's local-filesystem
         fallback URLs point at. Used only when the deploy has no
@@ -2914,7 +3516,6 @@ paths:
       tags: [test_runs]
       summary: Trigger a new test run on a project.
       operationId: test_runs_trigger
-      x-pychestrate-status: planned
       description: |
         Creates a new run from a catalog entry and a pod selector.
         Returns the freshly-created run in `PENDING` state; the
@@ -2923,6 +3524,11 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              importer_tag: testbase-project
+              entry_key: ccai.tests.singlehost.checkout.test_cart
+              labels:
+                trigger: nightly
             schema: { $ref: '#/components/schemas/TestRunCreateRequest' }
       responses:
         '202':
@@ -2934,7 +3540,19 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '409':
+          description: Request conflicts with current resource state.
+          content:
+            application/problem+json:
+              example:
+                type: https://docs.pychestrate.io/errors/conflict
+                title: Conflict
+                status: 409
+                detail: No enrolled pod matches the job's capability requirements -- enroll a client/pod first.
+                instance: /api/v1/projects/5dcb26cd-4085-42ea-90ea-18891c42e818/test-runs
+                project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                reason: no_eligible_pod
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /projects/{project_id}/test-catalog:
     parameters:
@@ -2943,7 +3561,6 @@ paths:
       tags: [test_catalog]
       summary: List test-catalog entries for a project.
       operationId: test_catalog_list
-      x-pychestrate-status: planned
       parameters:
         - in: query
           name: importer_tag
@@ -2958,12 +3575,54 @@ paths:
           description: Page of catalog entries.
           content:
             application/json:
+              example:
+                items:
+                - entry_id: 4380ef67-42d4-426e-9212-726a96562a0e
+                  project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                  importer_tag: testbase-project
+                  entry_key: ccai.tests.singlehost.checkout.test_cart
+                  display_name: test_cart
+                  description: ''
+                  required_capability_tags:
+                  - linux
+                  param_schema: {}
+                  raw_metadata:
+                    runner_kind: testbase
+                    includes:
+                    - ccai.tests.singlehost.checkout.test_cart
+                    branch: main
+                  canonical_digest: 1b010b1f988dd79387fd855763d65f9a7b757207cd874481ed274072e3116ab4
+                  retired: false
+                  created_at: '2026-09-28T23:58:25.987126+00:00'
+                  updated_at: '2026-09-28T23:58:25.987126+00:00'
+                - entry_id: 84d6c725-be00-4844-abd9-da9d711b1338
+                  project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                  importer_tag: testbase-project
+                  entry_key: ccai.tests.singlehost.checkout.test_payment
+                  display_name: test_payment
+                  description: ''
+                  required_capability_tags:
+                  - linux
+                  param_schema: {}
+                  raw_metadata:
+                    runner_kind: testbase
+                    includes:
+                    - ccai.tests.singlehost.checkout.test_payment
+                    branch: main
+                  canonical_digest: cec995096e9da016b2d6499346d3c80c8e5f9aa352705ce676b3d2d22e76a37d
+                  retired: false
+                  created_at: '2026-09-28T23:58:25.991612+00:00'
+                  updated_at: '2026-09-28T23:58:25.991612+00:00'
+                meta:
+                  page: 1
+                  per_page: 50
+                  total: 2
+                  next_cursor: null
               schema: { $ref: '#/components/schemas/TestCatalogEntryPage' }
     post:
       tags: [test_catalog]
       summary: Upsert a test-catalog entry.
       operationId: test_catalog_upsert
-      x-pychestrate-status: planned
       requestBody:
         required: true
         content:
@@ -2983,7 +3642,6 @@ paths:
       tags: [test_catalog]
       summary: Run a test-catalog importer (e.g., testbase project discovery).
       operationId: test_catalog_import
-      x-pychestrate-status: planned
       description: |
         Invokes the named importer (resolved via the
         `test_catalog_importer` factory protocol) against the project.
@@ -3003,12 +3661,27 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              importer_tag: testbase-project
+              source:
+                includes:
+                - ccai.tests.singlehost.checkout.test_cart
+                - ccai.tests.singlehost.checkout.test_payment
+                ref: main
+                required_capability_tags:
+                - linux
             schema: { $ref: '#/components/schemas/TestCatalogImportRequest' }
       responses:
         '202':
           description: Import accepted (runs asynchronously).
           content:
             application/json:
+              example:
+                importer_tag: testbase-project
+                started_at: '2026-09-28T23:58:25.986962+00:00'
+                entries_imported: 2
+                entries_retired: 0
+                errors: []
               schema: { $ref: '#/components/schemas/TestCatalogImportSummary' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -3021,7 +3694,6 @@ paths:
       tags: [builds]
       summary: List build runs for a project.
       operationId: builds_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated page of build runs for the project,
         newest-first. The optional `state` query param filters by
@@ -3047,7 +3719,6 @@ paths:
       tags: [builds]
       summary: Trigger a new build run on a project.
       operationId: builds_trigger
-      x-pychestrate-status: planned
       description: |
         Resolves the named `runner_kind` (via the
         `build_runner_kind` factory protocol), validates the
@@ -3065,6 +3736,13 @@ paths:
         required: true
         content:
           application/json:
+            example:
+              runner_kind: makefile
+              runner_inputs:
+                git_url: https://git.example.com/acme/shop.git
+                git_ref: main
+                targets:
+                - all
             schema: { $ref: '#/components/schemas/BuildRunCreateRequest' }
       responses:
         '202':
@@ -3075,6 +3753,19 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Request conflicts with current resource state.
+          content:
+            application/problem+json:
+              example:
+                type: https://docs.pychestrate.io/errors/conflict
+                title: Conflict
+                status: 409
+                detail: No enrolled pod matches the build job's requirements -- enroll a client/pod first.
+                instance: /api/v1/projects/5dcb26cd-4085-42ea-90ea-18891c42e818/builds
+                project_id: 5dcb26cd-4085-42ea-90ea-18891c42e818
+                reason: no_eligible_pod
+              schema: { $ref: '#/components/schemas/Problem' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
   /projects/{project_id}/builds/{build_id}:
@@ -3088,7 +3779,6 @@ paths:
       tags: [builds]
       summary: Read a single build run.
       operationId: builds_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Build run.
@@ -3110,7 +3800,6 @@ paths:
       tags: [builds]
       summary: List the output artifacts of a build run.
       operationId: builds_list_artifacts
-      x-pychestrate-status: planned
       description: |
         Returns the artifact-manifest entries synthesized for the
         build run. The page is empty when the build run has not
@@ -3136,7 +3825,6 @@ paths:
       tags: [pipelines]
       summary: List pipeline definitions for a project.
       operationId: pipelines_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated page of pipeline-definition documents
         cached for the project, newest-cached first. A pipeline
@@ -3159,7 +3847,6 @@ paths:
       tags: [pipelines]
       summary: Create or upsert a pipeline definition.
       operationId: pipelines_upsert
-      x-pychestrate-status: planned
       description: |
         Parses, DAG-validates (cycle detection + stage-reference
         checks), canonicalizes, and caches a pipeline-definition
@@ -3195,7 +3882,6 @@ paths:
       tags: [pipelines]
       summary: Read a single pipeline definition.
       operationId: pipelines_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Pipeline definition.
@@ -3209,7 +3895,6 @@ paths:
       tags: [pipelines]
       summary: Delete a pipeline definition.
       operationId: pipelines_delete
-      x-pychestrate-status: planned
       responses:
         '204': { description: Pipeline definition deleted. }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -3223,7 +3908,6 @@ paths:
       tags: [pipelines]
       summary: Validate a pipeline-definition DAG.
       operationId: pipelines_validate
-      x-pychestrate-status: planned
       description: |
         Pure DAG validation of a supplied pipeline-definition
         document -- parsing, cycle detection, and stage-reference
@@ -3256,7 +3940,6 @@ paths:
       tags: [pipelines]
       summary: Preview a matrix expansion into shards.
       operationId: pipelines_expand_matrix
-      x-pychestrate-status: planned
       description: |
         Pure compute/preview surface: expands a supplied matrix
         spec into the concrete shard set the named sharding
@@ -3291,7 +3974,6 @@ paths:
       tags: [pipelines]
       summary: List pipeline runs for a project.
       operationId: pipeline_runs_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated page of pipeline runs for the project,
         newest-started first. Each run carries its per-stage and
@@ -3312,7 +3994,6 @@ paths:
       tags: [pipelines]
       summary: Trigger a pipeline run.
       operationId: pipeline_runs_trigger
-      x-pychestrate-status: planned
       description: |
         Triggers a pipeline run from a supplied pipeline-definition
         document. The DAG-walking `PipelineOrchestrator` parses and
@@ -3356,7 +4037,6 @@ paths:
       tags: [pipelines]
       summary: Read a single pipeline run.
       operationId: pipeline_runs_read
-      x-pychestrate-status: planned
       description: |
         Reads a single pipeline run including its per-stage status
         (each stage's state, the dispatched stage jobs, and the
@@ -3380,7 +4060,6 @@ paths:
       tags: [metrics]
       summary: List the registered metric catalog.
       operationId: metrics_catalog_list
-      x-pychestrate-status: planned
       description: |
         Returns the registered metric definitions -- name, kind,
         and declared label dimensions -- so a UI knows what is
@@ -3399,7 +4078,6 @@ paths:
       tags: [metrics]
       summary: Query a metric timeseries.
       operationId: metrics_timeseries_query
-      x-pychestrate-status: planned
       description: |
         Returns timestamped data points for the named metric,
         newest-first, optionally bounded by the `from` / `to`
@@ -3436,7 +4114,6 @@ paths:
       tags: [metrics]
       summary: Read test-result metrics for a project.
       operationId: metrics_test_read
-      x-pychestrate-status: planned
       description: |
         Returns a read-time roll-up of testbase / testplus test
         results for the project: aggregate pass / fail rates, the
@@ -3466,7 +4143,6 @@ paths:
       tags: [dashboards]
       summary: List dashboards for a project.
       operationId: dashboards_list
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Page of dashboards.
@@ -3480,7 +4156,6 @@ paths:
       tags: [dashboards]
       summary: Create a dashboard.
       operationId: dashboards_create
-      x-pychestrate-status: planned
       description: |
         Creates a named dashboard with an optional set of
         metric-tile definitions. The dashboard name is UNIQUE
@@ -3513,7 +4188,6 @@ paths:
       tags: [dashboards]
       summary: Read a single dashboard.
       operationId: dashboards_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Dashboard.
@@ -3527,7 +4201,6 @@ paths:
       tags: [dashboards]
       summary: Update a dashboard in place.
       operationId: dashboards_update
-      x-pychestrate-status: planned
       description: |
         Updates a dashboard in place -- only the supplied fields
         change. A supplied `tiles` array replaces the whole tile
@@ -3560,7 +4233,6 @@ paths:
       tags: [metric_alerts]
       summary: List metric-alert rules for a project.
       operationId: metric_alerts_list
-      x-pychestrate-status: planned
       parameters:
         - in: query
           name: enabled_only
@@ -3578,7 +4250,6 @@ paths:
       tags: [metric_alerts]
       summary: Create a metric-alert rule.
       operationId: metric_alerts_create
-      x-pychestrate-status: planned
       description: |
         Creates a metric-alert rule. The rule kind is resolved
         via the `alert_rule_kind` factory protocol and its config
@@ -3609,7 +4280,6 @@ paths:
       tags: [environments]
       summary: List target environments for a project.
       operationId: environments_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated page of environments registered for
         the project. The optional `kind` and `state` query params
@@ -3638,7 +4308,6 @@ paths:
       tags: [environments]
       summary: Register a new environment on a project.
       operationId: environments_register
-      x-pychestrate-status: planned
       description: |
         Declares a named environment under a registered
         environment kind (resolved via the `environment_kind`
@@ -3673,7 +4342,6 @@ paths:
       tags: [environments]
       summary: Read a single environment.
       operationId: environments_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Environment.
@@ -3691,7 +4359,6 @@ paths:
       tags: [provisioning]
       summary: List provisioning runs for a project.
       operationId: provisioning_runs_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated page of provisioning runs for the
         project, newest-first. The optional `state` and
@@ -3720,7 +4387,6 @@ paths:
       tags: [provisioning]
       summary: Trigger a provisioning run against an environment.
       operationId: provisioning_runs_trigger
-      x-pychestrate-status: planned
       description: |
         Resolves the named `driver_name` (via the
         `infra_tool_driver` factory protocol), validates the
@@ -3759,7 +4425,6 @@ paths:
       tags: [provisioning]
       summary: Read a single provisioning run.
       operationId: provisioning_runs_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Provisioning run.
@@ -3781,7 +4446,6 @@ paths:
       tags: [drift]
       summary: Read the current drift status of an environment.
       operationId: drift_status_read
-      x-pychestrate-status: planned
       description: |
         Returns the latest drift run for the environment as its
         current drift status. `latest_report` is `null` until a
@@ -3807,7 +4471,6 @@ paths:
       tags: [drift]
       summary: Trigger a drift check on an environment.
       operationId: drift_check_trigger
-      x-pychestrate-status: planned
       description: |
         Triggers a manual drift check, persisting a drift run in
         `PENDING` state. The run borrows the environment's drift
@@ -3839,7 +4502,6 @@ paths:
       tags: [source_integrations]
       summary: List source integrations for a project.
       operationId: source_integrations_list
-      x-pychestrate-status: planned
       description: |
         Returns a `{items, meta}` page. A project owns at most one
         source integration in the M1 scaffolding, so the page
@@ -3857,7 +4519,6 @@ paths:
       tags: [source_integrations]
       summary: Register (or update) a project's source integration.
       operationId: source_integrations_register
-      x-pychestrate-status: planned
       description: |
         Binds the project to an SCM provider + repository. The
         `provider_name` resolves to a registered `scm_provider`
@@ -3894,7 +4555,6 @@ paths:
       tags: [source_integrations]
       summary: Read a single source integration.
       operationId: source_integrations_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Source integration.
@@ -3914,7 +4574,6 @@ paths:
       tags: [resource_pools]
       summary: List resource pools for a project.
       operationId: resource_pools_list
-      x-pychestrate-status: planned
       description: |
         Returns a paginated `{items, meta}` page of resource pools.
         The pool-listing service is project-scoped, so the
@@ -3944,7 +4603,6 @@ paths:
       tags: [resource_pools]
       summary: Create a resource pool.
       operationId: resource_pools_create
-      x-pychestrate-status: planned
       description: |
         Creates a capability-tagged pool. The `(project_id, name)`
         pair is unique -- a duplicate name returns `409`.
@@ -3975,7 +4633,6 @@ paths:
       tags: [resource_pools]
       summary: Read a resource pool.
       operationId: resource_pools_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Resource pool.
@@ -3989,7 +4646,6 @@ paths:
       tags: [resource_pools]
       summary: Delete a resource pool.
       operationId: resource_pools_delete
-      x-pychestrate-status: planned
       description: |
         Hard-deletes the pool. Pool-membership rows cascade through
         the `resources_resource_pool_member` foreign key.
@@ -4010,7 +4666,6 @@ paths:
       tags: [resource_pools]
       summary: List the resource members of a pool.
       operationId: resource_pools_list_members
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Page of pool members.
@@ -4024,7 +4679,6 @@ paths:
       tags: [resource_pools]
       summary: Add a resource to a pool.
       operationId: resource_pools_add_member
-      x-pychestrate-status: planned
       description: |
         Idempotent -- adding an already-attached resource returns
         the existing membership row.
@@ -4060,7 +4714,6 @@ paths:
       tags: [resource_pools]
       summary: Remove a resource from a pool.
       operationId: resource_pools_remove_member
-      x-pychestrate-status: planned
       description: |
         Idempotent on a missing membership. A `pool_id` or
         `resource_id` that is not a UUID names nothing and answers
@@ -4082,7 +4735,6 @@ paths:
       tags: [resource_pools]
       summary: List reservations across a pool's member resources.
       operationId: resource_pools_list_reservations
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Page of reservations.
@@ -4096,7 +4748,6 @@ paths:
       tags: [resource_pools]
       summary: Reserve (checkout) an eligible pool member.
       operationId: resource_pools_create_reservation
-      x-pychestrate-status: planned
       description: |
         Opens a reservation against an eligible pool member. The
         FIFO `pick_candidate` allocation strategy chooses the
@@ -4138,7 +4789,6 @@ paths:
       tags: [resource_pools]
       summary: Release a reservation.
       operationId: resource_pools_release_reservation
-      x-pychestrate-status: planned
       description: Idempotent on already-released reservations.
       responses:
         '204': { description: Reservation released. }
@@ -4157,7 +4807,6 @@ paths:
       tags: [resources]
       summary: Read a resource.
       operationId: resources_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Resource.
@@ -4179,7 +4828,6 @@ paths:
       tags: [resources]
       summary: Transition a resource's lifecycle state.
       operationId: resources_transition_state
-      x-pychestrate-status: planned
       description: |
         Applies a lifecycle state transition (quarantine, move to
         maintenance, mark available, retire, ...). Legal transitions
@@ -4216,7 +4864,6 @@ paths:
       tags: [resources]
       summary: Read the current health record for a resource.
       operationId: resources_read_health
-      x-pychestrate-status: planned
       description: |
         Health records are seeded on `entity.resource.registered`
         -- a resource that has never been seeded returns `404`.
@@ -4241,7 +4888,6 @@ paths:
       tags: [resources]
       summary: List the usage-history timeline for a resource.
       operationId: resources_list_usage_history
-      x-pychestrate-status: planned
       description: |
         Returns the usage timeline newest-first as a `{items, meta}`
         page. A `resource_id` that is not a UUID names nothing and
@@ -4272,7 +4918,6 @@ paths:
       tags: [blast_radius_guards]
       summary: List blast-radius guards for an environment.
       operationId: blast_radius_guards_list
-      x-pychestrate-status: planned
       description: >-
         The guards domain is environment scoped; the
         `environment_id` query param is required and must be a
@@ -4309,7 +4954,6 @@ paths:
       tags: [blast_radius_guards]
       summary: Attach a blast-radius guard onto an environment.
       operationId: blast_radius_guards_create
-      x-pychestrate-status: planned
       requestBody:
         required: true
         content:
@@ -4337,7 +4981,6 @@ paths:
       tags: [blast_radius_guards]
       summary: Evaluate a proposed change against the guards.
       operationId: blast_radius_guards_evaluate
-      x-pychestrate-status: planned
       description: >-
         Previews whether a proposed change would be blocked.
         Walks every registered guard rule regardless of attachment
@@ -4377,7 +5020,6 @@ paths:
       tags: [blast_radius_guards]
       summary: Read a blast-radius guard.
       operationId: blast_radius_guards_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Blast-radius guard.
@@ -4391,7 +5033,6 @@ paths:
       tags: [blast_radius_guards]
       summary: Toggle a blast-radius guard's enabled flag.
       operationId: blast_radius_guards_patch
-      x-pychestrate-status: planned
       requestBody:
         required: true
         content:
@@ -4411,7 +5052,6 @@ paths:
       tags: [blast_radius_guards]
       summary: Disable a blast-radius guard.
       operationId: blast_radius_guards_delete
-      x-pychestrate-status: planned
       description: >-
         The guards domain has no hard delete -- the attachment
         row is flipped to a disabled state.
@@ -4433,7 +5073,6 @@ paths:
       tags: [slos]
       summary: List SLO definitions for a project.
       operationId: slos_list
-      x-pychestrate-status: planned
       parameters:
         - in: query
           name: kind
@@ -4458,7 +5097,6 @@ paths:
       tags: [slos]
       summary: Create an SLO definition.
       operationId: slos_create
-      x-pychestrate-status: planned
       requestBody:
         required: true
         content:
@@ -4492,7 +5130,6 @@ paths:
       tags: [slos]
       summary: Read an SLO definition with current status.
       operationId: slos_read
-      x-pychestrate-status: planned
       description: >-
         Returns the SLO definition with an embedded `status`
         block carrying the current achieved ratio, error-budget
@@ -4510,7 +5147,6 @@ paths:
       tags: [slos]
       summary: Delete an SLO definition.
       operationId: slos_delete
-      x-pychestrate-status: planned
       description: >-
         Idempotent delete -- the burn-rate-state row cascades via
         the foreign key.
@@ -4526,7 +5162,6 @@ paths:
       tags: [release_channels]
       summary: List published release-channel entries.
       operationId: release_channels_list
-      x-pychestrate-status: planned
       description: >-
         A release-channel entry is a published release row. The
         M1 release domain ships publish + read only; promotion and
@@ -4562,7 +5197,6 @@ paths:
       tags: [release_channels]
       summary: Publish a release onto a channel.
       operationId: release_channels_create
-      x-pychestrate-status: planned
       description: >-
         Publishes a Pychestrate service or agent release onto an update
         channel. Publishing signs the release manifest; when the server
@@ -4600,7 +5234,6 @@ paths:
       tags: [release_channels]
       summary: Read a release-channel entry.
       operationId: release_channels_read
-      x-pychestrate-status: planned
       responses:
         '200':
           description: Release-channel entry.
@@ -5737,6 +6370,19 @@ components:
       name: pod_id
       required: true
       schema: { type: string, format: uuid }
+    ReleaseProjectIdParam:
+      in: path
+      name: project_id
+      required: true
+      description: >
+        Integer id of a project in the consumer web UI's project store
+        (the release-template routes key on it, not on a slug).
+      schema: { type: integer, minimum: 1 }
+    ReleaseTemplateIdParam:
+      in: path
+      name: template_id
+      required: true
+      schema: { type: integer, minimum: 1 }
     RunIdParam:
       in: path
       name: run_id
@@ -5834,6 +6480,11 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Gone:
       description: The target resource is no longer available.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: The caller is over its request budget; wait and retry.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -6056,15 +6707,12 @@ components:
 
     MePermissions:
       type: object
-      required: [user_id, permissions]
+      required: [permissions]
       properties:
-        user_id: { type: string, format: uuid }
         permissions:
           type: array
+          description: Every permission key the caller holds, sorted.
           items: { type: string }
-        role_bindings:
-          type: array
-          items: { $ref: '#/components/schemas/RbacRoleBinding' }
 
     MeNavigation:
       type: object
@@ -6175,28 +6823,25 @@ components:
           nullable: true
     RbacCheckRequest:
       type: object
-      required: [permission]
+      required: [principal_id, permission_key]
       properties:
-        permission: { type: string }
-        project_id:
+        principal_id:
           type: string
           format: uuid
-          nullable: true
-        user_id:
+          description: The account to check. Required; the check does not default to the caller.
+        permission_key:
           type: string
-          format: uuid
-          description: When omitted, the check runs against the calling actor.
+          description: "`system:<action>` or `project:<project_id>:<action>`."
+          example: system:runs.read
     RbacCheckResponse:
       type: object
-      required: [allowed, permission]
+      required: [allowed, reason, permission_key]
       properties:
         allowed: { type: boolean }
-        permission: { type: string }
-        project_id:
+        reason:
           type: string
-          format: uuid
-          nullable: true
-        reason: { type: string }
+          description: Why (for example `binding_allow`).
+        permission_key: { type: string }
 
     # ----------------------------------------------------------------
     # audit
@@ -6204,21 +6849,33 @@ components:
 
     AuditRecord:
       type: object
-      required: [sequence_number, action, recorded_at]
+      description: One entry in the tamper-evident audit log.
+      required: [sequence_number, record_id, kind, written_at]
       properties:
         sequence_number: { type: integer, minimum: 0 }
-        action: { type: string, description: 'Action key (e.g. `project.created`).' }
-        actor_id:
+        record_id: { type: string, format: uuid }
+        kind:
+          type: string
+          description: 'What happened (e.g. `audit.api_token.created`).'
+        source_topic:
+          type: string
+          description: 'The internal event that produced the record (e.g. `entity.api_token.created`).'
+        actor_user_id:
           type: string
           format: uuid
           nullable: true
-        target_kind: { type: string }
-        target_id: { type: string }
-        recorded_at: { type: string, format: date-time }
-        payload:
+        target_ref:
+          type: string
+          nullable: true
+          description: 'What it happened to, as `kind:id` (e.g. `api_token:<uuid>`).'
+        payload_json:
           type: object
           additionalProperties: true
-          description: Action-specific payload bag.
+          description: Event-specific details.
+        record_hash_hex:
+          type: string
+          description: Hash that chains this record to the one before it.
+        written_at: { type: string, format: date-time }
 
     # ----------------------------------------------------------------
     # secrets
@@ -6528,7 +7185,7 @@ components:
 
     Project:
       type: object
-      required: [project_id, slug, display_name, status, created_at]
+      required: [project_id, slug, display_name, state, created_at]
       properties:
         project_id: { type: string, format: uuid }
         slug: { type: string }
@@ -6544,14 +7201,18 @@ components:
         template_version:
           type: string
           nullable: true
-        status:
+        state:
           type: string
-          enum: [active, archived, deleted]
+          enum: [ACTIVE, ARCHIVED]
         extension_fields:
           type: object
           additionalProperties: true
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
     ProjectCreateRequest:
       type: object
       required: [slug, display_name]
@@ -6608,23 +7269,44 @@ components:
 
     Client:
       type: object
-      required: [client_id, status, created_at]
+      description: An enrolled pod client.
+      required: [client_id, pod_name, status, liveness_state, enrolled_at]
       properties:
         client_id: { type: string, format: uuid }
-        display_name: { type: string }
+        project_id: { type: string, format: uuid }
+        pod_name: { type: string }
         status:
           type: string
-          enum: [pending, active, revoked]
-        attributes:
-          type: object
-          additionalProperties: true
-        last_seen_at:
+          description: Enrollment lifecycle. A revoked client stays listed.
+          enum: [ACTIVE, SUSPENDED, REVOKED]
+        liveness_state:
+          type: string
+          description: >-
+            Driven by heartbeats: `ALIVE` after enrollment, `DEGRADED` after
+            missed heartbeats, `LOST` once the pod has been unreachable past
+            the configured threshold.
+          enum: [ALIVE, DEGRADED, LOST]
+        enrolled_at: { type: string, format: date-time }
+        last_seen:
           type: string
           format: date-time
           nullable: true
-        agent_version: { type: string }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        last_agent_version:
+          type: string
+          nullable: true
+        transport_name:
+          type: string
+          nullable: true
+        degraded_at:
+          type: string
+          format: date-time
+          nullable: true
+        revision_token:
+          type: string
+          description: Opaque token identifying the current version of the client's attributes.
+        attributes:
+          type: object
+          additionalProperties: true
     ClientRevokeRequest:
       type: object
       properties:
@@ -10765,3 +11447,48 @@ components:
         catalog:
           type: array
           items: { $ref: '#/components/schemas/UiSurfaceCatalogEntry' }
+
+    ReleaseTemplate:
+      type: object
+      required: [template_id, project_id, name]
+      properties:
+        template_id: { type: integer }
+        project_id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        default_channel: { type: [string, 'null'] }
+        version_pattern:
+          type: [string, 'null']
+          description: A regular expression a release version must match.
+        default_repo_ids:
+          type: array
+          items: { type: integer }
+        default_pipeline: { type: [object, 'null'], additionalProperties: true }
+        default_schedule: { type: [object, 'null'], additionalProperties: true }
+        created_at: { type: [string, 'null'], format: date-time }
+        updated_at: { type: [string, 'null'], format: date-time }
+
+    ReleaseTemplateWrite:
+      type: object
+      description: >
+        Body of a create or a change. `name` is required when creating; a
+        change carries only the fields it sets.
+      properties:
+        name: { type: string }
+        description: { type: string }
+        default_channel: { type: [string, 'null'] }
+        version_pattern: { type: [string, 'null'] }
+        default_repo_ids:
+          type: [array, 'null']
+          items: { type: integer }
+        default_pipeline: { type: [object, 'null'], additionalProperties: true }
+        default_schedule: { type: [object, 'null'], additionalProperties: true }
+
+    ReleaseTemplatePage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReleaseTemplate' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
