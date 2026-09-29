@@ -537,6 +537,14 @@ preview tag.
 
 ### Fixed
 
+- A rejected embed shows a page that says what happened (ORC-46). Where an
+  embed's signed link is refused (expired, forged, incomplete, unknown key or
+  view) the frame showed a bare paragraph in the browser's default style,
+  "This embed could not be displayed (403)". It is now a small page in the
+  design tokens (light and dark) with a heading, a plain-language reason ("The
+  link has expired."), and "Ask whoever shared it for a new link"; the reason
+  stays on the page as `data-embed-error` and the statuses are unchanged.
+
 - The resources dashboard fits and guides (RES-44). The four count cards share
   one row at laptop width instead of wrapping three and one; the four health
   icons are one size, so the Maintenance number no longer sits 2px low; Quick

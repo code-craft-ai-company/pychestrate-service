@@ -45,6 +45,7 @@ __version__ = "1.0.0"
 import logging
 
 from datetime import datetime, timezone
+from html import escape as html_escape
 from typing import Any, Dict, Optional
 
 from ccai.errors.exceptions import ConfigurationError, SemanticError
@@ -519,23 +520,54 @@ def handle_sign_view(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+#: What a person looking at a rejected embed is told, by rejection reason.
+#: The reason itself stays machine-readable on the page (``data-embed-error``).
+EMBED_ERROR_MESSAGES: Dict[str, str] = {
+    "unknown_view_kind": "This view does not exist.",
+    "malformed_payload": "The link is incomplete.",
+    "signature_mismatch": "The link is not valid.",
+    "expired": "The link has expired.",
+    "signing_key_unknown": "The link was signed with a key this service no longer accepts.",
+}
+
+_EMBED_ERROR_FALLBACK_MESSAGE: str = "The link could not be accepted."
+
+
 def _embed_error_html(*, status: int, reason: str) -> str:
     """
-        Build a minimal chromeless HTML stub for a rejected embed.
+        Build the small, styled chromeless page an embed shows when its
+        signed URL is rejected (ORC-46). It sits inside someone else's
+        page, so it says what happened in plain words and who can fix it,
+        follows the light / dark tokens, and carries no navigation.
 
         :param status: HTTP status code.
         :param reason: Machine-readable rejection reason.
 
         :returns: HTML document string.
     """
+    message = EMBED_ERROR_MESSAGES.get(reason, _EMBED_ERROR_FALLBACK_MESSAGE)
     rtnval = (
         "<!DOCTYPE html><html lang=\"en\"><head>"
         "<meta charset=\"utf-8\">"
-        "<title>Embed unavailable</title></head>"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<title>Embed unavailable</title>"
+        "<link rel=\"stylesheet\" href=\"/static/styles/pyc-tokens.css\">"
+        "<style>"
+        "body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;"
+        "background:var(--pyc-color-app-bg,#f5f5f7);color:var(--pyc-color-on-surface,#1a1a2e);"
+        "font-family:var(--pyc-font-family-base,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif)}}"
+        "main{{box-sizing:border-box;max-width:28rem;margin:1rem;padding:1.5rem;text-align:center;"
+        "background:var(--pyc-color-surface,#fff);border:1px solid var(--pyc-color-border,#dee2e6);border-radius:8px}}"
+        "h1{{margin:0 0 .5rem;font-size:1.125rem}}"
+        "p{{margin:.25rem 0}}"
+        ".muted{{color:var(--pyc-color-on-surface-muted,#5a6072);font-size:.875rem}}"
+        "</style></head>"
         "<body><main data-embed-error=\"{reason}\">"
-        "<p>This embed could not be displayed ({status}).</p>"
+        "<h1>This embed could not be displayed</h1>"
+        "<p>{message}</p>"
+        "<p class=\"muted\">Ask whoever shared it for a new link. (Error {status})</p>"
         "</main></body></html>"
-    ).format(reason=reason, status=status)
+    ).format(reason=html_escape(reason, quote=True), message=html_escape(message), status=int(status))
     return rtnval
 
 
