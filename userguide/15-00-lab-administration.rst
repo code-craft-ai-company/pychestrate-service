@@ -16,6 +16,30 @@ that open from it. Creating and changing devices, pools and IP pools needs the
 resource-management permission that the built-in **system-admin** role holds.
 
 
+Project resources and their pools (preview)
+===========================================
+
+Fleet also has **Pod Resource Pools**. Its page is scoped to a project: choose
+the project at the top and the page lists that project's **Resources** and,
+below them, its **Pools**. These are a newer set of records than the Resources
+pages described in the rest of this chapter, and the two are not connected yet:
+a device registered on one does not appear on the other. Jobs do not use
+either yet; the plan is to move to this newer set (see ``specs/model-convergence.md``
+in the source tree).
+
+To register a device, open **Register a device** above the pools and fill in a
+**Name** and a **Hostname** (the hostname, with the MAC address if you give
+one, is what tells one device from another; registering the same pair twice
+is refused). The **MAC address**, **IPv4 address**, **Vendor**, **Model**,
+**Location** and **Notes** are optional, and **Tags** takes a comma-separated
+list. The device starts as *available*. The form shows for people who hold the
+resource-write permission (``system:resources.write``).
+
+To put a device in a pool, open the pool and choose the device from the
+**Add resource** list. It offers the project's devices that are not in the pool
+and not retired.
+
+
 Resource pools
 ==============
 

@@ -253,6 +253,7 @@ var PycResourcePools = class extends HTMLElement {
   _projects;
   _root;
   _project_region;
+  _inventory;
   _create_region;
   _table_region;
   _create_status;
@@ -275,6 +276,7 @@ var PycResourcePools = class extends HTMLElement {
     this._projects = [];
     this._root = null;
     this._project_region = null;
+    this._inventory = null;
     this._create_region = null;
     this._table_region = null;
     this._create_status = null;
@@ -404,7 +406,7 @@ var PycResourcePools = class extends HTMLElement {
     root.appendChild(heading);
     const subtitle = document.createElement("p");
     subtitle.classList.add("pyc-resources__subtitle");
-    subtitle.textContent = "Resource pools are project-scoped. Pick a project to list its pools.";
+    subtitle.textContent = "Resources and resource pools are project-scoped. Pick a project to list them.";
     root.appendChild(subtitle);
     const filters = document.createElement("div");
     filters.classList.add("pyc-resources__filters");
@@ -425,6 +427,14 @@ var PycResourcePools = class extends HTMLElement {
     });
     filters.appendChild(refresh_button);
     root.appendChild(filters);
+    const inventory = document.createElement("pyc-resource-inventory");
+    inventory.setAttribute("data-role", "inventory");
+    root.appendChild(inventory);
+    this._inventory = inventory;
+    const pools_heading = document.createElement("h2");
+    pools_heading.classList.add("pyc-resources__section-heading");
+    pools_heading.textContent = "Pools";
+    root.appendChild(pools_heading);
     const create_region = document.createElement("div");
     create_region.setAttribute("data-role", "create-region");
     root.appendChild(create_region);
@@ -580,7 +590,7 @@ var PycResourcePools = class extends HTMLElement {
     const section = document.createElement("section");
     section.classList.add("pyc-resources__create");
     section.setAttribute("data-role", "create-section");
-    const heading = document.createElement("h2");
+    const heading = document.createElement("h3");
     heading.classList.add("pyc-resources__section-heading");
     heading.textContent = "Create pool";
     section.appendChild(heading);
@@ -741,7 +751,14 @@ var PycResourcePools = class extends HTMLElement {
     await this._refresh();
     return;
   }
+  _sync_inventory() {
+    if (this._inventory !== null) {
+      this._inventory.projectId = this._state.projectFilter;
+    }
+    return;
+  }
   async _refresh() {
+    this._sync_inventory();
     if (this._state.projectFilter.length === 0) {
       this._state.needsProject = true;
       this._render_table_region();
@@ -958,6 +975,438 @@ var PycResourcePools = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-inventory-view.js
+var RESOURCES_API_PATH = "/api/v1/resources";
+var LIST_LIMIT = 100;
+var DEVICE_KIND = "device";
+var DEVICE_DETAILS = [
+  ["mac_address", "MAC address", "aa:bb:cc:dd:ee:ff"],
+  ["ipv4", "IPv4 address", "10.0.0.12"],
+  ["vendor", "Vendor", "optional"],
+  ["model", "Model", "optional"],
+  ["location", "Location", "optional"],
+  ["notes", "Notes", "optional"]
+];
+function build_resources_url(project_id, limit) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  params.set("per_page", String(limit));
+  return RESOURCES_API_PATH + "?" + params.toString();
+}
+function parse_tags(raw) {
+  const rtnval = [];
+  if (typeof raw !== "string") {
+    return rtnval;
+  }
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (trimmed.length > 0 && rtnval.indexOf(trimmed) < 0) {
+      rtnval.push(trimmed);
+    }
+  }
+  return rtnval;
+}
+function build_device_body(project_id, values) {
+  const name = String(values.display_name || "").trim();
+  const hostname = String(values.hostname || "").trim();
+  if (project_id.length === 0) {
+    return { error: "Pick a project before registering a device." };
+  }
+  if (name.length === 0) {
+    return { error: "A name is required." };
+  }
+  if (hostname.length === 0) {
+    return { error: "A hostname is required: it is what tells one device from another." };
+  }
+  const attributes = { hostname };
+  for (const [key] of DEVICE_DETAILS) {
+    const value = String(values[key] || "").trim();
+    if (value.length > 0) {
+      attributes[key] = value;
+    }
+  }
+  const body = { project_id, kind: DEVICE_KIND, display_name: name, attributes };
+  const tags = parse_tags(values.tags);
+  if (tags.length > 0) {
+    body.tags = tags;
+  }
+  return { body };
+}
+function registration_failure_message(status, detail) {
+  if (status === 403) {
+    return "You do not have permission to register resources.";
+  }
+  if (status === 409) {
+    return "That device is already registered (same hostname and MAC address).";
+  }
+  return message_with_detail("Not registered", detail, "Not registered (HTTP " + String(status) + ").");
+}
+var PycResourceInventory = class extends HTMLElement {
+  _project_id = "";
+  _resources = [];
+  _total = 0;
+  _state = "idle";
+  _error_status = 0;
+  _saving = false;
+  _list_region = null;
+  _form_region = null;
+  _status = null;
+  constructor() {
+    super();
+  }
+  /* Diagnostic accessor for tests. */
+  get inventoryState() {
+    return {
+      projectId: this._project_id,
+      state: this._state,
+      count: this._resources.length,
+      total: this._total,
+      saving: this._saving
+    };
+  }
+  connectedCallback() {
+    const section = document.createElement("section");
+    section.classList.add("pyc-resources__inventory");
+    section.setAttribute("data-role", "inventory-section");
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-resources__section-heading");
+    heading.textContent = "Resources";
+    section.appendChild(heading);
+    const list_region = document.createElement("div");
+    list_region.setAttribute("data-role", "inventory-list");
+    section.appendChild(list_region);
+    this._list_region = list_region;
+    const form_region = document.createElement("div");
+    form_region.setAttribute("data-role", "inventory-form-region");
+    section.appendChild(form_region);
+    this._form_region = form_region;
+    this.replaceChildren(section);
+    this._render_form();
+    on_shell_permissions_changed(() => {
+      if (this.isConnected === true) {
+        this._render_form();
+        this._render_list();
+      }
+    });
+    void this._load();
+    return;
+  }
+  /* The project whose resources are shown; setting it loads them. */
+  set projectId(value) {
+    const next = typeof value === "string" ? value : "";
+    if (next === this._project_id) {
+      return;
+    }
+    this._project_id = next;
+    if (this.isConnected === true) {
+      void this._load();
+    }
+  }
+  get projectId() {
+    return this._project_id;
+  }
+  async refresh() {
+    await this._load();
+    return;
+  }
+  async _load() {
+    if (this._list_region === null) {
+      return;
+    }
+    if (this._project_id.length === 0) {
+      this._state = "idle";
+      this._resources = [];
+      this._total = 0;
+      this._render_list();
+      return;
+    }
+    this._state = "loading";
+    this._render_list();
+    try {
+      const response = await fetch(build_resources_url(this._project_id, LIST_LIMIT), {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        this._state = "error";
+        this._error_status = response.status;
+      } else {
+        const body = await response.json();
+        this._resources = Array.isArray(body.items) ? body.items : [];
+        this._total = body.meta && typeof body.meta.total === "number" ? body.meta.total : this._resources.length;
+        this._state = "loaded";
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.resources.inventory_fetch_failed", { reason: String(reason) });
+      this._state = "error";
+      this._error_status = 0;
+    }
+    this._render_list();
+    return;
+  }
+  _note(text, role, tone) {
+    const note = document.createElement("p");
+    note.classList.add("pyc-resources__status");
+    if (tone === "error") {
+      note.classList.add("pyc-resources__status--error");
+    }
+    note.setAttribute("data-role", role);
+    note.setAttribute("role", "status");
+    note.textContent = text;
+    return note;
+  }
+  _render_list() {
+    const region = this._list_region;
+    if (region === null) {
+      return;
+    }
+    if (this._state === "idle") {
+      region.replaceChildren(this._note("Pick a project above to list its resources.", "inventory-needs-project"));
+      return;
+    }
+    if (this._state === "loading") {
+      region.replaceChildren(this._note("Loading resources\u2026", "inventory-loading"));
+      return;
+    }
+    if (this._state === "error") {
+      const text = this._error_status === 403 ? "You do not have permission to view resources." : "Failed to load resources" + (this._error_status > 0 ? " (HTTP " + String(this._error_status) + ")." : ".");
+      region.replaceChildren(this._note(text, "inventory-error", "error"));
+      return;
+    }
+    if (this._resources.length === 0) {
+      const writable = shell_write_allowed(RESOURCES_WRITE_PERMISSION) !== false;
+      region.replaceChildren(this._note(
+        writable ? "No resources in this project yet. Register a device below, then add it to a pool." : "No resources in this project yet.",
+        "inventory-empty"
+      ));
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(this._build_table());
+    if (this._total > this._resources.length) {
+      fragment.appendChild(this._note(
+        "Showing the first " + String(this._resources.length) + " of " + String(this._total) + " resources.",
+        "inventory-truncated"
+      ));
+    }
+    region.replaceChildren(fragment);
+    return;
+  }
+  _build_table() {
+    const table = document.createElement("mj-data-table");
+    table.classList.add("pyc-resources__table", "pyc-resources__table--inventory");
+    table.setAttribute("sortable", "");
+    table.rowClass = "pyc-resources__row";
+    table.columns = [
+      {
+        key: "display_name",
+        label: "Name",
+        width: "16rem",
+        render: (resource) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-resources__link");
+          link.setAttribute("href", "/resource-pools/resources/" + resource.resource_id);
+          link.textContent = resource.display_name && resource.display_name.length > 0 ? resource.display_name : resource.resource_id;
+          return link;
+        }
+      },
+      { key: "kind", label: "Kind", width: "8rem", render: (resource) => resource.kind },
+      {
+        key: "state",
+        label: "State",
+        width: "9rem",
+        render: (resource) => {
+          const badge = document.createElement("mj-badge");
+          badge.classList.add("pyc-resources__badge");
+          badge.setAttribute("data-tone", resource_state_tone(resource.state));
+          badge.textContent = resource.state;
+          return badge;
+        }
+      },
+      {
+        key: "tags",
+        label: "Tags",
+        width: "16rem",
+        sortable: false,
+        render: (resource) => {
+          const tags = Array.isArray(resource.tags) ? resource.tags : [];
+          if (tags.length === 0) {
+            return "\u2014";
+          }
+          const fragment = document.createDocumentFragment();
+          for (const tag of tags) {
+            const chip = document.createElement("mj-chip");
+            chip.classList.add("pyc-resources__tag");
+            chip.textContent = tag;
+            fragment.appendChild(chip);
+          }
+          return fragment;
+        }
+      },
+      { key: "created_at", label: "Registered", width: "14rem", render: (resource) => format_timestamp(resource.created_at) }
+    ];
+    table.rows = this._resources;
+    return table;
+  }
+  /* The register form, for people who may write resources (the server still checks). */
+  _render_form() {
+    const region = this._form_region;
+    if (region === null) {
+      return;
+    }
+    if (shell_write_allowed(RESOURCES_WRITE_PERMISSION) === false) {
+      region.replaceChildren();
+      return;
+    }
+    const details = document.createElement("details");
+    details.classList.add("pyc-resources__register");
+    details.setAttribute("data-role", "register-section");
+    const summary = document.createElement("summary");
+    summary.textContent = "Register a device";
+    details.appendChild(summary);
+    const form = document.createElement("form");
+    form.classList.add("pyc-resources__form");
+    form.setAttribute("data-role", "register-form");
+    const inputs = {};
+    const add_field = (key, label, placeholder) => {
+      const wrapper = document.createElement("div");
+      wrapper.classList.add("pyc-resources__filter");
+      const input = document.createElement("mj-text-field");
+      input.setAttribute("label", label);
+      input.classList.add("pyc-resources__input");
+      input.setAttribute("type", "text");
+      input.setAttribute("placeholder", placeholder);
+      input.setAttribute("data-role", "register-" + key);
+      wrapper.appendChild(input);
+      form.appendChild(wrapper);
+      inputs[key] = input;
+    };
+    add_field("display_name", "Name", "Bench phone 1");
+    add_field("hostname", "Hostname", "phone-01");
+    for (const [key, label, hint] of DEVICE_DETAILS) {
+      add_field(key, label, hint);
+    }
+    add_field("tags", "Tags", "comma-separated, for example android, lab");
+    const submit = document.createElement("mj-button");
+    submit.classList.add("pyc-resources__button");
+    submit.setAttribute("type", "submit");
+    submit.setAttribute("data-role", "register-submit");
+    submit.textContent = "Register device";
+    form.appendChild(submit);
+    const status = document.createElement("p");
+    status.classList.add("pyc-resources__form-status");
+    status.setAttribute("data-role", "register-status");
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    this._status = status;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const values = {};
+      for (const key of Object.keys(inputs)) {
+        values[key] = inputs[key].value;
+      }
+      void this._register(values, submit, inputs);
+    });
+    details.appendChild(form);
+    details.appendChild(status);
+    region.replaceChildren(details);
+    return;
+  }
+  _show_status(message, errored) {
+    if (this._status === null) {
+      return;
+    }
+    this._status.hidden = false;
+    this._status.textContent = message;
+    this._status.setAttribute("data-tone", errored === true ? "error" : "ok");
+    return;
+  }
+  async _register(values, submit, inputs) {
+    if (this._saving === true) {
+      return;
+    }
+    const built = build_device_body(this._project_id, values);
+    if (built.error !== void 0) {
+      this._show_status(built.error, true);
+      return;
+    }
+    this._saving = true;
+    submit.setAttribute("disabled", "");
+    let registered = false;
+    try {
+      const response = await fetch(RESOURCES_API_PATH, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(built.body)
+      });
+      if (response.ok === false) {
+        const detail = await read_problem_detail(response);
+        this._show_status(registration_failure_message(response.status, detail), true);
+      } else {
+        registered = true;
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.resources.register_failed", { reason: String(reason) });
+      this._show_status("Not registered: network error. Try again.", true);
+    } finally {
+      this._saving = false;
+      submit.removeAttribute("disabled");
+    }
+    if (registered === true) {
+      for (const key of Object.keys(inputs)) {
+        inputs[key].value = "";
+      }
+      this._show_status("Registered " + built.body.display_name + ".", false);
+      await this._load();
+    }
+    return;
+  }
+};
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -982,6 +1431,7 @@ var ACTIVE_RESERVATION_STATES = [
 ];
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var PROJECTS_LIST_URL2 = PROJECTS_API_PATH2 + "?per_page=500";
+var RESOURCES_API_PATH2 = "/api/v1/resources";
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pool_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -1055,6 +1505,23 @@ function build_pool_resources_url(pool_id) {
   const rtnval = build_pool_url(pool_id) + "/resources";
   return rtnval;
 }
+function build_project_resources_url(project_id) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  params.set("per_page", "500");
+  return RESOURCES_API_PATH2 + "?" + params.toString();
+}
+function addable_resources(resources, members) {
+  const taken = new Set((Array.isArray(members) ? members : []).map((member) => member.resource_id));
+  return (Array.isArray(resources) ? resources : []).filter(
+    (resource) => resource.state !== "retired" && taken.has(resource.resource_id) === false
+  );
+}
+function resource_option_label(resource) {
+  const name = typeof resource.display_name === "string" && resource.display_name.length > 0 ? resource.display_name : resource.resource_id;
+  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " \xB7 " + resource.kind : "";
+  return name + kind;
+}
 function build_pool_member_url(pool_id, resource_id) {
   const rtnval = build_pool_resources_url(pool_id) + "/" + encodeURIComponent(resource_id);
   return rtnval;
@@ -1122,6 +1589,7 @@ var PycPoolDetail = class extends HTMLElement {
   _errored;
   _error_status;
   _members_error;
+  _candidates;
   _reservations_error;
   _project_names;
   _reserving;
@@ -1140,6 +1608,7 @@ var PycPoolDetail = class extends HTMLElement {
     this._errored = false;
     this._error_status = 0;
     this._members_error = null;
+    this._candidates = null;
     this._reservations_error = null;
     this._project_names = {};
     this._reserving = false;
@@ -1240,6 +1709,7 @@ var PycPoolDetail = class extends HTMLElement {
     }
     this._update_back_link();
     await this._refresh_members();
+    await this._refresh_candidates();
     await this._refresh_reservations();
     this._loading = false;
     this._errored = false;
@@ -1289,6 +1759,25 @@ var PycPoolDetail = class extends HTMLElement {
       this._members_error = null;
     } else {
       this._members_error = result.status;
+    }
+    return;
+  }
+  /*
+   * The project's resources a person can add: null when they cannot be listed
+   * (no permission to read resources, a failure), so the form falls back to
+   * asking for an id.
+   */
+  async _refresh_candidates() {
+    const project_id = this._pool !== null && typeof this._pool.project_id === "string" ? this._pool.project_id : this._project_id;
+    if (project_id.length === 0) {
+      this._candidates = null;
+      return;
+    }
+    const result = await this._fetch_json(build_project_resources_url(project_id), "candidates_fetch_failed");
+    if (result.ok === true && Array.isArray(result.body.items) === true) {
+      this._candidates = addable_resources(result.body.items, this._members);
+    } else {
+      this._candidates = null;
     }
     return;
   }
@@ -1793,19 +2282,50 @@ var PycPoolDetail = class extends HTMLElement {
     heading.classList.add("pyc-resources__section-heading");
     heading.textContent = "Add resource";
     section.appendChild(heading);
+    if (Array.isArray(this._candidates) === true && this._candidates.length === 0) {
+      const none = document.createElement("p");
+      none.classList.add("pyc-resources__status");
+      none.setAttribute("data-role", "add-resource-none");
+      none.appendChild(document.createTextNode("Every resource in this project is already in this pool. "));
+      const register = document.createElement("a");
+      register.classList.add("pyc-resources__link");
+      register.setAttribute("href", this._pools_list_href());
+      register.textContent = "Register another device";
+      none.appendChild(register);
+      none.appendChild(document.createTextNode("."));
+      section.appendChild(none);
+      return section;
+    }
     const form = document.createElement("form");
     form.classList.add("pyc-resources__form");
     form.setAttribute("data-role", "add-resource-form");
-    const id_label = document.createElement("label");
-    id_label.classList.add("pyc-resources__filter");
-    id_label.textContent = "Resource id";
-    const id_input = document.createElement("mj-text-field");
-    id_input.classList.add("pyc-resources__input");
-    id_input.setAttribute("type", "text");
-    id_input.setAttribute("placeholder", "resource uuid");
-    id_input.setAttribute("data-role", "add-resource-id");
-    id_label.appendChild(id_input);
-    form.appendChild(id_label);
+    let read_value = null;
+    if (Array.isArray(this._candidates) === true) {
+      const label = document.createElement("label");
+      label.classList.add("pyc-resources__filter");
+      label.textContent = "Resource";
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-resources__select");
+      select.setAttribute("data-role", "add-resource-select");
+      for (const resource of this._candidates) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", resource.resource_id);
+        option.textContent = resource_option_label(resource);
+        select.appendChild(option);
+      }
+      label.appendChild(select);
+      form.appendChild(label);
+      read_value = () => String(select.value || "").trim();
+    } else {
+      const id_input = document.createElement("mj-text-field");
+      id_input.setAttribute("label", "Resource id");
+      id_input.classList.add("pyc-resources__input");
+      id_input.setAttribute("type", "text");
+      id_input.setAttribute("placeholder", "resource uuid");
+      id_input.setAttribute("data-role", "add-resource-id");
+      form.appendChild(id_input);
+      read_value = () => id_input.value.trim();
+    }
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-resources__button");
     submit.setAttribute("type", "submit");
@@ -1814,12 +2334,19 @@ var PycPoolDetail = class extends HTMLElement {
     form.appendChild(submit);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this._submit_add_resource(id_input.value.trim(), submit);
+      void this._submit_add_resource(read_value(), submit);
     });
     section.appendChild(form);
     return section;
   }
   async _submit_add_resource(resource_id, submit_button) {
+    if (resource_id.length === 0) {
+      this._show_action_status(
+        Array.isArray(this._candidates) === true ? "Choose a resource to add." : "A resource id is required.",
+        true
+      );
+      return;
+    }
     if (is_valid_uuid(resource_id) === false) {
       this._show_action_status(
         "A valid resource id (UUID) is required.",
@@ -3030,6 +3557,7 @@ var PycResourceDetail = class extends HTMLElement {
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/index.entry.js
 var RESOURCE_POOLS_ROUTE = "/resource-pools";
 var RESOURCE_POOLS_TAG = "pyc-resource-pools";
+var RESOURCE_INVENTORY_TAG = "pyc-resource-inventory";
 var POOL_DETAIL_TAG = "pyc-pool-detail";
 var RESOURCE_DETAIL_TAG = "pyc-resource-detail";
 var RESOURCES_STYLESHEET_HREF = "/static/javascript/pyc-resources-bundle/pyc-resources-bundle.css";
@@ -3051,6 +3579,9 @@ function ensure_resources_stylesheet() {
 function define_resources_elements() {
   if (typeof customElements === "undefined") {
     return;
+  }
+  if (customElements.get(RESOURCE_INVENTORY_TAG) === void 0) {
+    customElements.define(RESOURCE_INVENTORY_TAG, PycResourceInventory);
   }
   if (customElements.get(RESOURCE_POOLS_TAG) === void 0) {
     customElements.define(RESOURCE_POOLS_TAG, PycResourcePools);

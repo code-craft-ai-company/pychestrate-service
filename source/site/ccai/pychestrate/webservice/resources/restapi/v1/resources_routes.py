@@ -11,6 +11,9 @@ Exposes the per-resource read operations from the resources domain
 
 Routes attached by :func:`register_resources_routes`:
 
+* ``POST /api/v1/resources`` -- register a resource (RES-04: nothing
+  could, so no pool could have a member)
+* ``GET /api/v1/resources?project_id=`` -- list a project's resources
 * ``GET /api/v1/resources/{resource_id}`` -- read one resource
 * ``POST /api/v1/resources/{resource_id}/state`` -- transition the
   resource lifecycle state (quarantine / maintenance / available /
@@ -40,6 +43,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
@@ -57,6 +61,8 @@ from ccai.pychestrate.webservice.resources.inventory import (
     service as inventory_service,
 )
 from ccai.pychestrate.webservice.resources.inventory.errors import (
+    ResourceIdentityConflictError,
+    ResourceKindUnknownError,
     ResourceNotFoundError,
     ResourceStateTransitionError,
 )
@@ -73,6 +79,10 @@ RESOURCES_PATH = "/resources"
 
 RESOURCES_READ_PERMISSION_KEY = "system:resources.read"
 RESOURCES_WRITE_PERMISSION_KEY = "system:resources.write"
+
+DEFAULT_PAGE_SIZE = 50
+MIN_PAGE_SIZE = 1
+MAX_PAGE_SIZE = 500
 
 DEFAULT_TIMELINE_LIMIT = 200
 MIN_TIMELINE_LIMIT = 1
@@ -475,6 +485,187 @@ def _usage_record_view_to_dict(view: Any) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/resources and POST /api/v1/resources
+# ---------------------------------------------------------------------------
+
+
+def _require_project_id_query(*, request: Request) -> str:
+    """
+        Resolve the required ``project_id`` query param (a UUID) or abort 400.
+
+        :param request: Incoming webworks request.
+
+        :returns: The canonical UUID text.
+    """
+    raw = request.query_params.get("project_id", None)
+    if raw is None or len(raw) == 0:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="Query param 'project_id' is required.",
+            extensions={"query_param": "project_id"},
+        )
+    try:
+        rtnval = str(uuid.UUID(str(raw)))
+    except (TypeError, ValueError, AttributeError):
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="Query param 'project_id' must be a UUID.",
+            extensions={"query_param": "project_id", "raw_value": raw},
+        )
+        rtnval = ""  # unreachable
+    return rtnval
+
+
+def handle_list_resources(request: Request) -> Response:
+    """
+        ``GET /api/v1/resources`` -- list a project's resources.
+
+        Query: ``project_id`` (required), ``kind``, ``state`` and ``tag``
+        (each optional), ``include_retired`` (``true`` to list retired
+        resources too), ``page`` and ``per_page``. Returns a paginated
+        ``Page<Resource>`` (``{items, meta}``), oldest registration first.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) or a problem response.
+    """
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session,
+            permission_key=RESOURCES_READ_PERMISSION_KEY,
+        )
+        project_id = _require_project_id_query(request=request)
+        kind = request.query_params.get("kind", None) or None
+        state_filter = request.query_params.get("state", None) or None
+        tag_filter = request.query_params.get("tag", None) or None
+        include_retired = str(request.query_params.get("include_retired", "")).lower() in ("1", "true", "yes")
+        if state_filter is not None:
+            valid_states = [member.value for member in ResourceState]
+            if state_filter not in valid_states:
+                _abort_problem(
+                    request=request, status=400,
+                    detail="Query param 'state' must be one of: {}.".format(", ".join(valid_states)),
+                    extensions={"query_param": "state", "raw_value": state_filter},
+                )
+            if state_filter == ResourceState.RETIRED.value:
+                include_retired = True
+        page = _parse_positive_int(
+            request=request, name="page", raw=request.query_params.get("page", None),
+            default=1, minimum=1,
+        )
+        per_page = _parse_positive_int(
+            request=request, name="per_page", raw=request.query_params.get("per_page", None),
+            default=DEFAULT_PAGE_SIZE, minimum=MIN_PAGE_SIZE, maximum=MAX_PAGE_SIZE,
+        )
+
+        views = inventory_service.list_resources(
+            db_session=db_session, project_id=project_id, kind=kind, include_retired=include_retired,
+        )
+        if state_filter is not None:
+            views = [view for view in views if _enum_value_or_str(view.state) == state_filter]
+        if tag_filter is not None:
+            views = [view for view in views if tag_filter in (view.tags or ())]
+        total = len(views)
+        offset = (page - 1) * per_page
+        body = {
+            "items": [_resource_view_to_dict(view=view) for view in views[offset:offset + per_page]],
+            "meta": {"page": page, "per_page": per_page, "total": int(total), "next_cursor": None},
+        }
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+def handle_register_resource(request: Request) -> Response:
+    """
+        ``POST /api/v1/resources`` -- register a resource.
+
+        Body: ``project_id`` (a UUID), ``kind`` and ``display_name``
+        (required), ``attributes`` (an object the kind validates),
+        ``description`` and ``tags`` (optional). ``201`` with the
+        ``Resource``; ``400`` for a kind that is not loaded (the detail names
+        it and lists the loaded kinds); ``409`` when the same identity is
+        already registered; ``422`` when the kind refuses the attributes.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (201) or a problem response.
+    """
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session,
+            permission_key=RESOURCES_WRITE_PERMISSION_KEY,
+        )
+        body = _decode_json_object_or_abort(request=request)
+        raw_project_id = _require_string_field(request=request, body=body, field_name="project_id")
+        try:
+            project_id = str(uuid.UUID(raw_project_id))
+        except (TypeError, ValueError, AttributeError):
+            _abort_problem(
+                request=request, status=422, detail="Field 'project_id' must be a UUID.",
+                extensions={"invalid_fields": ["project_id"], "raw_value": raw_project_id},
+            )
+            project_id = ""  # unreachable
+        kind = _require_string_field(request=request, body=body, field_name="kind")
+        display_name = _require_string_field(request=request, body=body, field_name="display_name").strip()
+        if len(display_name) == 0:
+            _abort_problem(
+                request=request, status=422, detail="Field 'display_name' is required.",
+                extensions={"missing_fields": ["display_name"]},
+            )
+        description = body.get("description", "")
+        if isinstance(description, str) is False:
+            _abort_problem(request=request, status=422, detail="Field 'description' must be a string.")
+        attributes = body.get("attributes", {})
+        if isinstance(attributes, dict) is False:
+            _abort_problem(request=request, status=422, detail="Field 'attributes' must be an object.")
+        tags_raw = body.get("tags", [])
+        if isinstance(tags_raw, list) is False or all(isinstance(tag, str) for tag in tags_raw) is False:
+            _abort_problem(request=request, status=422, detail="Field 'tags' must be an array of strings.")
+        tags = tuple(dict.fromkeys(tag.strip() for tag in tags_raw if len(tag.strip()) > 0))
+
+        try:
+            view = inventory_service.register_resource(
+                db_session=db_session, project_id=project_id, kind=kind,
+                display_name=display_name, attributes=attributes,
+                description=description, tags=tags,
+            )
+        except ResourceKindUnknownError as xcpt:
+            _abort_problem(
+                request=request, status=400,
+                detail="Resource kind '{}' is not loaded. Loaded kinds: {}.".format(
+                    kind, ", ".join(inventory_service.list_kind_names()) or "none"),
+                extensions={"kind": kind, "loaded_kinds": inventory_service.list_kind_names(), "reason": str(xcpt).splitlines()[0]},
+            )
+            view = None  # unreachable
+        except ResourceIdentityConflictError as xcpt:
+            _abort_problem(
+                request=request, status=409,
+                detail="A {} with this identity is already registered.".format(kind),
+                extensions={"kind": kind, "reason": str(xcpt).splitlines()[0]},
+            )
+            view = None  # unreachable
+        except SemanticError as xcpt:
+            # ccai errors derive from BaseException, so ``except Exception`` would miss this.
+            _abort_problem(
+                request=request, status=422,
+                detail=str(xcpt).splitlines()[0] if len(str(xcpt)) > 0 else "The attributes are not valid for this kind.",
+                extensions={"kind": kind, "reason": str(xcpt)},
+            )
+            view = None  # unreachable
+
+        rtnval = JSONResponse(content=_resource_view_to_dict(view=view), status_code=201)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/resources/{resource_id}
 # ---------------------------------------------------------------------------
 
@@ -737,6 +928,8 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + RESOURCES_PATH
 
+    app.attach_route(base, methods=["GET"])(handle_list_resources)
+    app.attach_route(base, methods=["POST"])(handle_register_resource)
     app.attach_route(
         base + "/{resource_id}", methods=["GET"],
     )(handle_read_resource)
@@ -751,7 +944,7 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
     )(handle_list_resource_usage_history)
 
     _LOGGER.info(
-        "pychestrate.resources.routes registered: 4 routes under %s",
+        "pychestrate.resources.routes registered: 6 routes under %s",
         base,
     )
     return
@@ -764,6 +957,8 @@ __all__ = [
     "DEFAULT_TIMELINE_LIMIT",
     "MAX_TIMELINE_LIMIT",
     "register_resources_routes",
+    "handle_list_resources",
+    "handle_register_resource",
     "handle_read_resource",
     "handle_transition_resource_state",
     "handle_read_resource_health",

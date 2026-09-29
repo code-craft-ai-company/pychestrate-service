@@ -227,6 +227,19 @@ preview tag.
   build that has not started says "Waiting: nothing has started this job"
   instead of "Live".
 
+- A resource can be registered, and a pool's member chosen by name (RES-04).
+  `register_resource` had no caller and the API no create call, so no resource
+  existed, no pool could have a member, and nothing could use a lab resource.
+  `POST /api/v1/resources` registers one (`201`; `400` for a kind that is not
+  loaded, naming the kinds that are; `409` for an identity already registered;
+  `422` when the kind refuses the attributes) and `GET /api/v1/resources`
+  lists a project's resources (`kind`, `state`, `tag` and `include_retired`
+  narrow it). The Resource pools page lists the project's resources and has a
+  "Register a device" form; a pool's page adds a member from a list of the
+  project's resources by name, where it asked for a pasted resource id. This is
+  the first step of the plan in `specs/model-convergence.md`; jobs do not use
+  resources yet (RES-04 stays open).
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

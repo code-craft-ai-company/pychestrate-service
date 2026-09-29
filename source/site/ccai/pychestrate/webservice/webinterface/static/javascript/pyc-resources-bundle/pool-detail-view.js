@@ -18,6 +18,7 @@ const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
 const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
+const RESOURCES_API_PATH = "/api/v1/resources";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pool_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -91,6 +92,25 @@ function build_pool_resources_url(pool_id) {
   const rtnval = build_pool_url(pool_id) + "/resources";
   return rtnval;
 }
+/* The project's resources (up to 500, the API's page limit), for the member picker. */
+function build_project_resources_url(project_id) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  params.set("per_page", "500");
+  return RESOURCES_API_PATH + "?" + params.toString();
+}
+/* The resources a person can still add to a pool: not retired, not already a member. */
+function addable_resources(resources, members) {
+  const taken = new Set((Array.isArray(members) ? members : []).map((member) => member.resource_id));
+  return (Array.isArray(resources) ? resources : []).filter(
+    (resource) => resource.state !== "retired" && taken.has(resource.resource_id) === false
+  );
+}
+function resource_option_label(resource) {
+  const name = typeof resource.display_name === "string" && resource.display_name.length > 0 ? resource.display_name : resource.resource_id;
+  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " · " + resource.kind : "";
+  return name + kind;
+}
 function build_pool_member_url(pool_id, resource_id) {
   const rtnval = build_pool_resources_url(pool_id) + "/" + encodeURIComponent(resource_id);
   return rtnval;
@@ -158,6 +178,7 @@ class PycPoolDetail extends HTMLElement {
   _errored;
   _error_status;
   _members_error;
+  _candidates;
   _reservations_error;
   _project_names;
   _reserving;
@@ -176,6 +197,7 @@ class PycPoolDetail extends HTMLElement {
     this._errored = false;
     this._error_status = 0;
     this._members_error = null;
+    this._candidates = null;
     this._reservations_error = null;
     this._project_names = {};
     this._reserving = false;
@@ -276,6 +298,7 @@ class PycPoolDetail extends HTMLElement {
     }
     this._update_back_link();
     await this._refresh_members();
+    await this._refresh_candidates();
     await this._refresh_reservations();
     this._loading = false;
     this._errored = false;
@@ -325,6 +348,25 @@ class PycPoolDetail extends HTMLElement {
       this._members_error = null;
     } else {
       this._members_error = result.status;
+    }
+    return;
+  }
+  /*
+   * The project's resources a person can add: null when they cannot be listed
+   * (no permission to read resources, a failure), so the form falls back to
+   * asking for an id.
+   */
+  async _refresh_candidates() {
+    const project_id = this._pool !== null && typeof this._pool.project_id === "string" ? this._pool.project_id : this._project_id;
+    if (project_id.length === 0) {
+      this._candidates = null;
+      return;
+    }
+    const result = await this._fetch_json(build_project_resources_url(project_id), "candidates_fetch_failed");
+    if (result.ok === true && Array.isArray(result.body.items) === true) {
+      this._candidates = addable_resources(result.body.items, this._members);
+    } else {
+      this._candidates = null;
     }
     return;
   }
@@ -829,19 +871,52 @@ class PycPoolDetail extends HTMLElement {
     heading.classList.add("pyc-resources__section-heading");
     heading.textContent = "Add resource";
     section.appendChild(heading);
+    if (Array.isArray(this._candidates) === true && this._candidates.length === 0) {
+      const none = document.createElement("p");
+      none.classList.add("pyc-resources__status");
+      none.setAttribute("data-role", "add-resource-none");
+      none.appendChild(document.createTextNode("Every resource in this project is already in this pool. "));
+      const register = document.createElement("a");
+      register.classList.add("pyc-resources__link");
+      register.setAttribute("href", this._pools_list_href());
+      register.textContent = "Register another device";
+      none.appendChild(register);
+      none.appendChild(document.createTextNode("."));
+      section.appendChild(none);
+      return section;
+    }
     const form = document.createElement("form");
     form.classList.add("pyc-resources__form");
     form.setAttribute("data-role", "add-resource-form");
-    const id_label = document.createElement("label");
-    id_label.classList.add("pyc-resources__filter");
-    id_label.textContent = "Resource id";
-    const id_input = document.createElement("mj-text-field");
-    id_input.classList.add("pyc-resources__input");
-    id_input.setAttribute("type", "text");
-    id_input.setAttribute("placeholder", "resource uuid");
-    id_input.setAttribute("data-role", "add-resource-id");
-    id_label.appendChild(id_input);
-    form.appendChild(id_label);
+    let read_value = null;
+    if (Array.isArray(this._candidates) === true) {
+      // The project's resources, by name: no id to look up and paste.
+      const label = document.createElement("label");
+      label.classList.add("pyc-resources__filter");
+      label.textContent = "Resource";
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-resources__select");
+      select.setAttribute("data-role", "add-resource-select");
+      for (const resource of this._candidates) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", resource.resource_id);
+        option.textContent = resource_option_label(resource);
+        select.appendChild(option);
+      }
+      label.appendChild(select);
+      form.appendChild(label);
+      read_value = () => String(select.value || "").trim();
+    } else {
+      // The resources could not be listed: fall back to an id.
+      const id_input = document.createElement("mj-text-field");
+      id_input.setAttribute("label", "Resource id");
+      id_input.classList.add("pyc-resources__input");
+      id_input.setAttribute("type", "text");
+      id_input.setAttribute("placeholder", "resource uuid");
+      id_input.setAttribute("data-role", "add-resource-id");
+      form.appendChild(id_input);
+      read_value = () => id_input.value.trim();
+    }
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-resources__button");
     submit.setAttribute("type", "submit");
@@ -850,12 +925,19 @@ class PycPoolDetail extends HTMLElement {
     form.appendChild(submit);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this._submit_add_resource(id_input.value.trim(), submit);
+      void this._submit_add_resource(read_value(), submit);
     });
     section.appendChild(form);
     return section;
   }
   async _submit_add_resource(resource_id, submit_button) {
+    if (resource_id.length === 0) {
+      this._show_action_status(
+        Array.isArray(this._candidates) === true ? "Choose a resource to add." : "A resource id is required.",
+        true
+      );
+      return;
+    }
     if (is_valid_uuid(resource_id) === false) {
       this._show_action_status(
         "A valid resource id (UUID) is required.",
@@ -1233,7 +1315,9 @@ class PycPoolDetail extends HTMLElement {
 export {
   ACTIVE_RESERVATION_STATES,
   PycPoolDetail,
+  addable_resources,
   build_pool_member_url,
+  build_project_resources_url,
   build_pool_reservations_url,
   build_pool_resources_url,
   build_pool_url,
@@ -1244,6 +1328,7 @@ export {
   pool_id_from_path,
   project_id_from_search,
   reservation_tone,
+  resource_option_label,
   reserve_failure_message,
   section_error_message
 };

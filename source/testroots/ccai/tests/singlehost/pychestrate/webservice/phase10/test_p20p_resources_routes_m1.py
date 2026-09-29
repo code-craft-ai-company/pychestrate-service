@@ -206,10 +206,10 @@ def _make_usage_view(*, event_id: str = "evt-1") -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_resources_routes_attaches_four_endpoints():
+def test_register_resources_routes_attaches_six_endpoints():
     """
     **Feature: 4-resources PR p20p**
-    **Property: register_resources_routes attaches the four
+    **Property: register_resources_routes attaches the six
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -217,6 +217,8 @@ def test_register_resources_routes_attaches_four_endpoints():
         app=app, version_prefix="/api/v1",
     )
     expected_pairs = (
+        ("/api/v1/resources", ("GET",)),
+        ("/api/v1/resources", ("POST",)),
         ("/api/v1/resources/{resource_id}", ("GET",)),
         ("/api/v1/resources/{resource_id}/state", ("POST",)),
         ("/api/v1/resources/{resource_id}/health", ("GET",)),

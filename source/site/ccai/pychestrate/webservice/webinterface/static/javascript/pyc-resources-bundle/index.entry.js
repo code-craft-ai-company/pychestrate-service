@@ -13,6 +13,7 @@ import {
   short_id,
   total_pages_for
 } from "./resource-pools-view.js";
+import { PycResourceInventory } from "./resource-inventory-view.js";
 import {
   ACTIVE_RESERVATION_STATES,
   PycPoolDetail,
@@ -44,6 +45,7 @@ import {
 } from "./resource-detail-view.js";
 const RESOURCE_POOLS_ROUTE = "/resource-pools";
 const RESOURCE_POOLS_TAG = "pyc-resource-pools";
+const RESOURCE_INVENTORY_TAG = "pyc-resource-inventory";
 const POOL_DETAIL_TAG = "pyc-pool-detail";
 const RESOURCE_DETAIL_TAG = "pyc-resource-detail";
 const RESOURCES_STYLESHEET_HREF = "/static/javascript/pyc-resources-bundle/pyc-resources-bundle.css";
@@ -65,6 +67,9 @@ function ensure_resources_stylesheet() {
 function define_resources_elements() {
   if (typeof customElements === "undefined") {
     return;
+  }
+  if (customElements.get(RESOURCE_INVENTORY_TAG) === void 0) {
+    customElements.define(RESOURCE_INVENTORY_TAG, PycResourceInventory);
   }
   if (customElements.get(RESOURCE_POOLS_TAG) === void 0) {
     customElements.define(RESOURCE_POOLS_TAG, PycResourcePools);

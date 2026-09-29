@@ -194,6 +194,7 @@ class PycResourcePools extends HTMLElement {
   _projects;
   _root;
   _project_region;
+  _inventory;
   _create_region;
   _table_region;
   _create_status;
@@ -216,6 +217,7 @@ class PycResourcePools extends HTMLElement {
     this._projects = [];
     this._root = null;
     this._project_region = null;
+    this._inventory = null;
     this._create_region = null;
     this._table_region = null;
     this._create_status = null;
@@ -345,7 +347,7 @@ class PycResourcePools extends HTMLElement {
     root.appendChild(heading);
     const subtitle = document.createElement("p");
     subtitle.classList.add("pyc-resources__subtitle");
-    subtitle.textContent = "Resource pools are project-scoped. Pick a project to list its pools.";
+    subtitle.textContent = "Resources and resource pools are project-scoped. Pick a project to list them.";
     root.appendChild(subtitle);
     const filters = document.createElement("div");
     filters.classList.add("pyc-resources__filters");
@@ -366,6 +368,16 @@ class PycResourcePools extends HTMLElement {
     });
     filters.appendChild(refresh_button);
     root.appendChild(filters);
+    // The project's registered resources, and the form that registers one
+    // (RES-04): a pool's members come from here.
+    const inventory = document.createElement("pyc-resource-inventory");
+    inventory.setAttribute("data-role", "inventory");
+    root.appendChild(inventory);
+    this._inventory = inventory;
+    const pools_heading = document.createElement("h2");
+    pools_heading.classList.add("pyc-resources__section-heading");
+    pools_heading.textContent = "Pools";
+    root.appendChild(pools_heading);
     const create_region = document.createElement("div");
     create_region.setAttribute("data-role", "create-region");
     root.appendChild(create_region);
@@ -521,7 +533,7 @@ class PycResourcePools extends HTMLElement {
     const section = document.createElement("section");
     section.classList.add("pyc-resources__create");
     section.setAttribute("data-role", "create-section");
-    const heading = document.createElement("h2");
+    const heading = document.createElement("h3");
     heading.classList.add("pyc-resources__section-heading");
     heading.textContent = "Create pool";
     section.appendChild(heading);
@@ -682,7 +694,14 @@ class PycResourcePools extends HTMLElement {
     await this._refresh();
     return;
   }
+  _sync_inventory() {
+    if (this._inventory !== null) {
+      this._inventory.projectId = this._state.projectFilter;
+    }
+    return;
+  }
   async _refresh() {
+    this._sync_inventory();
     if (this._state.projectFilter.length === 0) {
       this._state.needsProject = true;
       this._render_table_region();

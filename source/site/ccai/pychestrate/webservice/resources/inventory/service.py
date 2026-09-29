@@ -297,9 +297,25 @@ def _resolve_kind(*, kind: str):
             continue
     err_lines = ["No resource_kind implementation registered for kind."]
     err_lines.append("KIND: {}".format(kind))
-    err_lines.append("REGISTERED: ({})".format(len(candidates)))
+    err_lines.append("REGISTERED: ({}) {}".format(len(candidates), ", ".join(list_kind_names())))
     err_msg = os.linesep.join(err_lines)
     raise ResourceKindUnknownError(err_msg) from None
+
+
+def list_kind_names() -> List[str]:
+    """
+        The names of every loaded resource kind, sorted.
+
+        :returns: Kind names.
+    """
+    names = []
+    for impl in list_factory_implementations(factory_protocol_name=RESOURCE_KIND_PROTOCOL):
+        try:
+            names.append(str(impl.kind_name()))
+        except NotImplementedError:
+            continue
+    rtnval = sorted(names)
+    return rtnval
 
 
 def _to_view(*, row: Resource) -> ResourceView:
