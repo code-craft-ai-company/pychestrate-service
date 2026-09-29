@@ -331,6 +331,11 @@ class PycSiteShell extends HTMLElement {
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
     main.classList.add("pyc-site-shell__main");
+    // The target of the "Skip to main content" link exists from the start
+    // and can take focus, so the link works from a URL fragment and for a
+    // checker as well as through the click handler below (WCAG 2.4.1).
+    main.id = "pyc-main-content";
+    main.setAttribute("tabindex", "-1");
     // Re-attach the server-rendered fragment captured above (minus
     // the lifted flashes) so the route's page survives the
     // skeleton rebuild.

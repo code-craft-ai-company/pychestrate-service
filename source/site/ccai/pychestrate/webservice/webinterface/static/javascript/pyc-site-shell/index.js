@@ -3726,6 +3726,8 @@ var PycSiteShell = class extends HTMLElement {
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
     main.classList.add("pyc-site-shell__main");
+    main.id = "pyc-main-content";
+    main.setAttribute("tabindex", "-1");
     for (const node of flash_extraction.remaining_nodes) {
       main.appendChild(node);
     }

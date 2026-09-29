@@ -542,6 +542,13 @@ preview tag.
 
 ### Fixed
 
+- The "Skip to main content" link has a target that exists (WCAG 2.4.1). It
+  pointed at `#pyc-main-content`, but the shell gave the main region that id
+  only inside the link's own click handler, so on every page the target was
+  missing until the link had been used once (an accessibility checker flagged
+  every page, and the link did nothing from a URL fragment). The main region
+  now has the id, and can take focus, from the moment it is built.
+
 - Every form control on a bundle page has an accessible name (ORC-42). Six
   text fields had none: the pipeline document and matrix spec, the new
   resource pool's name, description and capability tags, and the webhooks
