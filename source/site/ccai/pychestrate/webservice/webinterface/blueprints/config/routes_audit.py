@@ -49,6 +49,7 @@ from ccai.webworks.routing.response import (
     Response,
 )
 
+from ccai.pychestrate.webservice.csv_export import spreadsheet_safe
 from ccai.pychestrate.webservice.webinterface.foundation import (
     flash,
     url_for as _url_for_module,
@@ -564,9 +565,11 @@ def render_audit_export(*, rows: List[Any], export_format: str) -> bytes:
     writer.writerow(list(EXPORT_COLUMNS))
     for row in rows:
         values = _export_row_values(row=row)
+        # A summary or a target name can come from a person; a spreadsheet must
+        # not read it as a formula (ORG-F22).
         writer.writerow([
             json.dumps(values[column], sort_keys=True, default=str)
-            if column == "payload" else values[column]
+            if column == "payload" else spreadsheet_safe(values[column])
             for column in EXPORT_COLUMNS
         ])
     rtnval = buffer.getvalue().encode("utf-8")

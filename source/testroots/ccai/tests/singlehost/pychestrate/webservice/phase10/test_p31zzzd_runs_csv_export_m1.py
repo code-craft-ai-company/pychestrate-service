@@ -163,3 +163,28 @@ def test_an_export_past_the_row_limit_is_cut_and_says_so():
 
     testbase.assert_equal((len(_rows(response)), response.headers.get("X-Export-Truncated")), (2, "true"))
     return
+
+
+def test_the_audit_export_defuses_formula_cells_too():
+    """
+    **Feature: CSV export (ORG-F22)**
+    **Property: a record whose summary starts with ``=`` is exported with a
+    leading apostrophe; the payload column (JSON) and ordinary values are left
+    alone.**
+    """
+    from types import SimpleNamespace
+
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import routes_audit
+
+    row = SimpleNamespace(
+        sequence_number=7, written_at=None, actor_label="dana", actor_user_id="u-1", action="variable.update", kind="variable",
+        target_ref="=SUM(A1)", summary="=1+1", client_address="10.0.0.1", record_hash_hex="ab" * 16, payload={"note": "-x"},
+    )
+    body = routes_audit.render_audit_export(rows=[row], export_format=routes_audit.EXPORT_FORMAT_CSV)
+    parsed = list(csv.DictReader(io.StringIO(body.decode("utf-8"))))[0]
+
+    testbase.assert_equal(
+        (parsed["summary"], parsed["target_ref"], parsed["actor"], parsed["payload"]),
+        ("'=1+1", "'=SUM(A1)", "dana", '{"note": "-x"}'),
+    )
+    return
