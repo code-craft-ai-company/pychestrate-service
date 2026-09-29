@@ -167,19 +167,70 @@ def test_validating_a_pipeline_without_a_commit_says_which_field(browser: Browse
     return
 
 
+def test_a_refused_client_revoke_says_why(browser: Browser):
+    """
+    **Feature: server error detail (ORC-08)**
+    **Property: when the server answers a client revoke with 409 and a
+    reason, the outcome reads "Client not revoked: <reason>", and a bare
+    Forbidden keeps the view's own sentence.**
+    """
+    client_id = "0f6c2c1e-9999-4000-8000-000000000003"
+    page = open_shell_page(browser, path="/clients", bundle_names=["pyc-site-shell", "pyc-pods-bundle"], **DESKTOP)
+    try:
+        page.wait_for_selector("pyc-clients-list", timeout=8000)
+        path = "/api/v1/clients/{}/revoke".format(client_id)
+        _refuse(page, path, 409, "This client was already revoked")
+        detailed = page.evaluate(
+            """async (id) => {
+                const m = await import('/static/javascript/pyc-pods-bundle/clients-list-view.js');
+                return (await m.perform_client_revoke(id)).message;
+            }""",
+            client_id,
+        )
+        _refuse(page, path, 403, "Forbidden")
+        bare = page.evaluate(
+            """async (id) => {
+                const m = await import('/static/javascript/pyc-pods-bundle/clients-list-view.js');
+                return (await m.perform_client_revoke(id)).message;
+            }""",
+            client_id,
+        )
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (detailed, bare != detailed and "Client not revoked" not in bare),
+        ("Client not revoked: This client was already revoked", True),
+    )
+    return
+
+
+#: Every view whose refusal path now reads the server's detail.
+VIEWS_THAT_READ_THE_DETAIL = (
+    "pyc-infra-bundle/provisioning-list-view.js",
+    "pyc-infra-bundle/environments-view.js",
+    "pyc-infra-bundle/guards-view.js",
+    "pyc-catalog-bundle/catalog-view.js",
+    "pyc-pipelines-bundle/pipelines-list-view.js",
+    "pyc-admin-bundle/feature-flags-view.js",
+    "pyc-admin-bundle/admin-overview-view.js",
+    "pyc-pods-bundle/pod-detail-view.js",
+    "pyc-pods-bundle/clients-list-view.js",
+    "pyc-metrics-bundle/dashboards-view.js",
+    "pyc-ops-bundle/webhooks-view.js",
+)
+
+
 def test_every_view_that_reported_a_fixed_sentence_reads_the_servers_detail():
     """
     **Feature: server error detail (ORC-08)**
-    **Property: the provisioning, environments (register and drift check),
-    catalog (test run) and pipelines (validate) views import the shared
-    reader, so a new refusal path cannot quietly drop the reason again.**
+    **Property: the eleven views that used to show a fixed sentence for a
+    refused request import the shared reader, so a new refusal path cannot
+    quietly drop the reason again.**
     """
     root = os.path.join(SITE_DIRECTORIES.DIR_STATIC, "javascript")
     missing = []
-    for relative in (
-        "pyc-infra-bundle/provisioning-list-view.js", "pyc-infra-bundle/environments-view.js",
-        "pyc-catalog-bundle/catalog-view.js", "pyc-pipelines-bundle/pipelines-list-view.js",
-    ):
+    for relative in VIEWS_THAT_READ_THE_DETAIL:
         with open(os.path.join(root, relative), encoding="utf-8") as handle:
             if "shared/problem-detail.js" not in handle.read():
                 missing.append(relative)

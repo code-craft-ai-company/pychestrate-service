@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
@@ -489,6 +490,7 @@ class PycPodDetail extends HTMLElement {
    */
   async applyTransition(event_kind) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_pod_transitions_url(this._project_id, this._pod_id),
@@ -503,6 +505,7 @@ class PycPodDetail extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.pods.transition_failed",
@@ -516,7 +519,7 @@ class PycPodDetail extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: transition_message_for_status(status, event_kind)
+      message: message_with_detail("Pod not updated", detail, transition_message_for_status(status, event_kind))
     };
     return rtnval;
   }

@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import {
   announce_session_expired,
@@ -289,6 +290,7 @@ function revoke_message_for_status(status) {
  */
 async function perform_client_revoke(client_id) {
   let status = 0;
+  let detail = "";
   try {
     const response = await fetch(build_client_revoke_url(client_id), {
       method: "POST",
@@ -303,6 +305,7 @@ async function perform_client_revoke(client_id) {
       })
     });
     status = response.status;
+    detail = await read_problem_detail(response);
   } catch (reason) {
     console.warn(
       "pychestrate.ui.clients.revoke_failed",
@@ -316,7 +319,7 @@ async function perform_client_revoke(client_id) {
   const rtnval = {
     ok,
     status,
-    message: revoke_message_for_status(status)
+    message: message_with_detail("Client not revoked", detail, revoke_message_for_status(status))
   };
   return rtnval;
 }

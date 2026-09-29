@@ -725,6 +725,48 @@ var PycPodsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -1219,6 +1261,7 @@ var PycPodDetail = class extends HTMLElement {
    */
   async applyTransition(event_kind) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_pod_transitions_url(this._project_id, this._pod_id),
@@ -1233,6 +1276,7 @@ var PycPodDetail = class extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.pods.transition_failed",
@@ -1246,7 +1290,7 @@ var PycPodDetail = class extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: transition_message_for_status(status, event_kind)
+      message: message_with_detail("Pod not updated", detail, transition_message_for_status(status, event_kind))
     };
     return rtnval;
   }
@@ -2221,6 +2265,7 @@ function revoke_message_for_status(status) {
 }
 async function perform_client_revoke(client_id) {
   let status = 0;
+  let detail = "";
   try {
     const response = await fetch(build_client_revoke_url(client_id), {
       method: "POST",
@@ -2235,6 +2280,7 @@ async function perform_client_revoke(client_id) {
       })
     });
     status = response.status;
+    detail = await read_problem_detail(response);
   } catch (reason) {
     console.warn(
       "pychestrate.ui.clients.revoke_failed",
@@ -2248,7 +2294,7 @@ async function perform_client_revoke(client_id) {
   const rtnval = {
     ok,
     status,
-    message: revoke_message_for_status(status)
+    message: message_with_detail("Client not revoked", detail, revoke_message_for_status(status))
   };
   return rtnval;
 }

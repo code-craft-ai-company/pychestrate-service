@@ -4232,6 +4232,7 @@ var PycGuards = class extends HTMLElement {
       return rtnval2;
     }
     let status = 0;
+    let detail = "";
     try {
       const url = build_guard_item_url(
         this._state.projectId,
@@ -4247,6 +4248,7 @@ var PycGuards = class extends HTMLElement {
         body: JSON.stringify({ enabled })
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.infra.guard_toggle_failed",
@@ -4262,7 +4264,7 @@ var PycGuards = class extends HTMLElement {
     const rtnval = {
       ok: status === 200,
       status,
-      message: toggle_message_for_status(status, enabled)
+      message: message_with_detail("Guard not changed", detail, toggle_message_for_status(status, enabled))
     };
     return rtnval;
   }

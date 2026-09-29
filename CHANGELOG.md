@@ -548,10 +548,11 @@ preview tag.
   "not a valid DAG": the views mapped the status to a fixed sentence and dropped
   the problem document's `detail`. A shared reader (`shared/problem-detail.js`)
   now lets the provisioning, environments (register and drift check), catalog
-  (test run) and pipelines (validate) views show "Provisioning run not started:
-  No enrolled pod can take this run" and keep their sentence as the fallback
-  when the server gives no reason (or only repeats "Not Found"). The builds,
-  guards, SLOs, alert-rule, dashboard-editor and release-channel views already
+  (test run), pipelines (validate), pod (drain, retire), client (revoke),
+  feature-flag, guard, dashboard and webhook views show "Provisioning run not
+  started: No enrolled pod can take this run" and keep their sentence as the
+  fallback when the server gives no reason (or only repeats "Not Found"). The
+  builds, SLOs, alert-rule, dashboard-editor and release-channel views already
   did this.
 
 - Every bundle page shows the "session expired" notice when the session has

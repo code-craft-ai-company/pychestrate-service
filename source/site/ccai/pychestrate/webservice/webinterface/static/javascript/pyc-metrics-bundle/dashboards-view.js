@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   build_chart_element,
   build_timeseries_url
@@ -584,6 +585,7 @@ class PycDashboardsList extends HTMLElement {
       payload.description = description;
     }
     let status = 0;
+    let detail = "";
     let dashboard_id = "";
     let ok = false;
     try {
@@ -600,6 +602,7 @@ class PycDashboardsList extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       ok = response.ok;
       if (response.ok === true) {
         const body = await response.json();
@@ -614,7 +617,7 @@ class PycDashboardsList extends HTMLElement {
         { reason: String(reason) }
       );
     }
-    const message = create_message_for_status(status);
+    const message = message_with_detail("Dashboard not created", detail, create_message_for_status(status));
     const rtnval = {
       ok,
       status,

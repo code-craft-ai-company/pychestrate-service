@@ -1,3 +1,45 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
@@ -817,6 +859,7 @@ var PycWebhooks = class extends HTMLElement {
    */
   async updateIntegration(webhook_id, enabled) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_integration_resource_url(webhook_id),
@@ -831,6 +874,7 @@ var PycWebhooks = class extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.integration_update_failed",
@@ -847,7 +891,7 @@ var PycWebhooks = class extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: toggle_message_for_status(status, "Integration", enabled)
+      message: message_with_detail("Integration not changed", detail, toggle_message_for_status(status, "Integration", enabled))
     };
     return rtnval;
   }
@@ -1351,6 +1395,7 @@ var PycWebhooks = class extends HTMLElement {
    */
   async updateSubscription(subscription_id, enabled) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_subscription_resource_url(subscription_id),
@@ -1365,6 +1410,7 @@ var PycWebhooks = class extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.subscription_update_failed",
@@ -1381,7 +1427,7 @@ var PycWebhooks = class extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: toggle_message_for_status(status, "Subscription", enabled)
+      message: message_with_detail("Subscription not changed", detail, toggle_message_for_status(status, "Subscription", enabled))
     };
     return rtnval;
   }
@@ -1786,6 +1832,7 @@ var PycWebhooks = class extends HTMLElement {
       topic_filters
     };
     let status = 0;
+    let detail = "";
     let signing_secret = "";
     try {
       const response = await fetch(WEBHOOKS_OUT_PATH, {
@@ -1798,6 +1845,7 @@ var PycWebhooks = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const created = body;
@@ -1823,7 +1871,7 @@ var PycWebhooks = class extends HTMLElement {
       ok,
       status,
       signingSecret: signing_secret,
-      message: create_message_for_status(status, "Subscription")
+      message: message_with_detail("Subscription not created", detail, create_message_for_status(status, "Subscription"))
     };
     return rtnval;
   }

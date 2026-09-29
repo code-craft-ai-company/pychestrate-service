@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 const WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
@@ -788,6 +789,7 @@ class PycWebhooks extends HTMLElement {
    */
   async updateIntegration(webhook_id, enabled) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_integration_resource_url(webhook_id),
@@ -802,6 +804,7 @@ class PycWebhooks extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.integration_update_failed",
@@ -818,7 +821,7 @@ class PycWebhooks extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: toggle_message_for_status(status, "Integration", enabled)
+      message: message_with_detail("Integration not changed", detail, toggle_message_for_status(status, "Integration", enabled))
     };
     return rtnval;
   }
@@ -1326,6 +1329,7 @@ class PycWebhooks extends HTMLElement {
    */
   async updateSubscription(subscription_id, enabled) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(
         build_subscription_resource_url(subscription_id),
@@ -1340,6 +1344,7 @@ class PycWebhooks extends HTMLElement {
         }
       );
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.subscription_update_failed",
@@ -1356,7 +1361,7 @@ class PycWebhooks extends HTMLElement {
     const rtnval = {
       ok,
       status,
-      message: toggle_message_for_status(status, "Subscription", enabled)
+      message: message_with_detail("Subscription not changed", detail, toggle_message_for_status(status, "Subscription", enabled))
     };
     return rtnval;
   }
@@ -1761,6 +1766,7 @@ class PycWebhooks extends HTMLElement {
       topic_filters
     };
     let status = 0;
+    let detail = "";
     let signing_secret = "";
     try {
       const response = await fetch(WEBHOOKS_OUT_PATH, {
@@ -1773,6 +1779,7 @@ class PycWebhooks extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       if (response.ok === true) {
         const body = await response.json();
         const created = body;
@@ -1798,7 +1805,7 @@ class PycWebhooks extends HTMLElement {
       ok,
       status,
       signingSecret: signing_secret,
-      message: create_message_for_status(status, "Subscription")
+      message: message_with_detail("Subscription not created", detail, create_message_for_status(status, "Subscription"))
     };
     return rtnval;
   }

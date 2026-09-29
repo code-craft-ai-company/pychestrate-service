@@ -999,6 +999,48 @@ function extract_catalog(body) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboards-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var PROJECTS_LIST_URL2 = PROJECTS_API_PATH2 + "?per_page=500";
@@ -1571,6 +1613,7 @@ var PycDashboardsList = class extends HTMLElement {
       payload.description = description;
     }
     let status = 0;
+    let detail = "";
     let dashboard_id = "";
     let ok = false;
     try {
@@ -1587,6 +1630,7 @@ var PycDashboardsList = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
       ok = response.ok;
       if (response.ok === true) {
         const body = await response.json();
@@ -1601,7 +1645,7 @@ var PycDashboardsList = class extends HTMLElement {
         { reason: String(reason) }
       );
     }
-    const message = create_message_for_status(status);
+    const message = message_with_detail("Dashboard not created", detail, create_message_for_status(status));
     const rtnval = {
       ok,
       status,

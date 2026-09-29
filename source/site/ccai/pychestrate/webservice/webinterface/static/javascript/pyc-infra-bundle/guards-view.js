@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import {
   announce_session_expired,
@@ -965,6 +966,7 @@ class PycGuards extends HTMLElement {
       return rtnval2;
     }
     let status = 0;
+    let detail = "";
     try {
       const url = build_guard_item_url(
         this._state.projectId,
@@ -980,6 +982,7 @@ class PycGuards extends HTMLElement {
         body: JSON.stringify({ enabled })
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.infra.guard_toggle_failed",
@@ -995,7 +998,7 @@ class PycGuards extends HTMLElement {
     const rtnval = {
       ok: status === 200,
       status,
-      message: toggle_message_for_status(status, enabled)
+      message: message_with_detail("Guard not changed", detail, toggle_message_for_status(status, enabled))
     };
     return rtnval;
   }

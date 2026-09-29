@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 const FLAGS_PATH = "/api/v1/flags";
 const FLAG_STATE_ENABLED = "enabled";
 const FLAG_STATE_DISABLED = "disabled";
@@ -403,6 +404,7 @@ class PycFeatureFlags extends HTMLElement {
   async toggleFlag(flag_key, target_state) {
     const payload = { state: target_state };
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -414,6 +416,7 @@ class PycFeatureFlags extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.flag_toggle_failed",
@@ -432,7 +435,7 @@ class PycFeatureFlags extends HTMLElement {
       ok,
       status,
       flagKey: flag_key,
-      message: toggle_message_for_status(status)
+      message: message_with_detail("Feature flag not changed", detail, toggle_message_for_status(status))
     };
     return rtnval;
   }

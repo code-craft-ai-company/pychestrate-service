@@ -1,3 +1,4 @@
+import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   fetch_system_health,
   health_status_tone
@@ -501,6 +502,7 @@ class PycAdminOverview extends HTMLElement {
    */
   async toggleFlag(flag_key, target_state) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -512,6 +514,7 @@ class PycAdminOverview extends HTMLElement {
         body: JSON.stringify({ state: target_state })
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.overview_flag_toggle_failed",
@@ -530,7 +533,7 @@ class PycAdminOverview extends HTMLElement {
       ok,
       status,
       flagKey: flag_key,
-      message: toggle_message_for_status(status)
+      message: message_with_detail("Feature flag not changed", detail, toggle_message_for_status(status))
     };
     return rtnval;
   }

@@ -1,3 +1,45 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
+var REASON_PHRASES = [
+  "bad request",
+  "unauthorized",
+  "unauthenticated",
+  "authentication required.",
+  "forbidden",
+  "not found",
+  "method not allowed",
+  "conflict",
+  "unprocessable entity",
+  "validation failed",
+  "internal server error",
+  "service unavailable",
+  "error"
+];
+function problem_detail_of_body(body) {
+  if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+    const line = body.detail.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+    if (line.length > 0 && REASON_PHRASES.indexOf(line.toLowerCase()) < 0) {
+      return line;
+    }
+  }
+  return "";
+}
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
+function message_with_detail(prefix, detail, generic) {
+  if (typeof detail === "string" && detail.length > 0) {
+    return prefix + ": " + detail;
+  }
+  return generic;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
 var FLAGS_PATH = "/api/v1/flags";
 var FLAG_STATE_ENABLED = "enabled";
@@ -389,6 +431,7 @@ var PycFeatureFlags = class extends HTMLElement {
   async toggleFlag(flag_key, target_state) {
     const payload = { state: target_state };
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -400,6 +443,7 @@ var PycFeatureFlags = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.flag_toggle_failed",
@@ -418,7 +462,7 @@ var PycFeatureFlags = class extends HTMLElement {
       ok,
       status,
       flagKey: flag_key,
-      message: toggle_message_for_status(status)
+      message: message_with_detail("Feature flag not changed", detail, toggle_message_for_status(status))
     };
     return rtnval;
   }
@@ -1553,6 +1597,7 @@ var PycAdminOverview = class extends HTMLElement {
    */
   async toggleFlag(flag_key, target_state) {
     let status = 0;
+    let detail = "";
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -1564,6 +1609,7 @@ var PycAdminOverview = class extends HTMLElement {
         body: JSON.stringify({ state: target_state })
       });
       status = response.status;
+      detail = await read_problem_detail(response);
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.overview_flag_toggle_failed",
@@ -1582,7 +1628,7 @@ var PycAdminOverview = class extends HTMLElement {
       ok,
       status,
       flagKey: flag_key,
-      message: toggle_message_for_status(status)
+      message: message_with_detail("Feature flag not changed", detail, toggle_message_for_status(status))
     };
     return rtnval;
   }
