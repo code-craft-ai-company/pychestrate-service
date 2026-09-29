@@ -9,7 +9,28 @@
     <p>Overview of resources, allocations, and system health</p>
 </div>
 
-<div class="stat-grid">
+{% if can_manage and (pool_count == 0 or resource_count == 0 or ip_pool_count == 0) %}
+{#- First run: the three things a lab needs, in the order it needs them, with what is done so far. #}
+<div class="card mb" data-role="first-run-checklist">
+    <h2 class="card-header">Get started</h2>
+    <ol class="pyc-checklist">
+        <li>
+            <span class="badge {{ 'badge-success' if pool_count > 0 else 'badge-secondary' }}">{{ 'Done' if pool_count > 0 else 'To do' }}</span>
+            <span><a href="{{ url_for('resources.pool_create') }}">Create a resource pool</a> to group the devices you will lend out.</span>
+        </li>
+        <li>
+            <span class="badge {{ 'badge-success' if resource_count > 0 else 'badge-secondary' }}">{{ 'Done' if resource_count > 0 else 'To do' }}</span>
+            <span>Register your devices: <a href="{{ url_for('resources.resource_create') }}">add one</a> or <a href="{{ url_for('resources.resource_import') }}">import a spreadsheet</a>.</span>
+        </li>
+        <li>
+            <span class="badge {{ 'badge-success' if ip_pool_count > 0 else 'badge-secondary' }}">{{ 'Done' if ip_pool_count > 0 else 'To do' }}</span>
+            <span><a href="{{ url_for('resources.ip_pool_create') }}">Create an IP pool</a> if devices need addresses handed out.</span>
+        </li>
+    </ol>
+</div>
+{% endif %}
+
+<div class="stat-grid stat-grid--dense">
     <a href="{{ url_for('resources.resource_list') }}" class="stat-card stat-card--link">
         <div class="stat-value">{{ resource_count }}</div>
         <div class="stat-label">Total Resources</div>
@@ -54,25 +75,23 @@
     </div>
 </div>
 
-<div class="narrow">
-    <div class="card">
-        <h2 class="card-header">Quick Actions</h2>
-        <div class="stack">
-            {% if can_manage %}
-            <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
-                {{ ui.icon("add") }} Create Resource
-            </a>
-            <a href="{{ url_for('resources.pool_create') }}" class="btn btn-secondary">
-                {{ ui.icon("create_new_folder") }} Create Resource Pool
-            </a>
-            <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-secondary">
-                {{ ui.icon("add_circle") }} Create IP Pool
-            </a>
-            {% endif %}
-            <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-secondary">
-                {{ ui.icon("event") }} Create Reservation
-            </a>
-        </div>
+<div class="card">
+    <h2 class="card-header">Quick Actions</h2>
+    <div class="actions-row">
+        {% if can_manage %}
+        <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
+            {{ ui.icon("add") }} Create Resource
+        </a>
+        <a href="{{ url_for('resources.pool_create') }}" class="btn btn-secondary">
+            {{ ui.icon("create_new_folder") }} Create Resource Pool
+        </a>
+        <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-secondary">
+            {{ ui.icon("add_circle") }} Create IP Pool
+        </a>
+        {% endif %}
+        <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-secondary">
+            {{ ui.icon("event") }} Create Reservation
+        </a>
     </div>
 </div>
 {% endblock %}

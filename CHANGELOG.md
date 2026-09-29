@@ -537,6 +537,14 @@ preview tag.
 
 ### Fixed
 
+- The resources dashboard fits and guides (RES-44). The four count cards share
+  one row at laptop width instead of wrapping three and one; the four health
+  icons are one size, so the Maintenance number no longer sits 2px low; Quick
+  Actions is as wide as the cards above it, with its buttons in a row; and a
+  lab with nothing set up gets a "Get started" checklist (resource pool,
+  devices, IP pool, each marked Done or To do) for people who may manage
+  resources.
+
 - The sign-in page is a sign-in page (XC-08, ADM-35). It has one heading,
   "Sign in to Pychestrate", a neutral line ("Enter your username and
   password.") instead of "Welcome Back ... the configuration panel", and the
