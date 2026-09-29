@@ -402,6 +402,28 @@ preview tag.
   says to "extend the pool", which cannot be done: it links to create
   another pool.
 
+- **The minted-token screen can be copied from and survives a reload.**
+  It clipped the enroll command, had no copy button, pasted its
+  arguments unquoted (a pod label with a space became several
+  arguments), and a reload minted a second token whose secret nobody
+  saw. The secret and the commands each have a Copy button, the command
+  wraps, its arguments are shell-quoted, and a second mint of the same
+  project and pod within 30 seconds (a reload or a double click) is
+  refused with a message instead of minting again. The secret is still
+  shown once and never put in the session cookie. The token list shows
+  short ids (the full id is the tooltip), issue and expiry times in your
+  zone, a colour per status, newest first, and for a redeemed token which
+  client redeemed it and when.
+
+- **Name fields say what they accept.** Every input with a pattern
+  carries a title stating the rule, so the browser's refusal is no longer
+  just "match the requested format". Variable names may contain periods
+  (the system's own, `ui.profile.surfaces`, could not be typed), and the
+  server refuses a bad name beside the field, with the rule, for a
+  browser that does not check patterns. The users and variables search
+  boxes are labelled (a crawl of every reachable server-rendered page
+  found no other unlabelled input).
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

@@ -18,8 +18,8 @@
             <label for="name">Variable Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   pattern="[a-zA-Z][a-zA-Z0-9_]*"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
-            <p class="form-text" id="name-help">Alphanumeric and underscores, must start with a letter</p>
+                   pattern="[a-zA-Z][a-zA-Z0-9_.]{0,127}" title="Letters, digits, underscores and periods, starting with a letter; at most 128 characters. Spaces are not allowed."{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <p class="form-text" id="name-help">Letters, digits, underscores and periods, starting with a letter; at most 128 characters. For example <code>ui.profile.surfaces</code>.</p>
             {{ ui.field_error(errors, 'name') }}
         </div>
         

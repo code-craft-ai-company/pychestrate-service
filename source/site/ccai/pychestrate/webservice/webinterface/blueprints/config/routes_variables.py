@@ -32,6 +32,7 @@ __version__ = "1.0.0"
 
 
 import json
+import re
 
 from typing import Any, Callable, Dict, List, Optional
 
@@ -267,6 +268,15 @@ def _parse_pagination_params(
     return rtnval
 
 
+#: What a variable name may be: a letter, then letters, digits, underscores
+#: and periods (the system's own names use periods, ``ui.profile.surfaces``).
+VARIABLE_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.]{0,127}\Z")
+VARIABLE_NAME_RULE = (
+    "Use letters, digits, underscores and periods, starting with a letter"
+    " (up to 128 characters), for example ui.profile.surfaces."
+)
+
+
 def _variable_field_errors(*, exc: BaseException, default_field: Optional[str] = None) -> Dict[str, str]:
     """
         The ``{field: message}`` for a refused variable form.
@@ -427,6 +437,11 @@ def handle_variable_create(request: Request) -> Response:
         parsing_field = "value"
 
         try:
+            if VARIABLE_NAME_PATTERN.match(name) is None:
+                from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+                    VariableValidationError,
+                )
+                raise VariableValidationError(VARIABLE_NAME_RULE, field="name")
             var_type = _resolve_variable_type(var_type_str=var_type_str)
             parsed_value = variable_store.parse_value_from_string(
                 value_raw, var_type

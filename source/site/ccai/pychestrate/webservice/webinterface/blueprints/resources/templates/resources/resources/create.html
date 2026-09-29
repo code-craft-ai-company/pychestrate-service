@@ -18,7 +18,7 @@
             <label for="name">Resource Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]*"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]*" title="Letters, digits, underscores, hyphens and periods only, starting with a letter or digit. Spaces are not allowed."{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
             <p class="form-text" id="name-help">Alphanumeric characters, underscores, hyphens, and periods only</p>
             {{ ui.field_error(errors, 'name') }}
         </div>

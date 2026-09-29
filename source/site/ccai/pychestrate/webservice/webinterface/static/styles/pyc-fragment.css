@@ -947,7 +947,7 @@
 .pyc-admin-page-fragment .scroll-box { max-height: 18rem; overflow-y: auto; border: 1px solid var(--pyc-color-border); border-radius: 6px; padding: 0.6rem; }
 .pyc-admin-page-fragment .pre-block { margin: 0; padding: 0.9rem; background: var(--pyc-color-surface-elevated); border-radius: 6px; overflow: auto; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); }
 .pyc-admin-page-fragment .pre-wrap { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.pyc-admin-page-fragment .command-box { margin: 0 0 1rem; padding: 0.6rem 0.75rem; background: var(--pyc-color-on-surface); color: var(--pyc-color-surface-elevated); border-radius: 6px; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); overflow-x: auto; user-select: all; }
+.pyc-admin-page-fragment .command-box { margin: 0 0 1rem; padding: 0.6rem 0.75rem; background: var(--pyc-color-on-surface); color: var(--pyc-color-surface-elevated); border-radius: 6px; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); user-select: all; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pyc-admin-page-fragment .narrow-sm { max-width: 19rem; }
 .pyc-admin-page-fragment .list-tight { margin: 0; padding-left: 1.25rem; }
 .pyc-admin-page-fragment .masked { letter-spacing: 0.15em; color: var(--pyc-color-on-surface-muted); }

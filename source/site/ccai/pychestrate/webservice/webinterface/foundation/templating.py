@@ -186,7 +186,7 @@ _STATUS_TONES: Dict[str, str] = {
     "pending": "warning", "queued": "warning", "scheduled": "warning",
     "degraded": "warning", "draft": "warning", "maintenance": "warning",
     "waiting_approval": "warning", "reserved": "warning",
-    "exclusive": "info", "shared": "secondary",
+    "exclusive": "info", "shared": "secondary", "redeemed": "success",
     "skipped": "secondary", "disabled": "secondary", "unknown": "secondary",
     "inactive": "secondary", "destroyed": "secondary", "released": "secondary",
 }

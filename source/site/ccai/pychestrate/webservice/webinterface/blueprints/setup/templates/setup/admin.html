@@ -25,7 +25,7 @@
                {% if first_invalid is none or first_invalid == "login_name" %}autofocus{% endif %}
                minlength="3" maxlength="64" autocomplete="username"
                value="{{ form_values.login_name }}"
-               pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}"
+               pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}" title="3 to 64 characters: letters, digits, underscore, or hyphen, starting with a letter or digit."
                spellcheck="false" autocapitalize="off"
                aria-describedby="login_name-help{% if field_errors and 'login_name' in field_errors %} login_name-error{% endif %}"
                {%- if field_errors and 'login_name' in field_errors %} aria-invalid="true"{% endif %}>

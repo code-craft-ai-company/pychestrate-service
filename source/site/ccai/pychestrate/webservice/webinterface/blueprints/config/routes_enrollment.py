@@ -58,8 +58,10 @@ __version__ = "1.0.0"
 
 
 import logging
+import shlex
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -534,6 +536,68 @@ def _project_labels_by_value(*, choices: List[ProjectChoice]) -> Dict[str, str]:
     return rtnval
 
 
+#: A second mint of the same project and pod inside this many seconds is
+#: taken to be a reload or a double click.
+DUPLICATE_MINT_WINDOW_SECONDS = 30
+
+
+def _parse_iso(*, text: Optional[str]) -> Optional[datetime]:
+    """An aware UTC datetime from an ISO string, or None when it is empty or malformed."""
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _recently_minted_token(*, db_session: Any, project_id: str, pod_name: str) -> Optional[Any]:
+    """
+        A still-pending token for this project and pod that was issued
+        within :data:`DUPLICATE_MINT_WINDOW_SECONDS`.
+
+        :returns: ``(token id, seconds since it was issued)`` or None.
+    """
+    now = datetime.now(timezone.utc)
+    for token in _service_list_tokens(db_session=db_session):
+        if token.pod_name != pod_name or token.status.value != "PENDING":
+            continue
+        if str(token.project_id) != str(project_id):
+            continue
+        issued = _parse_iso(text=token.issued_at_iso)
+        if issued is None:
+            continue
+        age = (now - issued).total_seconds()
+        if 0 <= age <= DUPLICATE_MINT_WINDOW_SECONDS:
+            return (str(token.token_id), int(age))
+    return None
+
+
+def _token_rows(*, tokens: List[Any]) -> List[Dict[str, Any]]:
+    """
+        The list's rows, newest first, with real datetimes (the list shows
+        them in the viewer's zone) instead of the service's ISO strings.
+    """
+    rows = []
+    for token in tokens:
+        rows.append({
+            "token_id": str(token.token_id),
+            "project_id": str(token.project_id),
+            "pod_name": token.pod_name,
+            "status": token.status,
+            "one_shot": token.one_shot,
+            "issued_at": _parse_iso(text=token.issued_at_iso),
+            "expires_at": _parse_iso(text=token.expires_at_iso),
+            "redeemed_at": _parse_iso(text=token.redeemed_at_iso),
+            "redeemed_by_client_id": token.redeemed_by_client_id,
+        })
+    rows.sort(key=lambda row: row["issued_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return rows
+
+
 def _render_token_page(
         *,
         auth: Any,
@@ -567,7 +631,7 @@ def _render_token_page(
         flashes=flashes,
         csrf_token=auth.csrf_token,
     )
-    context["tokens"] = tokens
+    context["tokens"] = _token_rows(tokens=tokens)
     context["default_ttl_seconds"] = _DEFAULT_TTL_SECONDS
     context["project_choices"] = choices
     context["project_choice_groups"] = _project_choice_groups(choices=choices)
@@ -682,6 +746,32 @@ def handle_enrollment_token_mint(request: Request) -> Response:
             )
             return response
 
+        repeated = _recently_minted_token(
+            db_session=db_session,
+            project_id=_canonical_uuid_text(raw=project_id),
+            pod_name=pod_name,
+        )
+        if repeated is not None:
+            # The result page is a POST response, so reloading it sends the
+            # form again. A token for the same project and pod made a
+            # moment ago is that (or a double click): say so instead of
+            # minting a second one whose secret nobody will see.
+            flash.add_flash(
+                session=auth.session,
+                message=(
+                    'A token for pod "{}" was minted {} seconds ago (token {}).'
+                    " This looks like a reload or a double click, so no second"
+                    " token was made. Its secret was shown once. If you did not"
+                    " save it, revoke that token below and mint another."
+                ).format(pod_name, repeated[1], repeated[0][:8]),
+                category=flash.CATEGORY_WARNING,
+            )
+            response = _render_token_page(
+                auth=auth, db_session=db_session, status_code=409,
+                mint_form=mint_form,
+            )
+            return response
+
         try:
             issued = _service_issue_token(
                 db_session=db_session,
@@ -728,10 +818,15 @@ def handle_enrollment_token_mint(request: Request) -> Response:
         # cookie and squeeze it into a one-line alert, so the POST
         # response itself is the single place the secret appears.
         service_base_url = _resolve_service_base_url(request=request)
+        # Each value is quoted for a shell: a pod label with a space or a
+        # "!" pasted into a terminal must still be one argument.
         enroll_command = (
             "pychestrate-client enroll --service-url {} --token {}"
             " --name {}"
-        ).format(service_base_url, issued.secret, pod_name)
+        ).format(
+            shlex.quote(service_base_url), shlex.quote(issued.secret),
+            shlex.quote(pod_name),
+        )
 
         minted = {
             "token_id": issued.token_id,

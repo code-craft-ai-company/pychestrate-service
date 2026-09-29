@@ -339,6 +339,14 @@ def _availability_bookings(mode: str) -> Any:
     return rtnval
 
 
+def _token_rows_fixture(mode: str) -> Any:
+    """The enrollment token list the way the route passes it: rows with real datetimes."""
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_enrollment import _token_rows
+
+    rtnval = _token_rows(tokens=build_fixture_list(TokenView, mode=mode, count=2 if mode == MODE_POPULATED else 0))
+    return rtnval
+
+
 def _my_allocation(mode: str) -> Any:
     """The current person's own active allocation of the resource, or None."""
     if mode == MODE_SPARSE:
@@ -956,6 +964,10 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     # Resources audit fixes (RES-02 / RES-17): the IANA zone a
     # reservation form's times are typed in ("" = fresh form, UTC).
+    # Enrollment tokens as the route's rows (ADM-40): datetimes, not ISO text.
+    "config/enrollment/": {
+        "tokens": _token_rows_fixture,
+    },
     # The resource page's checkout card (RES-30): why checkout is not offered.
     "resources/resources/": {
         "my_allocation": _my_allocation,

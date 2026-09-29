@@ -25,7 +25,7 @@
         <div class="form-group">
             <label for="name">Project Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}"
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}" title="Letters, digits, underscores, hyphens and periods, starting with a letter or digit; at most 128 characters. Spaces are not allowed."
                    value="{{ form_data.name if form_data else project.name }}"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
             <div class="form-text" id="name-help">Letters, digits, underscores, hyphens and periods, starting with a letter or digit; at most 128 characters.</div>
             {{ ui.field_error(errors, 'name') }}

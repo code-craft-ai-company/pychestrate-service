@@ -1,0 +1,61 @@
+{#-
+    Makes every ``<button data-copy-from="#some-id">`` copy the text of
+    the element it names (audit finding ADM-40: a one-time secret and the
+    command that uses it had no copy button). Include it once per page,
+    after the buttons.
+
+    The button's label becomes "Copied" for two seconds. Where the
+    clipboard is not available to the page (a plain-http address that is
+    not localhost) the text is selected instead and the browser's copy
+    command is tried, so a person can still press Ctrl+C.
+-#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var buttons = document.querySelectorAll("button[data-copy-from]");
+    var select_text = function (element) {
+        var range = document.createRange();
+        range.selectNodeContents(element);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+    };
+    var done = function (button) {
+        // Keep the button's own markup (its icon) to put back afterwards.
+        if (button.getAttribute("data-copied") === null) {
+            button.setAttribute("data-copied", "1");
+            var original = button.innerHTML;
+            button.textContent = "Copied";
+            window.setTimeout(function () {
+                button.innerHTML = original;
+                button.removeAttribute("data-copied");
+            }, 2000);
+        }
+    };
+    for (var index = 0; index < buttons.length; index++) {
+        buttons[index].addEventListener("click", function (event) {
+            var button = event.currentTarget;
+            var target = document.querySelector(button.getAttribute("data-copy-from"));
+            if (target === null) {
+                return;
+            }
+            var text = target.textContent;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () {
+                    done(button);
+                }, function () {
+                    select_text(target);
+                });
+                return;
+            }
+            select_text(target);
+            try {
+                if (document.execCommand("copy")) {
+                    done(button);
+                }
+            } catch (error) {
+                /* the text stays selected for Ctrl+C */
+            }
+        });
+    }
+})();
+</script>

@@ -12,7 +12,7 @@
 {% if minted is defined and minted %}
 <div class="card" style="max-width: 45rem; margin-bottom: 1.5rem; border-color: var(--pyc-color-on-success-surface); background: var(--pyc-color-success-surface);">
     <div class="card-header" style="border-color: var(--pyc-color-on-success-surface);">
-        Token {{ minted.token_id }} minted for pod "{{ minted.pod_name }}" in project "{{ minted.project_label }}"
+        Token {{ ui.truncate_id(minted.token_id, 8) }} minted for pod "{{ minted.pod_name }}" in project "{{ minted.project_label }}"
     </div>
     <p class="strong text-danger mb-sm">
         Shown once &mdash; save it now. The secret cannot be retrieved again.
@@ -21,12 +21,17 @@
     <p class="text-danger small" data-role="mint-warning">{{ warning }}</p>
     {% endfor %}
     <p class="muted small">Enrollment token secret:</p>
-    <pre class="command-box">{{ minted.secret }}</pre>
+    <pre class="command-box" id="mint-secret" data-role="mint-secret">{{ minted.secret }}</pre>
+    <p class="mb-sm"><button type="button" class="btn btn-sm btn-secondary" data-copy-from="#mint-secret" data-role="copy-secret">{{ ui.icon("content_copy") }} Copy secret</button></p>
     <p class="muted small">
         Next steps &mdash; on the client machine, enroll and then start the runtime:
     </p>
-    <pre class="command-box">{{ minted.enroll_command }}
+    <pre class="command-box" id="mint-commands" data-role="mint-commands">{{ minted.enroll_command }}
 {{ minted.run_command }}</pre>
+    <p class="mb-sm"><button type="button" class="btn btn-sm btn-secondary" data-copy-from="#mint-commands" data-role="copy-commands">{{ ui.icon("content_copy") }} Copy commands</button></p>
+    <p class="muted small">
+        Do not reload this page: it would send the form again. If you do, no second token is made.
+    </p>
     <p class="muted small">
         Setting up a new machine? The
         <a href="https://github.com/code-craft-ai-company/pychestrate-client/blob/main/userguide/01-00-quickstart.rst" target="_blank" rel="noopener">pod guide</a>
@@ -117,12 +122,17 @@
     <tbody>
         {% for token in tokens %}
         <tr>
-            <td>{{ token.token_id }}</td>
+            <td>{{ ui.truncate_id(token.token_id, 8) }}</td>
             <td>{% if token.project_id in project_labels %}{{ project_labels[token.project_id] }}{% else %}{{ ui.truncate_id(token.project_id) }}{% endif %}</td>
             <td>{{ token.pod_name }}</td>
-            <td><span class="badge badge-info">{{ token.status.value }}</span></td>
-            <td>{{ token.issued_at_iso or '-' }}</td>
-            <td>{{ token.expires_at_iso or '-' }}</td>
+            <td>
+                <span class="badge badge-{{ token.status | status_tone }}">{{ token.status.value | capitalize }}</span>
+                {% if token.redeemed_by_client_id %}
+                <div class="muted small" data-role="redeemed-by">by client <a href="/clients">{{ ui.truncate_id(token.redeemed_by_client_id, 8) }}</a>{% if token.redeemed_at %} on {{ token.redeemed_at | local_datetime(false, '-') }}{% endif %}</div>
+                {% endif %}
+            </td>
+            <td>{{ token.issued_at | local_datetime(false, '-') }}</td>
+            <td>{{ token.expires_at | local_datetime(false, '-') }}</td>
             <td>
                 {% if token.status.value == 'PENDING' %}
                 <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"
@@ -148,4 +158,6 @@
 <p class="muted mt">
     Total: {{ tokens | length }} tokens
 </p>
+{% include "site_shell/_local_times.html" %}
+{% include "site_shell/_copy_buttons.html" %}
 {% endblock %}

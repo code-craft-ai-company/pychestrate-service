@@ -31,7 +31,7 @@
         <div class="form-group">
             <label for="login_name">Login name *</label>
             <input type="text" id="login_name" name="login_name" class="form-control" required
-                   pattern="[a-z0-9][a-z0-9._\-]{1,62}" placeholder="e.g. ci-nightly"
+                   pattern="[a-z0-9][a-z0-9._\-]{1,62}" title="2 to 63 lower-case letters, digits, dots, underscores or hyphens." placeholder="e.g. ci-nightly"
                    value="{{ form.get('login_name', '') if not issue_for else '' }}"{{ ui.invalid_attrs(errors, "login_name", "login_name-help") }}>
             {{ ui.field_error(errors, "login_name") }}
             <p class="form-text" id="login_name-help">2-63 lower-case letters, digits, '.', '_' or '-'.</p>

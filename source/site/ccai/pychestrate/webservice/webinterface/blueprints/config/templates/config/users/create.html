@@ -18,7 +18,7 @@
             <label for="username">Username *</label>
             <input type="text" id="username" name="username" class="form-control" required
                    value="{{ form_data.username if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}"{{ ui.invalid_attrs(errors, 'username', 'username-help') }}>
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}" title="3 to 64 characters: letters, digits, underscores and hyphens, starting with a letter or digit."{{ ui.invalid_attrs(errors, 'username', 'username-help') }}>
             <p class="form-text" id="username-help">3-64 characters, alphanumeric, underscores, and hyphens only</p>
             {{ ui.field_error(errors, 'username') }}
         </div>

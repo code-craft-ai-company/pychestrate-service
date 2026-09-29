@@ -23,7 +23,7 @@
 
         <div class="form-group">
             <label for="type_id">Type ID *</label>
-            <input type="text" id="type_id" name="type_id" class="form-control mono" required pattern="[a-z][a-z0-9\-]{2,63}"
+            <input type="text" id="type_id" name="type_id" class="form-control mono" required pattern="[a-z][a-z0-9\-]{2,63}" title="A lowercase slug of 3 to 64 characters: lowercase letters, digits and hyphens, starting with a letter."
                    placeholder="invoice-import" value="{{ form_data.type_id if form_data else '' }}"{{ ui.invalid_attrs(errors, 'type_id', 'type_id-help') }}>
             <div class="form-text" id="type_id-help">Lowercase slug, 3 to 64 characters. Stable identifier used by specifications and pods.</div>
             {{ ui.field_error(errors, 'type_id') }}

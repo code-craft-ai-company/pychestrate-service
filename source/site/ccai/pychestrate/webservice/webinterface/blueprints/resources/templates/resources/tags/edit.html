@@ -17,7 +17,7 @@
         <div class="form-group">
             <label for="name">Name *</label>
             <input type="text" id="name" name="name" class="form-control" required maxlength="64"
-                   pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,63}"
+                   pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,63}" title="Letters, digits, underscore and hyphen, starting with a letter or digit; at most 64 characters."
                    value="{{ typed.get('name', tag.name) }}"{{ ui.invalid_attrs(errors, "name", "name-help") }}>
             {{ ui.field_error(errors, "name") }}
             <p class="form-text" id="name-help">Letters, digits, '_' and '-', starting with a letter or digit.</p>
