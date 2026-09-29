@@ -1,4 +1,5 @@
 import { message_with_detail, problem_detail_of_body } from "../shared/problem-detail.js";
+import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -169,7 +170,7 @@ class PycPipelinesList extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -628,6 +629,11 @@ class PycPipelinesList extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({
+      project_id: this._state.projectId,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._render_table_region();

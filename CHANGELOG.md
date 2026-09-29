@@ -293,6 +293,15 @@ preview tag.
   id field, and only then says "Enter a project id". The environment id on the
   Blast-radius guards page and the ids shown as names elsewhere are not done.
 
+- A list's filters and page are kept in the address (ORC-27). The Runs,
+  Builds, Provisioning and Pipelines lists read `project_id`, `state` and
+  `page` from the address when they load (`/runs?state=failed` was ignored)
+  and write them back whenever they refresh, replacing the history entry so
+  Back still leaves the page. A filtered view can be shared or bookmarked, and
+  an unknown state in the address is ignored. The detail pages' "Back to ..."
+  links and the other bundle lists (test catalog, environments, pods,
+  dashboards) do not do this yet.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

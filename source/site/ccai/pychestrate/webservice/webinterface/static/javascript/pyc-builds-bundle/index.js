@@ -96,6 +96,41 @@ function build_source_label(build) {
   return ref.length > 0 ? ref : repository;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function query_choice(name, allowed) {
+  const value = query_value(name);
+  return allowed.indexOf(value) >= 0 ? value : "";
+}
+function page_from_query() {
+  const parsed = Number.parseInt(query_value("page"), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/builds-list-view.js
 var BUILD_STATES = [
   "pending",
@@ -290,8 +325,8 @@ var PycBuildsList = class extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      stateFilter: "",
-      page: 1,
+      stateFilter: query_choice("state", BUILD_STATES),
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -391,6 +426,7 @@ var PycBuildsList = class extends HTMLElement {
       option.textContent = build_state;
       state_select.appendChild(option);
     }
+    state_select.value = this._state.stateFilter;
     state_select.addEventListener("change", () => {
       this._state.stateFilter = state_select.value;
       this._state.page = 1;
@@ -723,6 +759,11 @@ var PycBuildsList = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({
+      project_id: this._state.projectId,
+      state: this._state.stateFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._render_table_region();

@@ -1,6 +1,7 @@
 import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { provisioning_title } from "../shared/run-labels.js";
+import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import {
   build_environments_query_url,
   format_timestamp,
@@ -133,8 +134,8 @@ class PycProvisioningList extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      stateFilter: "",
-      page: 1,
+      stateFilter: query_choice("state", PROVISIONING_STATES),
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -229,6 +230,7 @@ class PycProvisioningList extends HTMLElement {
       option.textContent = run_state;
       state_select.appendChild(option);
     }
+    state_select.value = this._state.stateFilter;
     state_select.addEventListener("change", () => {
       this._state.stateFilter = state_select.value;
       this._state.page = 1;
@@ -469,6 +471,12 @@ class PycProvisioningList extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({
+      project_id: this._state.projectId,
+      state: this._state.stateFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._render_table_region();

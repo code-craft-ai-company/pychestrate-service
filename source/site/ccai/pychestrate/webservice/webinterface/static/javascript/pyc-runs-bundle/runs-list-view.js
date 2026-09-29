@@ -1,5 +1,6 @@
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { job_type_label, run_title } from "../shared/run-labels.js";
+import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 const RUN_STATES = [
   "pending",
   "dispatching",
@@ -197,9 +198,9 @@ class PycRunsList extends HTMLElement {
   constructor() {
     super();
     this._state = {
-      stateFilter: "",
+      stateFilter: query_choice("state", RUN_STATES),
       projectFilter: project_from_search(),
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -332,6 +333,7 @@ class PycRunsList extends HTMLElement {
       option.textContent = run_state;
       state_select.appendChild(option);
     }
+    state_select.value = this._state.stateFilter;
     state_select.addEventListener("change", () => {
       this._state.stateFilter = state_select.value;
       this._state.page = 1;
@@ -488,6 +490,12 @@ class PycRunsList extends HTMLElement {
     this._fetch_seq = this._fetch_seq + 1;
     const fetch_seq = this._fetch_seq;
     if (background === false) {
+      // The address describes what is on screen (ORC-27).
+      mirror_to_query({
+        project_id: this._state.projectFilter,
+        state: this._state.stateFilter,
+        page: this._state.page > 1 ? String(this._state.page) : ""
+      });
       this._state.loading = true;
       this._state.errored = false;
       this._state.errorStatus = 0;
