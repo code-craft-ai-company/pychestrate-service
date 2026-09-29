@@ -422,6 +422,21 @@ var PycTestMetrics = class extends HTMLElement {
       }
       return;
     }
+    if (this._summary.summary.run_count === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "empty-state");
+      notice.appendChild(document.createTextNode("No test runs have reported results for this project yet, so there is nothing to measure. "));
+      const link = document.createElement("a");
+      link.classList.add("pyc-metrics__row-link");
+      link.setAttribute("href", "/test-catalog?project_id=" + encodeURIComponent(this._state.projectId));
+      link.setAttribute("data-role", "empty-next-step");
+      link.textContent = "Run tests from the Test catalog";
+      notice.appendChild(link);
+      notice.appendChild(document.createTextNode("; the numbers appear after the first run."));
+      region.appendChild(notice);
+      return;
+    }
     region.appendChild(this._build_cards(this._summary.summary));
     region.appendChild(
       this._build_duration_trend(this._summary.recent_runs)

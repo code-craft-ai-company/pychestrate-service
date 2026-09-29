@@ -377,7 +377,7 @@ var PycPipelinesList = class extends HTMLElement {
     panel.setAttribute("data-role", "upsert-panel");
     const heading = document.createElement("h2");
     heading.classList.add("pyc-pipelines__panel-heading");
-    heading.textContent = "Create / Upsert Pipeline";
+    heading.textContent = "Define a pipeline";
     panel.appendChild(heading);
     const form = document.createElement("form");
     form.classList.add("pyc-pipelines__form");
@@ -802,7 +802,7 @@ var PycPipelinesList = class extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-pipelines__status");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No pipelines cached yet";
+      empty.textContent = "No pipelines defined in this project yet. Paste a pipeline document into Define a pipeline above and choose Save.";
       region.replaceChildren(empty);
       this._render_pager();
       return;

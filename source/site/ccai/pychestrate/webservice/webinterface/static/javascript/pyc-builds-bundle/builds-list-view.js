@@ -454,7 +454,14 @@ class PycBuildsList extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-builds__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      const message = document.createElement("span");
+      message.textContent = "No projects exist yet. Builds belong to a project, so create one first. ";
+      const create = document.createElement("a");
+      create.classList.add("pyc-builds__build-link");
+      create.setAttribute("href", "/projects/create");
+      create.setAttribute("data-role", "create-project");
+      create.textContent = "Create a project";
+      region.replaceChildren(message, create);
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -701,6 +708,13 @@ class PycBuildsList extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-builds__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -743,7 +757,7 @@ class PycBuildsList extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-builds__status");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No builds yet";
+      empty.textContent = "No builds in this project yet. Choose Trigger Build above to start one.";
       region.replaceChildren(empty);
       this._render_pager();
       return;

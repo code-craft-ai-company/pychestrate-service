@@ -275,6 +275,16 @@ preview tag.
   sent all of it. Branch, commit and who or what triggered a run are not in the
   API yet, so they are not shown.
 
+- Empty lists say how to fill them (ORC-34). The Runs page says a run starts
+  from the Test catalog, a pipeline or a build and links to each; the Builds
+  page no longer says "No projects exist yet." and "Select a project to view
+  its builds." together (it says there are no projects once, with a link to
+  create one) and an empty project says "Choose Trigger Build above"; the
+  Pipelines page says to paste a pipeline document into the form above, whose
+  heading is now "Define a pipeline" (it was "Create / Upsert Pipeline"); and
+  Test metrics for a project with no runs says there is nothing to measure and
+  links to the Test catalog, instead of showing "Pass rate 0%".
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

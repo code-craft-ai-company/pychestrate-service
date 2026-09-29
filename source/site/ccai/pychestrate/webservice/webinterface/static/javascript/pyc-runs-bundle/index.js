@@ -846,8 +846,22 @@ var PycRunsList = class extends HTMLElement {
         empty_actions.appendChild(clear_button);
         region.replaceChildren(empty, empty_actions);
       } else {
-        empty.textContent = "No runs yet";
-        region.replaceChildren(empty);
+        empty.textContent = "No runs yet. A run starts when you run tests from the Test catalog, start a pipeline or trigger a build.";
+        const starts = document.createElement("div");
+        starts.classList.add("pyc-runs-list__empty-actions");
+        for (const [href, label, role] of [
+          ["/test-catalog", "Open the Test catalog", "start-test-catalog"],
+          ["/pipelines", "Open Pipelines", "start-pipelines"],
+          ["/builds", "Open Builds", "start-builds"]
+        ]) {
+          const link = document.createElement("a");
+          link.classList.add("pyc-runs-list__run-link");
+          link.setAttribute("href", href);
+          link.setAttribute("data-role", role);
+          link.textContent = label;
+          starts.appendChild(link);
+        }
+        region.replaceChildren(empty, starts);
       }
       this._render_pager();
       return;
