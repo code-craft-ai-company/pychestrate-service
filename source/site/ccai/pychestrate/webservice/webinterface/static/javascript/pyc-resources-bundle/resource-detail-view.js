@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCES_WRITE_PERMISSION,
@@ -598,10 +599,6 @@ class PycResourceDetail extends HTMLElement {
     if (this._transitioning === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const resource_label = this._resource !== null && typeof this._resource.display_name === "string" && this._resource.display_name.length > 0 ? this._resource.display_name : short_id(this._resource_id);
     let prompt = "Move " + resource_label + " to state '" + action.target + "'?";
     if (action.target === "retired") {
@@ -609,8 +606,8 @@ class PycResourceDetail extends HTMLElement {
     } else if (action.target === "quarantined") {
       prompt = "Quarantine " + resource_label + "? Quarantined resources are excluded from pool allocation until marked available again.";
     }
-    const confirmed = window.confirm(prompt);
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, prompt, action.target === "retired" ? "Retire resource" : action.target === "quarantined" ? "Quarantine resource" : "Change state");
+    if (confirmed !== true) {
       return;
     }
     const body = { state: action.target };

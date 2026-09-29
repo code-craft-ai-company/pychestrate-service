@@ -1,3 +1,4 @@
+import { confirm_action, label_from_button } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
@@ -524,13 +525,8 @@ class PycPodDetail extends HTMLElement {
     return rtnval;
   }
   async _on_transition(event_kind, confirm_text, button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(confirm_text);
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, confirm_text, label_from_button(button, "Continue"));
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }

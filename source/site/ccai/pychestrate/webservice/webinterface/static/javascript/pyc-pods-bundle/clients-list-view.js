@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import {
@@ -975,15 +976,8 @@ class PycClientsList extends HTMLElement {
     return table;
   }
   async _on_revoke_client(client, button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(
-      "Revoke client " + short_id(client.client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Revoke client " + short_id(client.client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI.", "Revoke client");
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }

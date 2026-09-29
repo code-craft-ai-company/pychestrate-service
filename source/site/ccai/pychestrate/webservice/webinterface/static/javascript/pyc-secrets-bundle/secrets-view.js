@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { format_instant, pad_two, parse_timestamp } from "../shared/datetime.js";
 const SECRET_SCOPE_KINDS = [
   "ORG",
@@ -1415,14 +1416,8 @@ class PycSecrets extends HTMLElement {
    * @param secret The secret to delete.
    */
   async _delete_secret(secret) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
-    const confirmed = window.confirm(
-      "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone.", "Delete secret");
+    if (confirmed !== true) {
       return;
     }
     this._set_action_status("", "neutral");

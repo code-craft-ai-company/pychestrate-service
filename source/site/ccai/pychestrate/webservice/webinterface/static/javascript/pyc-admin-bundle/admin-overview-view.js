@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   fetch_system_health,
@@ -467,11 +468,19 @@ class PycAdminOverview extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = "Set flag \"" + String(entry.flag_key) + "\" to " + target + "?";
-      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
+      const proceed = () => {
+        toggle.toggleAttribute("disabled", true);
+        void this._on_toggle(entry, toggle);
+      };
+      if (target === FLAG_STATE_ENABLED) {
+        proceed();
         return;
       }
-      toggle.toggleAttribute("disabled", true);
-      void this._on_toggle(entry, toggle);
+      void confirm_action(this, question, "Disable flag").then((confirmed) => {
+        if (confirmed === true) {
+          proceed();
+        }
+      });
     });
     return toggle;
   }

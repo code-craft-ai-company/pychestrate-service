@@ -725,6 +725,26 @@ var PycPodsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+function label_from_button(button, fallback) {
+  const text = button !== null && button !== void 0 && typeof button.textContent === "string" ? button.textContent.replace(/\s+/g, " ").trim() : "";
+  return text.length > 0 && text.length <= 40 ? text : fallback;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -1295,13 +1315,8 @@ var PycPodDetail = class extends HTMLElement {
     return rtnval;
   }
   async _on_transition(event_kind, confirm_text, button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(confirm_text);
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, confirm_text, label_from_button(button, "Continue"));
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }
@@ -2945,15 +2960,8 @@ var PycClientsList = class extends HTMLElement {
     return table;
   }
   async _on_revoke_client(client, button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(
-      "Revoke client " + short_id2(client.client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Revoke client " + short_id2(client.client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI.", "Revoke client");
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }
@@ -3566,15 +3574,8 @@ var PycClientDetail = class extends HTMLElement {
     return actions;
   }
   async _on_revoke(button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(
-      "Revoke client " + short_id2(this._client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Revoke client " + short_id2(this._client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI.", "Revoke client");
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }

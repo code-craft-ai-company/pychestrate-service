@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCE_POOLS_WRITE_PERMISSION,
@@ -601,15 +602,9 @@ class PycPoolDetail extends HTMLElement {
     if (this._deleting === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const pool_name = this._pool !== null && typeof this._pool.name === "string" && this._pool.name.length > 0 ? this._pool.name : short_id(this._pool_id);
-    const confirmed = window.confirm(
-      "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted.", "Delete pool");
+    if (confirmed !== true) {
       return;
     }
     this._deleting = true;
@@ -810,15 +805,9 @@ class PycPoolDetail extends HTMLElement {
     return;
   }
   async _submit_remove_member(member, remove_button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const label = member_display_label(member);
-    const confirmed = window.confirm(
-      "Remove " + label + " from this pool? The resource itself is not deleted and existing reservations are not released."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Remove " + label + " from this pool? The resource itself is not deleted and existing reservations are not released.", "Remove from pool");
+    if (confirmed !== true) {
       return;
     }
     if (remove_button !== null && remove_button !== void 0) {
@@ -1088,14 +1077,8 @@ class PycPoolDetail extends HTMLElement {
     if (this._releasing[reservation_id] === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
-    const confirmed = window.confirm(
-      "Release the " + reservation.mode + " reservation on " + short_id(reservation.resource_id) + "? The holder loses the resource."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Release the " + reservation.mode + " reservation on " + short_id(reservation.resource_id) + "? The holder loses the resource.", "Release reservation");
+    if (confirmed !== true) {
       return;
     }
     this._releasing[reservation_id] = true;

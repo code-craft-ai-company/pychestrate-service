@@ -1,3 +1,19 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -907,15 +923,8 @@ var PycWebhooks = class extends HTMLElement {
   async _on_toggle_integration(integration, button) {
     const next_enabled = integration.enabled !== true;
     if (next_enabled === false) {
-      const confirm_fn = window.confirm;
-      if (typeof confirm_fn !== "function") {
-        button.toggleAttribute("disabled", false);
-        return;
-      }
-      const confirmed = window.confirm(
-        "Disable the inbound integration " + integration.provider + "/" + integration.hook_name + "? The receiver will reject its deliveries until it is re-enabled."
-      );
-      if (confirmed === false) {
+      const confirmed = await confirm_action(this, "Disable the inbound integration " + integration.provider + "/" + integration.hook_name + "? The receiver will reject its deliveries until it is re-enabled.", "Disable integration");
+      if (confirmed !== true) {
         button.toggleAttribute("disabled", false);
         return;
       }
@@ -1443,15 +1452,8 @@ var PycWebhooks = class extends HTMLElement {
   async _on_toggle_subscription(subscription, button) {
     const next_enabled = subscription.enabled !== true;
     if (next_enabled === false) {
-      const confirm_fn = window.confirm;
-      if (typeof confirm_fn !== "function") {
-        button.toggleAttribute("disabled", false);
-        return;
-      }
-      const confirmed = window.confirm(
-        "Disable the subscription " + subscription.name + "? Deliveries to its URL stop until it is re-enabled."
-      );
-      if (confirmed === false) {
+      const confirmed = await confirm_action(this, "Disable the subscription " + subscription.name + "? Deliveries to its URL stop until it is re-enabled.", "Disable subscription");
+      if (confirmed !== true) {
         button.toggleAttribute("disabled", false);
         return;
       }

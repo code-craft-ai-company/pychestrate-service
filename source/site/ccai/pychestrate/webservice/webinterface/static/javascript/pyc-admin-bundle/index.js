@@ -1,3 +1,19 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -459,11 +475,19 @@ var PycFeatureFlags = class extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
-      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
+      const proceed = () => {
+        toggle.toggleAttribute("disabled", true);
+        void this._on_toggle(entry, toggle);
+      };
+      if (target === FLAG_STATE_ENABLED) {
+        proceed();
         return;
       }
-      toggle.toggleAttribute("disabled", true);
-      void this._on_toggle(entry, toggle);
+      void confirm_action(this, question, "Disable flag").then((confirmed) => {
+        if (confirmed === true) {
+          proceed();
+        }
+      });
     });
     return toggle;
   }
@@ -1623,11 +1647,19 @@ var PycAdminOverview = class extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
-      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
+      const proceed = () => {
+        toggle.toggleAttribute("disabled", true);
+        void this._on_toggle(entry, toggle);
+      };
+      if (target === FLAG_STATE_ENABLED) {
+        proceed();
         return;
       }
-      toggle.toggleAttribute("disabled", true);
-      void this._on_toggle(entry, toggle);
+      void confirm_action(this, question, "Disable flag").then((confirmed) => {
+        if (confirmed === true) {
+          proceed();
+        }
+      });
     });
     return toggle;
   }

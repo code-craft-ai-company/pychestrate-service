@@ -30,3 +30,12 @@ export function confirm_action(source, message, confirm_label) {
     }
   });
 }
+
+/*
+ * What the confirming button should say when the action button that asked is at
+ * hand: its own text ("Drain"), or ``fallback`` when it has none or a long one.
+ */
+export function label_from_button(button, fallback) {
+  const text = button !== null && button !== void 0 && typeof button.textContent === "string" ? button.textContent.replace(/\s+/g, " ").trim() : "";
+  return text.length > 0 && text.length <= 40 ? text : fallback;
+}

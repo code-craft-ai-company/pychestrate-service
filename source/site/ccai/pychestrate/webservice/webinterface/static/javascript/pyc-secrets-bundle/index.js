@@ -1,3 +1,19 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
@@ -1414,14 +1430,8 @@ var PycSecrets = class extends HTMLElement {
    * @param secret The secret to delete.
    */
   async _delete_secret(secret) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
-    const confirmed = window.confirm(
-      "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone.", "Delete secret");
+    if (confirmed !== true) {
       return;
     }
     this._set_action_status("", "neutral");

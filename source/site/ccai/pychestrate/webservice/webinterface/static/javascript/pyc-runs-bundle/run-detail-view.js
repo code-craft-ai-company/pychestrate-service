@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
@@ -540,10 +541,12 @@ class PycRunDetail extends HTMLElement {
     if (this._cancel_pending === true) {
       return;
     }
-    const confirmed = window.confirm(
-      "Cancel this run? A cancellation request will be sent to the orchestrator."
+    const confirmed = await confirm_action(
+      this,
+      "Cancel this run? A cancellation request will be sent to the orchestrator.",
+      "Yes, cancel the run"
     );
-    if (confirmed === false) {
+    if (confirmed !== true) {
       return;
     }
     this._cancel_pending = true;

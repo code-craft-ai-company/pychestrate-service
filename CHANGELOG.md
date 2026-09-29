@@ -194,6 +194,18 @@ preview tag.
 
 ### Changed
 
+- Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15,
+  ADM-21). Sixteen places called `window.confirm`: cancel a run, revoke a client
+  (list and detail), drain or deregister a pod, delete a pool, remove a pool
+  member, release a reservation, retire, quarantine or move a resource, disable a
+  flag (list and admin overview), disable an inbound integration or an outbound
+  subscription, and delete a secret. Each now asks through `shared/confirm.js`,
+  which reaches the shell's modal dialog (Cancel focused, the acting button
+  naming the deed: "Revoke client", "Delete pool", "Yes, cancel the run") and
+  falls back to the browser's box only when nothing answers. The wording of the
+  questions is unchanged. A test keeps `window.confirm` out of every bundle
+  source (the helper's fallback and the shell's own aside).
+
 - Charts read as times and dashboard tiles are what they say they are
   (ORC-15). The chart component draws an x value as the text it is given, so the
   raw ISO timestamps ("2026-09-29T10:00:00.000Z") were printed in full and
@@ -225,8 +237,8 @@ preview tag.
   bundle views now reach with a `pyc-confirm-request` event through
   `shared/confirm.js`; when nothing answers the event the helper uses the
   browser's confirm box, so a confirmation never disappears. A refusal, a
-  missing record and an unreachable server each get their own message. The
-  other bundle views still call `window.confirm` directly. Not changed: guards
+  missing record and an unreachable server each get their own message. Not
+  changed: guards
   and outbound webhooks (the API's DELETE only disables them, and their views
   already have enable/disable), and there is still no way to edit an SLO or
   re-describe a pipeline in place.

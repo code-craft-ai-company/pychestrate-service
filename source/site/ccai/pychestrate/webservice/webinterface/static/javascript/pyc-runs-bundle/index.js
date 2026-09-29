@@ -1087,6 +1087,22 @@ var PycRunsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -1629,10 +1645,12 @@ var PycRunDetail = class extends HTMLElement {
     if (this._cancel_pending === true) {
       return;
     }
-    const confirmed = window.confirm(
-      "Cancel this run? A cancellation request will be sent to the orchestrator."
+    const confirmed = await confirm_action(
+      this,
+      "Cancel this run? A cancellation request will be sent to the orchestrator.",
+      "Yes, cancel the run"
     );
-    if (confirmed === false) {
+    if (confirmed !== true) {
       return;
     }
     this._cancel_pending = true;

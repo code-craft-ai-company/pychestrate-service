@@ -1407,6 +1407,22 @@ var PycResourceInventory = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
+function confirm_action(source, message, confirm_label) {
+  return new Promise((resolve) => {
+    const request = new CustomEvent("pyc-confirm-request", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      detail: { message, confirm_label, resolve }
+    });
+    const answered_by_shell = source.dispatchEvent(request) === false;
+    if (answered_by_shell === false) {
+      resolve(window.confirm(message));
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -2012,15 +2028,9 @@ var PycPoolDetail = class extends HTMLElement {
     if (this._deleting === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const pool_name = this._pool !== null && typeof this._pool.name === "string" && this._pool.name.length > 0 ? this._pool.name : short_id(this._pool_id);
-    const confirmed = window.confirm(
-      "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted.", "Delete pool");
+    if (confirmed !== true) {
       return;
     }
     this._deleting = true;
@@ -2221,15 +2231,9 @@ var PycPoolDetail = class extends HTMLElement {
     return;
   }
   async _submit_remove_member(member, remove_button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const label = member_display_label(member);
-    const confirmed = window.confirm(
-      "Remove " + label + " from this pool? The resource itself is not deleted and existing reservations are not released."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Remove " + label + " from this pool? The resource itself is not deleted and existing reservations are not released.", "Remove from pool");
+    if (confirmed !== true) {
       return;
     }
     if (remove_button !== null && remove_button !== void 0) {
@@ -2497,14 +2501,8 @@ var PycPoolDetail = class extends HTMLElement {
     if (this._releasing[reservation_id] === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
-    const confirmed = window.confirm(
-      "Release the " + reservation.mode + " reservation on " + short_id(reservation.resource_id) + "? The holder loses the resource."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Release the " + reservation.mode + " reservation on " + short_id(reservation.resource_id) + "? The holder loses the resource.", "Release reservation");
+    if (confirmed !== true) {
       return;
     }
     this._releasing[reservation_id] = true;
@@ -3300,10 +3298,6 @@ var PycResourceDetail = class extends HTMLElement {
     if (this._transitioning === true) {
       return;
     }
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      return;
-    }
     const resource_label = this._resource !== null && typeof this._resource.display_name === "string" && this._resource.display_name.length > 0 ? this._resource.display_name : short_id(this._resource_id);
     let prompt = "Move " + resource_label + " to state '" + action.target + "'?";
     if (action.target === "retired") {
@@ -3311,8 +3305,8 @@ var PycResourceDetail = class extends HTMLElement {
     } else if (action.target === "quarantined") {
       prompt = "Quarantine " + resource_label + "? Quarantined resources are excluded from pool allocation until marked available again.";
     }
-    const confirmed = window.confirm(prompt);
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, prompt, action.target === "retired" ? "Retire resource" : action.target === "quarantined" ? "Quarantine resource" : "Change state");
+    if (confirmed !== true) {
       return;
     }
     const body = { state: action.target };

@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 // Every project the person can see (the registry holds every web-UI project too).
@@ -840,15 +841,8 @@ class PycWebhooks extends HTMLElement {
   async _on_toggle_integration(integration, button) {
     const next_enabled = integration.enabled !== true;
     if (next_enabled === false) {
-      const confirm_fn = window.confirm;
-      if (typeof confirm_fn !== "function") {
-        button.toggleAttribute("disabled", false);
-        return;
-      }
-      const confirmed = window.confirm(
-        "Disable the inbound integration " + integration.provider + "/" + integration.hook_name + "? The receiver will reject its deliveries until it is re-enabled."
-      );
-      if (confirmed === false) {
+      const confirmed = await confirm_action(this, "Disable the inbound integration " + integration.provider + "/" + integration.hook_name + "? The receiver will reject its deliveries until it is re-enabled.", "Disable integration");
+      if (confirmed !== true) {
         button.toggleAttribute("disabled", false);
         return;
       }
@@ -1380,15 +1374,8 @@ class PycWebhooks extends HTMLElement {
   async _on_toggle_subscription(subscription, button) {
     const next_enabled = subscription.enabled !== true;
     if (next_enabled === false) {
-      const confirm_fn = window.confirm;
-      if (typeof confirm_fn !== "function") {
-        button.toggleAttribute("disabled", false);
-        return;
-      }
-      const confirmed = window.confirm(
-        "Disable the subscription " + subscription.name + "? Deliveries to its URL stop until it is re-enabled."
-      );
-      if (confirmed === false) {
+      const confirmed = await confirm_action(this, "Disable the subscription " + subscription.name + "? Deliveries to its URL stop until it is re-enabled.", "Disable subscription");
+      if (confirmed !== true) {
         button.toggleAttribute("disabled", false);
         return;
       }

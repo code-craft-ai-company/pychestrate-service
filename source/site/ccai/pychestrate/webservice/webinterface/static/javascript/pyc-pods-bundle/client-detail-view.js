@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
@@ -585,15 +586,8 @@ class PycClientDetail extends HTMLElement {
     return actions;
   }
   async _on_revoke(button) {
-    const confirm_fn = window.confirm;
-    if (typeof confirm_fn !== "function") {
-      button.toggleAttribute("disabled", false);
-      return;
-    }
-    const confirmed = window.confirm(
-      "Revoke client " + short_id(this._client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI."
-    );
-    if (confirmed === false) {
+    const confirmed = await confirm_action(this, "Revoke client " + short_id(this._client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI.", "Revoke client");
+    if (confirmed !== true) {
       button.toggleAttribute("disabled", false);
       return;
     }
