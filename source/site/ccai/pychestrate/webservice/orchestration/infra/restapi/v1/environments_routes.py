@@ -53,6 +53,7 @@ from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 ENVIRONMENTS_PATH_SUFFIX = "/environments"
+ENVIRONMENT_KINDS_PATH = "/environment-kinds"
 PROJECTS_PATH_PREFIX = "/projects"
 
 ENVIRONMENTS_READ_PERMISSION_KEY = "system:environments.read"
@@ -386,6 +387,31 @@ def _environment_view_to_dict(view: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def handle_list_environment_kinds(request: Request) -> Response:
+    """
+        ``GET /api/v1/environment-kinds`` -- the environment kinds that are
+        loaded, each with the attributes it takes, so a form can offer the real
+        choices instead of asking for a kind name and a JSON object.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) ``{"items": [{"kind", "fields"}]}`` or a
+                  problem response.
+    """
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=ENVIRONMENTS_READ_PERMISSION_KEY,
+        )
+        items = environment_service.list_kinds()
+        rtnval: Response = JSONResponse(content={"items": items}, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
 def handle_list_environments(request: Request) -> Response:
     """
         ``GET /api/v1/projects/{project_id}/environments``
@@ -665,6 +691,9 @@ def register_environments_routes(*, app: Any, version_prefix: str) -> None:
 
         :returns: None.
     """
+    app.attach_route(
+        version_prefix + ENVIRONMENT_KINDS_PATH, methods=["GET"],
+    )(handle_list_environment_kinds)
     base = version_prefix + PROJECTS_PATH_PREFIX + "/{project_id}"
     app.attach_route(
         base + ENVIRONMENTS_PATH_SUFFIX, methods=["GET"],
@@ -679,6 +708,8 @@ def register_environments_routes(*, app: Any, version_prefix: str) -> None:
 
 
 __all__ = [
+    "ENVIRONMENT_KINDS_PATH",
+    "handle_list_environment_kinds",
     "ENVIRONMENTS_PATH_SUFFIX",
     "ENVIRONMENTS_READ_PERMISSION_KEY",
     "ENVIRONMENTS_WRITE_PERMISSION_KEY",

@@ -261,6 +261,38 @@ function announce_session_expired() {
   );
   return;
 }
+const ENVIRONMENT_KINDS_URL = "/api/v1/environment-kinds";
+/*
+ * The attributes object a kind's form describes: a text or url field is its
+ * trimmed text, a number is a number, tags are a list; an empty optional field
+ * is left out. ``values`` maps a field name to the text typed. Returns
+ * ``{attrs}`` or ``{error}`` naming the first required field left empty or a
+ * number that is not one.
+ */
+function build_attrs_from_fields(fields, values) {
+  const attrs = {};
+  for (const field of fields) {
+    const raw = String(values[field.name] === undefined ? "" : values[field.name]).trim();
+    if (raw.length === 0) {
+      if (field.required === true) {
+        return { error: field.label + " is required." };
+      }
+      continue;
+    }
+    if (field.type === "number") {
+      const number = Number(raw);
+      if (Number.isFinite(number) === false) {
+        return { error: field.label + " must be a number." };
+      }
+      attrs[field.name] = number;
+    } else if (field.type === "tags") {
+      attrs[field.name] = raw.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+    } else {
+      attrs[field.name] = raw;
+    }
+  }
+  return { attrs };
+}
 function parse_environment_attrs(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) {
     const rtnval2 = {};
@@ -1068,9 +1100,11 @@ class PycEnvironments extends HTMLElement {
     return;
   }
   /**
-   * Render the register-environment form into the register
-   * region -- a name input, a kind-name input, an attrs JSON
-   * textarea, and a submit button.
+   * Render the register-environment form into the register region: a name, a
+   * kind chosen from the kinds the server has loaded, and that kind's own
+   * fields (ORC-17). When the kinds cannot be listed, or a kind does not
+   * describe its attributes, the kind is typed and the attributes are a JSON
+   * box.
    */
   _render_register_form() {
     if (this._register_region === null) {
@@ -1090,30 +1124,13 @@ class PycEnvironments extends HTMLElement {
     name_input.required = true;
     name_label.appendChild(name_input);
     form.appendChild(name_label);
-    const kind_label = document.createElement("label");
-    kind_label.classList.add("pyc-infra__field");
-    kind_label.textContent = "Environment kind";
-    const kind_input = document.createElement("mj-text-field");
-    kind_input.classList.add("pyc-infra__input");
-    kind_input.setAttribute("type", "text");
-    kind_input.setAttribute("placeholder", "terraform");
-    kind_input.setAttribute("data-role", "register-kind");
-    kind_input.required = true;
-    kind_label.appendChild(kind_input);
-    form.appendChild(kind_label);
-    const attrs_label = document.createElement("label");
-    attrs_label.classList.add(
-      "pyc-infra__field",
-      "pyc-infra__field--wide"
-    );
-    attrs_label.textContent = "Attributes (JSON)";
-    const attrs_area = document.createElement("mj-textarea");
-    attrs_area.classList.add("pyc-infra__textarea");
-    attrs_area.setAttribute("data-role", "register-attrs");
-    attrs_area.setAttribute("placeholder", '{"region": "us-east-1"}');
-    attrs_area.rows = 3;
-    attrs_label.appendChild(attrs_area);
-    form.appendChild(attrs_label);
+    const kind_region = document.createElement("div");
+    kind_region.setAttribute("data-role", "register-kind-region");
+    form.appendChild(kind_region);
+    const attrs_region = document.createElement("div");
+    attrs_region.classList.add("pyc-infra__attrs");
+    attrs_region.setAttribute("data-role", "register-attrs-region");
+    form.appendChild(attrs_region);
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
     submit_button.setAttribute("variant", "primary");
@@ -1125,60 +1142,177 @@ class PycEnvironments extends HTMLElement {
     status.classList.add("pyc-infra__form-status");
     status.setAttribute("data-role", "register-status");
     form.appendChild(status);
+    const controls = { name_input, kind_input: null, kind_select: null, attrs_area: null, fields: [], inputs: {} };
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this._submit_register(
-        form,
-        name_input,
-        kind_input,
-        attrs_area,
-        submit_button
-      );
+      void this._submit_register(form, controls, submit_button);
     });
     this._register_region.replaceChildren(form);
+    this._render_kind_controls(kind_region, attrs_region, controls, []);
+    void this._load_kinds().then((kinds) => {
+      if (kinds.length > 0 && this._register_region !== null && this._register_region.contains(form)) {
+        this._render_kind_controls(kind_region, attrs_region, controls, kinds);
+      }
+    });
     return;
   }
-  async _submit_register(form, name_input, kind_input, attrs_area, submit_button) {
-    const status = form.querySelector('[data-role="register-status"]');
-    const name = name_input.value.trim();
-    const kind_name = kind_input.value.trim();
-    if (name.length === 0 || kind_name.length === 0) {
-      if (status instanceof HTMLElement) {
-        status.textContent = "Environment name and kind are required.";
+  /* The loaded environment kinds ([] when they cannot be listed). */
+  async _load_kinds() {
+    try {
+      const response = await fetch(ENVIRONMENT_KINDS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        if (body !== null && Array.isArray(body.items) === true) {
+          return body.items.filter((entry) => entry !== null && typeof entry.kind === "string");
+        }
       }
+    } catch (reason) {
+      console.warn("pychestrate.ui.infra.kinds_fetch_failed", { reason: String(reason) });
+    }
+    return [];
+  }
+  /*
+   * The kind control and the attribute controls under it: a list of kinds and
+   * the chosen kind's fields when the kinds are known, a typed kind and a JSON
+   * box when not.
+   */
+  _render_kind_controls(kind_region, attrs_region, controls, kinds) {
+    const kind_label = document.createElement("label");
+    kind_label.classList.add("pyc-infra__field");
+    kind_label.textContent = "Environment kind";
+    controls.kind_input = null;
+    controls.kind_select = null;
+    if (kinds.length > 0) {
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-infra__select");
+      select.setAttribute("data-role", "register-kind");
+      for (const entry of kinds) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", entry.kind);
+        option.textContent = entry.kind;
+        select.appendChild(option);
+      }
+      select.value = kinds[0].kind;
+      const show = () => {
+        const chosen = kinds.find((entry) => entry.kind === select.value);
+        this._render_attribute_controls(attrs_region, controls, chosen !== undefined && Array.isArray(chosen.fields) ? chosen.fields : []);
+      };
+      select.addEventListener("change", show);
+      kind_label.appendChild(select);
+      controls.kind_select = select;
+      kind_region.replaceChildren(kind_label);
+      show();
+      return;
+    }
+    const kind_input = document.createElement("mj-text-field");
+    kind_input.classList.add("pyc-infra__input");
+    kind_input.setAttribute("type", "text");
+    kind_input.setAttribute("placeholder", "kind name");
+    kind_input.setAttribute("data-role", "register-kind");
+    kind_input.required = true;
+    kind_label.appendChild(kind_input);
+    controls.kind_input = kind_input;
+    kind_region.replaceChildren(kind_label);
+    this._render_attribute_controls(attrs_region, controls, []);
+    return;
+  }
+  _render_attribute_controls(attrs_region, controls, fields) {
+    controls.fields = fields;
+    controls.inputs = {};
+    controls.attrs_area = null;
+    if (fields.length === 0) {
+      const attrs_label = document.createElement("label");
+      attrs_label.classList.add("pyc-infra__field", "pyc-infra__field--wide");
+      attrs_label.textContent = "Attributes (JSON)";
+      const attrs_area = document.createElement("mj-textarea");
+      attrs_area.classList.add("pyc-infra__textarea");
+      attrs_area.setAttribute("data-role", "register-attrs");
+      attrs_area.setAttribute("placeholder", "{}");
+      attrs_area.rows = 3;
+      attrs_label.appendChild(attrs_area);
+      attrs_region.replaceChildren(attrs_label);
+      controls.attrs_area = attrs_area;
+      return;
+    }
+    const wrapper = document.createDocumentFragment();
+    for (const field of fields) {
+      const label = document.createElement("label");
+      label.classList.add("pyc-infra__field");
+      label.textContent = field.label + (field.required === true ? " *" : "");
+      const input = document.createElement("mj-text-field");
+      input.classList.add("pyc-infra__input");
+      input.setAttribute("type", field.type === "number" ? "number" : "text");
+      input.setAttribute("placeholder", typeof field.hint === "string" ? field.hint : "");
+      input.setAttribute("data-role", "register-field-" + field.name);
+      label.appendChild(input);
+      wrapper.appendChild(label);
+      controls.inputs[field.name] = input;
+    }
+    attrs_region.replaceChildren(wrapper);
+    return;
+  }
+  async _submit_register(form, controls, submit_button) {
+    const status = form.querySelector('[data-role="register-status"]');
+    const set_status = (text) => {
+      if (status instanceof HTMLElement) {
+        status.textContent = text;
+      }
+    };
+    const name = controls.name_input.value.trim();
+    const kind_name = controls.kind_select !== null ? String(controls.kind_select.value || "").trim() : controls.kind_input.value.trim();
+    if (name.length === 0 || kind_name.length === 0) {
+      set_status("Environment name and kind are required.");
       return;
     }
     let attrs = {};
-    try {
-      attrs = parse_environment_attrs(attrs_area.value);
-    } catch (reason) {
-      if (status instanceof HTMLElement) {
-        status.textContent = "Attributes must be valid JSON.";
+    if (controls.fields.length > 0) {
+      const values = {};
+      for (const field of controls.fields) {
+        values[field.name] = controls.inputs[field.name].value;
       }
-      console.warn(
-        "pychestrate.ui.infra.register_attrs_invalid",
-        { reason: String(reason) }
-      );
-      return;
+      const built = build_attrs_from_fields(controls.fields, values);
+      if (built.error !== undefined) {
+        set_status(built.error);
+        return;
+      }
+      attrs = built.attrs;
+    } else {
+      try {
+        attrs = parse_environment_attrs(controls.attrs_area.value);
+      } catch (reason) {
+        set_status("Attributes must be valid JSON.");
+        console.warn(
+          "pychestrate.ui.infra.register_attrs_invalid",
+          { reason: String(reason) }
+        );
+        return;
+      }
     }
     submit_button.toggleAttribute("disabled", true);
-    if (status instanceof HTMLElement) {
-      status.textContent = "Registering environment\u2026";
-    }
+    set_status("Registering environment\u2026");
     const outcome = await this._do_register(name, kind_name, attrs);
     submit_button.toggleAttribute("disabled", false);
-    if (status instanceof HTMLElement) {
-      status.textContent = "";
-    }
+    set_status("");
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
     );
     if (outcome.ok === true) {
       // Start the next registration from an empty form.
-      name_input.value = "";
-      kind_input.value = "";
-      attrs_area.value = "";
+      controls.name_input.value = "";
+      if (controls.kind_input !== null) {
+        controls.kind_input.value = "";
+      }
+      if (controls.attrs_area !== null) {
+        controls.attrs_area.value = "";
+      }
+      for (const field of controls.fields) {
+        controls.inputs[field.name].value = "";
+      }
       if (this._register_region !== null) {
         this._register_region.hidden = true;
       }

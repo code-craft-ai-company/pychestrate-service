@@ -9,7 +9,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from ccai.pychestrate.webservice.extensions.factory_protocol import (
     FactoryProtocolBase,
@@ -46,3 +46,15 @@ class EnvironmentKindProtocol(FactoryProtocolBase):
             ``(False, ("reason1", ...))`` otherwise.
         """
         raise NotImplementedError("Subclasses must implement validate_attrs")
+
+    @classmethod
+    def attribute_fields(cls) -> List[Dict[str, Any]]:
+        """
+            The attributes this kind takes, for a form to offer (ORC-17). Each
+            entry is ``{"name", "label", "type", "required", "hint"}`` with
+            ``type`` one of ``text``, ``url``, ``number`` or ``tags``. A kind that
+            does not describe its attributes returns ``[]`` and the form falls
+            back to a JSON box.
+        """
+        return []
+

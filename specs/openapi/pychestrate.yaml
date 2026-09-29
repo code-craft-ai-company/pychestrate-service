@@ -4284,6 +4284,46 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
+  /environment-kinds:
+    get:
+      tags: [environments]
+      summary: List the environment kinds that are loaded.
+      operationId: environment_kinds_list
+      description: |
+        Returns `{items: [{kind, fields}]}`. Each field describes an attribute
+        the kind takes (`name`, `label`, `type` of `text`, `url`, `number` or
+        `tags`, `required`, `hint`) so a form can offer them; a kind that does
+        not describe its attributes has an empty `fields` list. Needs
+        `system:environments.read`.
+      responses:
+        '200':
+          description: The loaded kinds.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, fields]
+                      properties:
+                        kind: { type: string, description: 'Stable kind name, e.g. `k8s-cluster`.' }
+                        fields:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name: { type: string }
+                              label: { type: string }
+                              type: { type: string, enum: [text, url, number, tags] }
+                              required: { type: boolean }
+                              hint: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /projects/{project_id}/environments:
     parameters:
       - $ref: '#/components/parameters/ProjectIdParam'

@@ -31,7 +31,7 @@ import os
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, List, Mapping, Optional, Tuple, Type
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Type
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -583,6 +583,21 @@ def list_environments(
         limit=limit,
     )
     rtnval = [_to_view(row=r) for r in rows]
+    return rtnval
+
+
+def list_kinds() -> List[Dict[str, Any]]:
+    """
+        The environment kinds that are loaded, with the attributes each takes.
+
+        :returns: ``[{"kind": <name>, "fields": [<attribute description>...]}]``,
+                  sorted by kind name.
+    """
+    rtnval: List[Dict[str, Any]] = []
+    for impl in list_factory_implementations(factory_protocol_name=ENVIRONMENT_KIND_PROTOCOL):
+        describe = getattr(impl, "attribute_fields", None)
+        rtnval.append({"kind": impl.kind_name(), "fields": list(describe()) if callable(describe) else []})
+    rtnval.sort(key=lambda entry: entry["kind"])
     return rtnval
 
 

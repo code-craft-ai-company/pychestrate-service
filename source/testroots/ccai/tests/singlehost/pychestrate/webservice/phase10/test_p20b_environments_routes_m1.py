@@ -175,10 +175,10 @@ def _make_env_view(
 # ---------------------------------------------------------------------------
 
 
-def test_register_environments_routes_attaches_three_endpoints():
+def test_register_environments_routes_attaches_four_endpoints():
     """
     **Feature: 6-environment-registry PR p20b**
-    **Property: register_environments_routes attaches the three
+    **Property: register_environments_routes attaches the four
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -186,6 +186,7 @@ def test_register_environments_routes_attaches_three_endpoints():
         app=app, version_prefix="/api/v1",
     )
     expected_pairs = (
+        ("/api/v1/environment-kinds", ("GET",)),
         ("/api/v1/projects/{project_id}/environments", ("GET",)),
         ("/api/v1/projects/{project_id}/environments", ("POST",)),
         (

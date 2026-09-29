@@ -21,7 +21,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from ccai.pychestrate.webservice.orchestration.infra.environment.factories.kind_protocol import (
     EnvironmentKindProtocol,
@@ -43,6 +43,20 @@ class K8sClusterEnvironmentKind(EnvironmentKindProtocol):
     @classmethod
     def kind_name(cls) -> str:
         rtnval = K8S_CLUSTER_KIND_NAME
+        return rtnval
+
+    @classmethod
+    def attribute_fields(cls) -> List[Dict[str, Any]]:
+        rtnval: List[Dict[str, Any]] = [
+            {"name": "cluster_id", "label": "Cluster id", "type": "text", "required": True,
+             "hint": "how your inventory names this cluster, e.g. prod-east-1"},
+            {"name": "region", "label": "Region", "type": "text", "required": True, "hint": "us-east-1"},
+            {"name": "api_endpoint", "label": "API endpoint", "type": "url", "required": True,
+             "hint": "https://k8s.example.com:6443"},
+            {"name": "node_pool_count", "label": "Node pools", "type": "number", "required": False, "hint": "0"},
+            {"name": "capability_tags", "label": "Capability tags", "type": "tags", "required": False,
+             "hint": "comma-separated, e.g. gpu, arm64"},
+        ]
         return rtnval
 
     @classmethod

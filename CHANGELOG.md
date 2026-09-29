@@ -194,6 +194,21 @@ preview tag.
 
 ### Changed
 
+- Registering an environment offers the kinds that exist and their fields
+  (ORC-17). The form asked for a kind name whose placeholder named a kind
+  that does not exist (`terraform`) and a JSON object whose example was
+  invalid for the only kind there is. It now lists the kinds the server has
+  loaded, shows the chosen kind's own fields (`k8s-cluster`: cluster id,
+  region, API endpoint, node pools, capability tags; required ones starred)
+  and builds the `attrs` object from them, so nothing needs to be typed as
+  JSON. A kind describes its fields with an optional `attribute_fields()`
+  on the kind protocol; a kind that does not still works through a typed
+  kind and a JSON box, whose placeholders are now `kind name` and `{}`.
+  `GET /api/v1/environment-kinds` lists the kinds and fields (read
+  permission on environments). The release-channel, pipeline, SLO and guard
+  forms still carry placeholder text of their own; those are not changed
+  here.
+
 - The setup wizard signs the new administrator in (XC-08). Finishing it used
   to send them to the sign-in page to type the password they had just
   chosen; it now signs them in and opens the home page. It goes through the
