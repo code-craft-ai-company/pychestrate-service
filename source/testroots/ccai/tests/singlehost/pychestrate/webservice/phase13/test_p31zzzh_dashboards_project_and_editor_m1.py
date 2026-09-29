@@ -268,3 +268,43 @@ def test_a_viewer_who_cannot_change_dashboards_is_told_so_instead_of_getting_a_d
         ("You can view this layout but not change it. Ask an administrator for dashboard write access.", 0),
     )
     return
+
+
+def test_a_long_metric_name_stays_inside_its_tile_card(browser: Browser):
+    """
+    **Feature: the dashboard editor (ORC-16)**
+    **Property: a tile's title (a metric name is one long unbroken word) wraps
+    inside the card instead of running past its border.**
+    """
+    page, _requested, _patched = _open(browser, "/dashboards/{}/edit?project_id={}".format(BOARD, BETA))
+    try:
+        page.wait_for_selector('[data-role="add-tile"]')
+        page.wait_for_timeout(500)
+        page.evaluate(
+            """() => {
+                const select = document.querySelector('[data-role="add-metric"]');
+                const option = document.createElement('mj-option');
+                option.setAttribute('value', 'pychestrate_resource_reservation_granted_total_by_pool_and_lab');
+                option.textContent = option.getAttribute('value');
+                select.appendChild(option);
+                select.value = option.getAttribute('value');
+            }"""
+        )
+        page.click('[data-role="add-tile"]')
+        page.wait_for_selector(".pyc-metrics__tile-title")
+        boxes = page.evaluate(
+            """() => {
+                const card = document.querySelector('.pyc-metrics__tile').getBoundingClientRect();
+                const title = document.querySelector('.pyc-metrics__tile-title');
+                return {card_right: card.right, title_right: title.getBoundingClientRect().right,
+                        text: title.textContent, overflow: title.scrollWidth - title.clientWidth};
+            }"""
+        )
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        ("granted_total_by_pool_and_lab" in boxes["text"], boxes["title_right"] <= boxes["card_right"] + 1, boxes["overflow"] <= 1),
+        (True, True, True),
+    )
+    return

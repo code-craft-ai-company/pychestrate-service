@@ -245,6 +245,8 @@ pyc-alert-rules {
     font-size: var(--pyc-font-size-caption, 0.8125rem);
     font-weight: 600;
     color: var(--pyc-metrics-fg-muted);
+    /* a metric name is one long unbroken word; wrap it inside the card */
+    overflow-wrap: anywhere;
 }
 
 /* Dashboard-layout editor -- per-tile reorder / remove actions */
