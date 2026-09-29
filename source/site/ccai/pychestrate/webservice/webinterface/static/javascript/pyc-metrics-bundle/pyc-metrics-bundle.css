@@ -365,3 +365,24 @@ pyc-alert-rules {
 .pyc-metrics__projects-notice--error {
     color: var(--pyc-metrics-error-fg);
 }
+
+/* A "single number" dashboard tile: the latest value, large, with when it was read */
+.pyc-metrics__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+}
+
+.pyc-metrics__stat-value {
+    font-size: var(--pyc-font-size-h1, 1.75rem);
+    font-weight: var(--pyc-font-weight-heading, 600);
+    line-height: var(--pyc-line-height-heading, 1.25);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.pyc-metrics__stat-caption {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-metrics-fg-muted);
+}

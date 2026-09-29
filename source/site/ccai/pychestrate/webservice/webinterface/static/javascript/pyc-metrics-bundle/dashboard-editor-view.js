@@ -1,6 +1,7 @@
 import {
   build_catalog_url,
-  extract_catalog
+  extract_catalog,
+  metric_display_name
 } from "./timeseries-view.js";
 import {
   extract_projects
@@ -672,7 +673,11 @@ class PycDashboardEditor extends HTMLElement {
     const title = document.createElement("div");
     title.classList.add("pyc-metrics__tile-title");
     const metric = editor_tile_metric(tile);
-    title.textContent = (metric.length > 0 ? metric : "(no metric)") + " \xB7 " + tile.kind;
+    const kind_option = TILE_KIND_OPTIONS.find((option) => option.value === tile.kind);
+    title.textContent = (metric.length > 0 ? metric_display_name(metric) : "(no metric)") + " \xB7 " + (kind_option !== void 0 ? kind_option.label : tile.kind);
+    if (metric.length > 0) {
+      title.title = metric;
+    }
     card.appendChild(title);
     const actions = document.createElement("div");
     actions.classList.add("pyc-metrics__tile-actions");

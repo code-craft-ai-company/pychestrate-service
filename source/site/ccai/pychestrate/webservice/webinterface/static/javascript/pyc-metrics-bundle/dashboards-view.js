@@ -1,9 +1,12 @@
 import { may } from "../shared/permissions.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { keep_list_state_on_back, mirror_to_query, query_value } from "../shared/view-state.js";
+import { format_clock_instant, parse_timestamp } from "../shared/datetime.js";
 import {
   build_chart_element,
-  build_timeseries_url
+  build_range_url,
+  build_timeseries_url,
+  metric_display_name
 } from "./timeseries-view.js";
 import {
   announce_session_expired,
@@ -912,7 +915,12 @@ class PycDashboardDetail extends HTMLElement {
     const title = document.createElement("div");
     title.classList.add("pyc-metrics__tile-title");
     const metric_name = tile_metric_name(tile);
-    title.textContent = metric_name.length > 0 ? metric_name : tile.kind;
+    // The metric's storage name is not what a person reads; it stays on hover
+    // for anyone who has to quote it.
+    title.textContent = metric_name.length > 0 ? metric_display_name(metric_name) : tile.kind;
+    if (metric_name.length > 0) {
+      title.title = metric_name;
+    }
     card.appendChild(title);
     const body = document.createElement("div");
     body.classList.add("pyc-metrics__tile-body");
@@ -923,15 +931,19 @@ class PycDashboardDetail extends HTMLElement {
     body.appendChild(placeholder);
     card.appendChild(body);
     if (metric_name.length > 0) {
-      void this._load_tile_metric(metric_name, body);
+      void this._load_tile_metric(tile, metric_name, body);
     }
     return card;
   }
-  async _load_tile_metric(metric_name, body) {
+  async _load_tile_metric(tile, metric_name, body) {
     let points = [];
     let errored = false;
+    // A tile keeps the range it was given; one without a range shows the last week.
+    const configured = tile.config !== null && typeof tile.config === "object" ? tile.config.range_seconds : void 0;
+    const range_seconds = typeof configured === "number" && Number.isFinite(configured) && configured > 0 ? configured : 0;
     try {
-      const url = build_timeseries_url(metric_name, "7d", /* @__PURE__ */ new Date());
+      const now = /* @__PURE__ */ new Date();
+      const url = range_seconds > 0 ? build_range_url(metric_name, range_seconds, now) : build_timeseries_url(metric_name, "7d", now);
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
@@ -969,9 +981,47 @@ class PycDashboardDetail extends HTMLElement {
       body.appendChild(notice);
       return;
     }
+    if (tile.kind === "metric-single-stat") {
+      body.appendChild(build_single_stat(points));
+      return;
+    }
     body.appendChild(build_chart_element(points, metric_name));
     return;
   }
+}
+function format_stat_value(value) {
+  if (typeof value !== "number" || Number.isFinite(value) === false) {
+    return String(value);
+  }
+  return value.toLocaleString(void 0, { maximumFractionDigits: 3 });
+}
+// A "single number" tile shows the latest value, not a chart of the series.
+function build_single_stat(points) {
+  let latest = null;
+  let latest_time = -Infinity;
+  for (const point of points) {
+    const at = new Date(point.observed_at).getTime();
+    if (Number.isFinite(at) === true && at >= latest_time) {
+      latest = point;
+      latest_time = at;
+    }
+  }
+  const stat = document.createElement("div");
+  stat.classList.add("pyc-metrics__stat");
+  stat.setAttribute("data-role", "tile-stat");
+  const value = document.createElement("span");
+  value.classList.add("pyc-metrics__stat-value");
+  value.setAttribute("data-role", "tile-stat-value");
+  value.textContent = latest !== null ? format_stat_value(latest.value) : "\u2014";
+  stat.appendChild(value);
+  const observed = latest !== null ? parse_timestamp(latest.observed_at) : null;
+  if (observed !== null) {
+    const caption = document.createElement("span");
+    caption.classList.add("pyc-metrics__stat-caption");
+    caption.textContent = "as of " + format_clock_instant(observed);
+    stat.appendChild(caption);
+  }
+  return stat;
 }
 function extract_dashboards(body) {
   let raw = [];
@@ -1024,6 +1074,7 @@ export {
   dashboard_href,
   dashboard_id_from_path,
   extract_dashboards,
+  format_stat_value,
   project_id_for_page,
   short_metric_id,
   tile_metric_name

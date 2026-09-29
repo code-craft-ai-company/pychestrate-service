@@ -194,6 +194,22 @@ preview tag.
 
 ### Changed
 
+- Charts read as times and dashboard tiles are what they say they are
+  (ORC-15). The chart component draws an x value as the text it is given, so the
+  raw ISO timestamps ("2026-09-29T10:00:00.000Z") were printed in full and
+  overprinted each other. Axis labels are now "HH:MM" (or "MM-DD HH:MM" for a
+  series longer than a day) in the viewer's zone; the chart has an accessible
+  name ("... over time, times in PDT"), and the timeseries page gives it a title
+  (the metric as words) and a subtitle (the range and the zone). On a dashboard a
+  "single number" tile shows its latest value with when it was read instead of
+  drawing a chart, a tile asks for the range it was configured with (a tile with
+  none still shows a week), and tile titles, in the viewer and in the editor,
+  show the metric as words ("Resource reservation granted total") with the
+  storage name on hover and the tile kind by name ("Line chart"). Not done:
+  units on the axes (the metric catalog records none), a legend, the tile
+  layout (position and size are still ignored), and the Test Metrics page's
+  chart (I could not find the chart the report describes there).
+
 - SLOs and pipelines can be deleted from their pages (ORC-26, XC-15). The API
   has always allowed it and nothing in the UI did. The SLO list has a Delete
   action per row; the pipeline page has a Delete button. Both ask first: "Delete

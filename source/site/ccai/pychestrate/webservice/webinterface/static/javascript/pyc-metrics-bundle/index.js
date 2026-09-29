@@ -644,6 +644,52 @@ function extract_projects(body) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
+var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+function pad_two(number) {
+  const rtnval = (number < 10 ? "0" : "") + String(number);
+  return rtnval;
+}
+function parse_timestamp(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  let text = value.trim();
+  if (ISO_DATE_TIME_PATTERN.test(text) === true && ZONE_DESIGNATOR_PATTERN.test(text) === false) {
+    text = text.replace(" ", "T") + "Z";
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+function zone_label(instant) {
+  try {
+    const parts = new Intl.DateTimeFormat(void 0, { timeZoneName: "short" }).formatToParts(instant);
+    for (const part of parts) {
+      if (part.type === "timeZoneName" && part.value.length > 0) {
+        const rtnval2 = part.value;
+        return rtnval2;
+      }
+    }
+  } catch (error) {
+  }
+  const offset_minutes = -instant.getTimezoneOffset();
+  const sign = offset_minutes >= 0 ? "+" : "-";
+  const magnitude = Math.abs(offset_minutes);
+  const rtnval = "UTC" + sign + pad_two(Math.floor(magnitude / 60)) + ":" + pad_two(magnitude % 60);
+  return rtnval;
+}
+function format_clock_instant(instant) {
+  const rtnval = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes()) + ":" + pad_two(instant.getSeconds()) + " " + zone_label(instant);
+  return rtnval;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/timeseries-view.js
 var METRICS_API_PATH = "/api/v1/metrics";
 var TIME_RANGE_PRESETS = [
@@ -676,6 +722,35 @@ function build_timeseries_url(metric, range_id, now) {
   const query = params.toString();
   const rtnval = METRICS_API_PATH + "/timeseries?" + query;
   return rtnval;
+}
+function build_range_url(metric, range_seconds, now) {
+  const params = new URLSearchParams();
+  params.set("metric", metric);
+  params.set("from", new Date(now.getTime() - range_seconds * 1e3).toISOString());
+  params.set("to", now.toISOString());
+  const rtnval = METRICS_API_PATH + "/timeseries?" + params.toString();
+  return rtnval;
+}
+function metric_display_name(metric) {
+  if (typeof metric !== "string" || metric.length === 0) {
+    return "";
+  }
+  const words = metric.replace(/^pychestrate_/, "").replace(/_/g, " ").trim();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : metric;
+}
+function axis_label(instant, spans_days) {
+  const clock = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
+  return spans_days === true ? pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate()) + " " + clock : clock;
+}
+function axis_labels(times) {
+  const known = times.filter((time) => time !== null);
+  if (known.length === 0) {
+    return times.map(() => "");
+  }
+  const first = Math.min(...known.map((time) => time.getTime()));
+  const last = Math.max(...known.map((time) => time.getTime()));
+  const spans_days = last - first > 24 * 3600 * 1e3;
+  return times.map((time) => time === null ? "" : axis_label(time, spans_days));
 }
 function build_catalog_url() {
   const rtnval = METRICS_API_PATH + "/catalog";
@@ -932,12 +1007,16 @@ var PycTimeseriesExplorer = class extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const chart = build_chart_element(points, this._state.metric);
+    const chart = build_chart_element(points, this._state.metric, {
+      title: metric_display_name(this._state.metric),
+      subtitle: resolve_range_preset(this._state.rangeId).label
+    });
     region.appendChild(chart);
     return;
   }
 };
-function build_chart_element(points, metric_name) {
+function build_chart_element(points, metric_name, options) {
+  const settings = options !== null && typeof options === "object" ? options : {};
   const chart = document.createElement("mj-chart");
   chart.classList.add("pyc-metrics__chart");
   chart.setAttribute("data-role", "timeseries-chart");
@@ -948,11 +1027,25 @@ function build_chart_element(points, metric_name) {
     const rtnval = left_time - right_time;
     return rtnval;
   });
+  const times = sorted.map((point) => parse_timestamp(point.observed_at));
+  const labels = axis_labels(times);
   const series_points = [];
-  for (const point of sorted) {
-    series_points.push({ x: point.observed_at, y: point.value });
+  sorted.forEach((point, index) => {
+    series_points.push({ x: labels[index], y: point.value });
+  });
+  const series_name = metric_name !== null && metric_name.length > 0 ? metric_display_name(metric_name) : "value";
+  const zone = times.find((time) => time !== null);
+  const zone_text = zone !== void 0 ? "times in " + zone_label(zone) : "";
+  chart.setAttribute("aria-label", series_name + (zone_text.length > 0 ? " over time, " + zone_text : " over time"));
+  if (typeof settings.title === "string" && settings.title.length > 0) {
+    const title = document.createElement("mj-chart-title");
+    title.setAttribute("text", settings.title);
+    const subtitle = [typeof settings.subtitle === "string" ? settings.subtitle : "", zone_text].filter((part) => part.length > 0).join(" \xB7 ");
+    if (subtitle.length > 0) {
+      title.setAttribute("subtitle", subtitle);
+    }
+    chart.appendChild(title);
   }
-  const series_name = metric_name !== null && metric_name.length > 0 ? metric_name : "value";
   chart.data = {
     series: [
       {
@@ -2021,7 +2114,10 @@ var PycDashboardDetail = class extends HTMLElement {
     const title = document.createElement("div");
     title.classList.add("pyc-metrics__tile-title");
     const metric_name = tile_metric_name(tile);
-    title.textContent = metric_name.length > 0 ? metric_name : tile.kind;
+    title.textContent = metric_name.length > 0 ? metric_display_name(metric_name) : tile.kind;
+    if (metric_name.length > 0) {
+      title.title = metric_name;
+    }
     card.appendChild(title);
     const body = document.createElement("div");
     body.classList.add("pyc-metrics__tile-body");
@@ -2032,15 +2128,18 @@ var PycDashboardDetail = class extends HTMLElement {
     body.appendChild(placeholder);
     card.appendChild(body);
     if (metric_name.length > 0) {
-      void this._load_tile_metric(metric_name, body);
+      void this._load_tile_metric(tile, metric_name, body);
     }
     return card;
   }
-  async _load_tile_metric(metric_name, body) {
+  async _load_tile_metric(tile, metric_name, body) {
     let points = [];
     let errored = false;
+    const configured = tile.config !== null && typeof tile.config === "object" ? tile.config.range_seconds : void 0;
+    const range_seconds = typeof configured === "number" && Number.isFinite(configured) && configured > 0 ? configured : 0;
     try {
-      const url = build_timeseries_url(metric_name, "7d", /* @__PURE__ */ new Date());
+      const now = /* @__PURE__ */ new Date();
+      const url = range_seconds > 0 ? build_range_url(metric_name, range_seconds, now) : build_timeseries_url(metric_name, "7d", now);
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
@@ -2078,10 +2177,47 @@ var PycDashboardDetail = class extends HTMLElement {
       body.appendChild(notice);
       return;
     }
+    if (tile.kind === "metric-single-stat") {
+      body.appendChild(build_single_stat(points));
+      return;
+    }
     body.appendChild(build_chart_element(points, metric_name));
     return;
   }
 };
+function format_stat_value(value) {
+  if (typeof value !== "number" || Number.isFinite(value) === false) {
+    return String(value);
+  }
+  return value.toLocaleString(void 0, { maximumFractionDigits: 3 });
+}
+function build_single_stat(points) {
+  let latest = null;
+  let latest_time = -Infinity;
+  for (const point of points) {
+    const at = new Date(point.observed_at).getTime();
+    if (Number.isFinite(at) === true && at >= latest_time) {
+      latest = point;
+      latest_time = at;
+    }
+  }
+  const stat = document.createElement("div");
+  stat.classList.add("pyc-metrics__stat");
+  stat.setAttribute("data-role", "tile-stat");
+  const value = document.createElement("span");
+  value.classList.add("pyc-metrics__stat-value");
+  value.setAttribute("data-role", "tile-stat-value");
+  value.textContent = latest !== null ? format_stat_value(latest.value) : "\u2014";
+  stat.appendChild(value);
+  const observed = latest !== null ? parse_timestamp(latest.observed_at) : null;
+  if (observed !== null) {
+    const caption = document.createElement("span");
+    caption.classList.add("pyc-metrics__stat-caption");
+    caption.textContent = "as of " + format_clock_instant(observed);
+    stat.appendChild(caption);
+  }
+  return stat;
+}
 function extract_dashboards(body) {
   let raw = [];
   if (Array.isArray(body) === true) {
@@ -5006,7 +5142,11 @@ var PycDashboardEditor = class extends HTMLElement {
     const title = document.createElement("div");
     title.classList.add("pyc-metrics__tile-title");
     const metric = editor_tile_metric(tile);
-    title.textContent = (metric.length > 0 ? metric : "(no metric)") + " \xB7 " + tile.kind;
+    const kind_option = TILE_KIND_OPTIONS.find((option) => option.value === tile.kind);
+    title.textContent = (metric.length > 0 ? metric_display_name(metric) : "(no metric)") + " \xB7 " + (kind_option !== void 0 ? kind_option.label : tile.kind);
+    if (metric.length > 0) {
+      title.title = metric;
+    }
     card.appendChild(title);
     const actions = document.createElement("div");
     actions.classList.add("pyc-metrics__tile-actions");

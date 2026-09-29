@@ -1,3 +1,4 @@
+import { pad_two, parse_timestamp, zone_label } from "../shared/datetime.js";
 const METRICS_API_PATH = "/api/v1/metrics";
 const TIME_RANGE_PRESETS = [
   { id: "1h", label: "Last hour", hours: 1 },
@@ -29,6 +30,42 @@ function build_timeseries_url(metric, range_id, now) {
   const query = params.toString();
   const rtnval = METRICS_API_PATH + "/timeseries?" + query;
   return rtnval;
+}
+// A timeseries over an arbitrary number of seconds (a dashboard tile's own range).
+function build_range_url(metric, range_seconds, now) {
+  const params = new URLSearchParams();
+  params.set("metric", metric);
+  params.set("from", new Date(now.getTime() - range_seconds * 1e3).toISOString());
+  params.set("to", now.toISOString());
+  const rtnval = METRICS_API_PATH + "/timeseries?" + params.toString();
+  return rtnval;
+}
+// "pychestrate_resource_reservation_granted_total" -> "Resource reservation granted total":
+// the product prefix and underscores are the storage name, not what a person reads.
+function metric_display_name(metric) {
+  if (typeof metric !== "string" || metric.length === 0) {
+    return "";
+  }
+  const words = metric.replace(/^pychestrate_/, "").replace(/_/g, " ").trim();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : metric;
+}
+// The x-axis label of a point: the time of day when the whole series fits in a
+// day, otherwise the date and the time ("09-29 10:00"), in the viewer's zone.
+// The component draws the label text as given, so the raw ISO string
+// ("2026-09-29T10:00:00.000Z") was printed in full and the labels overprinted.
+function axis_label(instant, spans_days) {
+  const clock = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
+  return spans_days === true ? pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate()) + " " + clock : clock;
+}
+function axis_labels(times) {
+  const known = times.filter((time) => time !== null);
+  if (known.length === 0) {
+    return times.map(() => "");
+  }
+  const first = Math.min(...known.map((time) => time.getTime()));
+  const last = Math.max(...known.map((time) => time.getTime()));
+  const spans_days = last - first > 24 * 3600 * 1e3;
+  return times.map((time) => (time === null ? "" : axis_label(time, spans_days)));
 }
 function build_catalog_url() {
   const rtnval = METRICS_API_PATH + "/catalog";
@@ -285,7 +322,10 @@ class PycTimeseriesExplorer extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const chart = build_chart_element(points, this._state.metric);
+    const chart = build_chart_element(points, this._state.metric, {
+      title: metric_display_name(this._state.metric),
+      subtitle: resolve_range_preset(this._state.rangeId).label
+    });
     region.appendChild(chart);
     return;
   }
@@ -296,7 +336,8 @@ class PycTimeseriesExplorer extends HTMLElement {
  * collapsing what used to be the area + line pair into one path.
  * External theming reaches the path via mj-chart::part(area).
  */
-function build_chart_element(points, metric_name) {
+function build_chart_element(points, metric_name, options) {
+  const settings = options !== null && typeof options === "object" ? options : {};
   const chart = document.createElement("mj-chart");
   chart.classList.add("pyc-metrics__chart");
   chart.setAttribute("data-role", "timeseries-chart");
@@ -307,13 +348,29 @@ function build_chart_element(points, metric_name) {
     const rtnval = left_time - right_time;
     return rtnval;
   });
+  const times = sorted.map((point) => parse_timestamp(point.observed_at));
+  const labels = axis_labels(times);
   const series_points = [];
-  for (const point of sorted) {
-    series_points.push({ x: point.observed_at, y: point.value });
-  }
+  sorted.forEach((point, index) => {
+    series_points.push({ x: labels[index], y: point.value });
+  });
   const series_name = metric_name !== null && metric_name.length > 0
-    ? metric_name
+    ? metric_display_name(metric_name)
     : "value";
+  const zone = times.find((time) => time !== null);
+  const zone_text = zone !== void 0 ? "times in " + zone_label(zone) : "";
+  // A figure needs a name: the drawing is hidden from assistive technology, the
+  // component's own table holds the values.
+  chart.setAttribute("aria-label", series_name + (zone_text.length > 0 ? " over time, " + zone_text : " over time"));
+  if (typeof settings.title === "string" && settings.title.length > 0) {
+    const title = document.createElement("mj-chart-title");
+    title.setAttribute("text", settings.title);
+    const subtitle = [typeof settings.subtitle === "string" ? settings.subtitle : "", zone_text].filter((part) => part.length > 0).join(" \xB7 ");
+    if (subtitle.length > 0) {
+      title.setAttribute("subtitle", subtitle);
+    }
+    chart.appendChild(title);
+  }
   chart.data = {
     series: [
       {
@@ -382,9 +439,12 @@ function extract_catalog(body) {
 export {
   PycTimeseriesExplorer,
   TIME_RANGE_PRESETS,
+  axis_labels,
   build_catalog_url,
   build_chart_element,
+  build_range_url,
   build_timeseries_url,
   extract_catalog,
+  metric_display_name,
   resolve_range_preset
 };
