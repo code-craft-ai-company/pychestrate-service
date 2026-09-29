@@ -531,3 +531,10 @@ pyc-guards {
 .pyc-infra__section > mj-button {
     align-self: flex-start;
 }
+
+/* The short id after a row's title: there to be quoted, not to lead (ORC-11). */
+.pyc-infra__run-id {
+    color: var(--pyc-infra-fg-muted);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    font-variant-numeric: tabular-nums;
+}

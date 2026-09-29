@@ -45,6 +45,54 @@ function format_instant(instant) {
   const rtnval = date_part + " " + time_part + " " + zone_label(instant);
   return rtnval;
 }
+function format_duration(started, finished, still_running, now) {
+  const start = parse_timestamp(started);
+  if (start === null) {
+    return "\u2014";
+  }
+  let end = parse_timestamp(finished);
+  let open = false;
+  if (end === null) {
+    if (still_running !== true) {
+      return "\u2014";
+    }
+    end = now instanceof Date ? now : /* @__PURE__ */ new Date();
+    open = true;
+  }
+  const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1e3));
+  let text;
+  if (total < 60) {
+    text = String(total) + "s";
+  } else if (total < 3600) {
+    text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";
+  } else if (total < 86400) {
+    text = String(Math.floor(total / 3600)) + "h " + String(Math.floor(total % 3600 / 60)) + "m";
+  } else {
+    text = String(Math.floor(total / 86400)) + "d " + String(Math.floor(total % 86400 / 3600)) + "h";
+  }
+  return open ? text + " so far" : text;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function build_title(build) {
+  const kind = typeof build.runner_kind === "string" && build.runner_kind.length > 0 ? build.runner_kind : "build";
+  const inputs = build.inputs !== null && typeof build.inputs === "object" ? build.inputs : {};
+  const target = typeof inputs.target === "string" ? inputs.target.trim() : "";
+  return target.length > 0 ? kind + " \xB7 " + target : kind;
+}
+function build_source_label(build) {
+  const source = build.source;
+  if (source === null || source === void 0 || typeof source !== "object") {
+    return "";
+  }
+  const ref = typeof source.ref === "string" ? source.ref : "";
+  let repository = typeof source.url === "string" ? source.url : "";
+  repository = repository.replace(/^[a-z+]+:\/\//i, "").replace(/\.git$/i, "").replace(/^[^@/]*@/, "");
+  if (ref.length > 0 && repository.length > 0) {
+    return ref + " @ " + repository;
+  }
+  return ref.length > 0 ? ref : repository;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/builds-list-view.js
 var BUILD_STATES = [
@@ -798,25 +846,37 @@ var PycBuildsList = class extends HTMLElement {
     table.rowAttrs = (build) => ({ "data-build-id": build.run_id });
     table.columns = [
       {
+        // What ran comes first (runner and target); the short id follows.
         key: "run_id",
         label: "Build",
-        width: "10rem",
+        width: "20rem",
         render: (build) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-builds__build-link");
           link.setAttribute(
             "href",
             build_build_detail_link(build.project_id, build.run_id)
           );
-          link.textContent = short_id(build.run_id);
+          link.textContent = build_title(build);
           link.title = build.run_id;
-          return link;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-builds__build-id");
+          id.textContent = " " + short_id(build.run_id);
+          cell.appendChild(id);
+          return cell;
         }
       },
       {
-        key: "runner_kind",
-        label: "Runner kind",
-        width: "10rem"
+        key: "source",
+        label: "Source",
+        width: "18rem",
+        sortable: false,
+        render: (build) => {
+          const label = build_source_label(build);
+          return label.length > 0 ? label : "\u2014";
+        }
       },
       {
         key: "state",
@@ -849,10 +909,11 @@ var PycBuildsList = class extends HTMLElement {
         render: (build) => format_timestamp(build.started_at)
       },
       {
-        key: "finished_at",
-        label: "Finished",
-        width: "12rem",
-        render: (build) => format_timestamp(build.finished_at)
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (build) => format_duration(build.started_at, build.finished_at, build.state === "running")
       }
     ];
     table.rows = this._builds;

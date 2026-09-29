@@ -99,3 +99,37 @@ export function format_timestamp(value) {
   const rtnval = format_instant(parsed);
   return rtnval;
 }
+
+/*
+ * How long something ran, for a list row (ORC-11): "45s", "3m 12s",
+ * "2h 5m", "1d 4h". A run with no start has no duration ("—"). One that is
+ * still running (``still_running``) is measured up to ``now`` and says so
+ * ("3m 12s so far"); one that has ended without a recorded finish has none.
+ */
+export function format_duration(started, finished, still_running, now) {
+  const start = parse_timestamp(started);
+  if (start === null) {
+    return "—";
+  }
+  let end = parse_timestamp(finished);
+  let open = false;
+  if (end === null) {
+    if (still_running !== true) {
+      return "—";
+    }
+    end = now instanceof Date ? now : new Date();
+    open = true;
+  }
+  const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000));
+  let text;
+  if (total < 60) {
+    text = String(total) + "s";
+  } else if (total < 3600) {
+    text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";
+  } else if (total < 86400) {
+    text = String(Math.floor(total / 3600)) + "h " + String(Math.floor((total % 3600) / 60)) + "m";
+  } else {
+    text = String(Math.floor(total / 86400)) + "d " + String(Math.floor((total % 86400) / 3600)) + "h";
+  }
+  return open ? text + " so far" : text;
+}

@@ -73,9 +73,15 @@ Follow a run
 
 **Orchestration**, **Runs** lists runs newest first. Filter by **State** or by
 **Project**, and choose **Refresh** to reload; the page notes when it last did.
-The columns are **Run** (a short id that links to the run's page), **Project**,
-**State**, **Created**, **Started** and **Completed**. On a narrow screen the
-table scrolls sideways as one piece.
+The columns are **Job** (what ran: the job's name, which links to the run's
+page, and the short id after it for quoting), **Type** (for example *Test ·
+testbase* or *Build · makefile*), **Project**, **State**, **Created** and
+**Duration** (how long it ran, or how long so far while it is running; a dash
+for a run that has not started). The **Builds** and **Provisioning runs** pages
+lead the same way: a build with its runner and target (*makefile · docs*) and
+the source it came from (*main @ github.com/acme/widgets*), a provisioning run
+with its action and driver (*apply · terraform*). On a narrow screen the table
+scrolls sideways as one piece.
 
 A run that has been sent to a pod that is not answering shows that it is
 waiting for that pod, and when the pod was last heard from. It starts when the

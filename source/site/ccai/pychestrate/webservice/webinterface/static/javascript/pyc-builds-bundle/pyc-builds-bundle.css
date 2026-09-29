@@ -411,3 +411,10 @@ pyc-build-detail {
     padding: 1rem 0;
     color: var(--pyc-builds-fg-muted);
 }
+
+/* The short id after a row's title: there to be quoted, not to lead (ORC-11). */
+.pyc-builds__build-id {
+    color: var(--pyc-builds-fg-muted);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    font-variant-numeric: tabular-nums;
+}

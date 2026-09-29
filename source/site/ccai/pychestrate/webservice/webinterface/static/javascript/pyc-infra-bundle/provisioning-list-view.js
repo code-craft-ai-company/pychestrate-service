@@ -1,4 +1,6 @@
+import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
+import { provisioning_title } from "../shared/run-labels.js";
 import {
   build_environments_query_url,
   format_timestamp,
@@ -584,23 +586,28 @@ class PycProvisioningList extends HTMLElement {
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
+        // What it did comes first (the action and the driver); the short id follows.
         key: "run_id",
         label: "Run",
-        width: "10rem",
+        width: "18rem",
         render: (run) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-infra__run-link");
           link.setAttribute(
             "href",
             build_provisioning_detail_link(run.project_id, run.run_id)
           );
-          link.textContent = short_id(run.run_id);
+          link.textContent = provisioning_title(run);
           link.title = run.run_id;
-          return link;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-infra__run-id");
+          id.textContent = " " + short_id(run.run_id);
+          cell.appendChild(id);
+          return cell;
         }
       },
-      { key: "action", label: "Action", width: "8rem" },
-      { key: "driver_name", label: "Driver", width: "12rem" },
       {
         key: "state",
         label: "State",
@@ -620,10 +627,11 @@ class PycProvisioningList extends HTMLElement {
         render: (run) => format_timestamp(run.started_at)
       },
       {
-        key: "finished_at",
-        label: "Finished",
-        width: "12rem",
-        render: (run) => format_timestamp(run.finished_at)
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (run) => format_duration(run.started_at, run.finished_at, run.state === "running")
       }
     ];
     table.rows = this._runs;

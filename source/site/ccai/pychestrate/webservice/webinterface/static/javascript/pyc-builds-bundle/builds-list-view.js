@@ -1,4 +1,5 @@
-import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { build_source_label, build_title } from "../shared/run-labels.js";
 const BUILD_STATES = [
   "pending",
   "running",
@@ -768,25 +769,37 @@ class PycBuildsList extends HTMLElement {
     table.rowAttrs = (build) => ({ "data-build-id": build.run_id });
     table.columns = [
       {
+        // What ran comes first (runner and target); the short id follows.
         key: "run_id",
         label: "Build",
-        width: "10rem",
+        width: "20rem",
         render: (build) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-builds__build-link");
           link.setAttribute(
             "href",
             build_build_detail_link(build.project_id, build.run_id)
           );
-          link.textContent = short_id(build.run_id);
+          link.textContent = build_title(build);
           link.title = build.run_id;
-          return link;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-builds__build-id");
+          id.textContent = " " + short_id(build.run_id);
+          cell.appendChild(id);
+          return cell;
         }
       },
       {
-        key: "runner_kind",
-        label: "Runner kind",
-        width: "10rem"
+        key: "source",
+        label: "Source",
+        width: "18rem",
+        sortable: false,
+        render: (build) => {
+          const label = build_source_label(build);
+          return label.length > 0 ? label : "\u2014";
+        }
       },
       {
         key: "state",
@@ -819,10 +832,11 @@ class PycBuildsList extends HTMLElement {
         render: (build) => format_timestamp(build.started_at)
       },
       {
-        key: "finished_at",
-        label: "Finished",
-        width: "12rem",
-        render: (build) => format_timestamp(build.finished_at)
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (build) => format_duration(build.started_at, build.finished_at, build.state === "running")
       }
     ];
     table.rows = this._builds;

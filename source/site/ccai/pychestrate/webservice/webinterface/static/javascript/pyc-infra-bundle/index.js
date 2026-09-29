@@ -87,6 +87,33 @@ function format_instant(instant) {
   const rtnval = date_part + " " + time_part + " " + zone_label(instant);
   return rtnval;
 }
+function format_duration(started, finished, still_running, now) {
+  const start = parse_timestamp(started);
+  if (start === null) {
+    return "\u2014";
+  }
+  let end = parse_timestamp(finished);
+  let open = false;
+  if (end === null) {
+    if (still_running !== true) {
+      return "\u2014";
+    }
+    end = now instanceof Date ? now : /* @__PURE__ */ new Date();
+    open = true;
+  }
+  const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1e3));
+  let text;
+  if (total < 60) {
+    text = String(total) + "s";
+  } else if (total < 3600) {
+    text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";
+  } else if (total < 86400) {
+    text = String(Math.floor(total / 3600)) + "h " + String(Math.floor(total % 3600 / 60)) + "m";
+  } else {
+    text = String(Math.floor(total / 86400)) + "d " + String(Math.floor(total % 86400 / 3600)) + "h";
+  }
+  return open ? text + " so far" : text;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
@@ -1852,6 +1879,13 @@ var PycEnvironmentDetail = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function provisioning_title(run) {
+  const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
+  const driver = typeof run.driver_name === "string" ? run.driver_name : "";
+  return driver.length > 0 ? action + " \xB7 " + driver : action;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
   "pending",
@@ -2412,23 +2446,28 @@ var PycProvisioningList = class extends HTMLElement {
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
+        // What it did comes first (the action and the driver); the short id follows.
         key: "run_id",
         label: "Run",
-        width: "10rem",
+        width: "18rem",
         render: (run) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-infra__run-link");
           link.setAttribute(
             "href",
             build_provisioning_detail_link(run.project_id, run.run_id)
           );
-          link.textContent = short_id(run.run_id);
+          link.textContent = provisioning_title(run);
           link.title = run.run_id;
-          return link;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-infra__run-id");
+          id.textContent = " " + short_id(run.run_id);
+          cell.appendChild(id);
+          return cell;
         }
       },
-      { key: "action", label: "Action", width: "8rem" },
-      { key: "driver_name", label: "Driver", width: "12rem" },
       {
         key: "state",
         label: "State",
@@ -2448,10 +2487,11 @@ var PycProvisioningList = class extends HTMLElement {
         render: (run) => format_timestamp(run.started_at)
       },
       {
-        key: "finished_at",
-        label: "Finished",
-        width: "12rem",
-        render: (run) => format_timestamp(run.finished_at)
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (run) => format_duration(run.started_at, run.finished_at, run.state === "running")
       }
     ];
     table.rows = this._runs;

@@ -49,6 +49,61 @@ function format_clock_instant(instant) {
   const rtnval = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes()) + ":" + pad_two(instant.getSeconds()) + " " + zone_label(instant);
   return rtnval;
 }
+function format_duration(started, finished, still_running, now) {
+  const start = parse_timestamp(started);
+  if (start === null) {
+    return "\u2014";
+  }
+  let end = parse_timestamp(finished);
+  let open = false;
+  if (end === null) {
+    if (still_running !== true) {
+      return "\u2014";
+    }
+    end = now instanceof Date ? now : /* @__PURE__ */ new Date();
+    open = true;
+  }
+  const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1e3));
+  let text;
+  if (total < 60) {
+    text = String(total) + "s";
+  } else if (total < 3600) {
+    text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";
+  } else if (total < 86400) {
+    text = String(Math.floor(total / 3600)) + "h " + String(Math.floor(total % 3600 / 60)) + "m";
+  } else {
+    text = String(Math.floor(total / 86400)) + "d " + String(Math.floor(total % 86400 / 3600)) + "h";
+  }
+  return open ? text + " so far" : text;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+var JOB_TYPE_KINDS = [
+  ["rpa-", "RPA"],
+  ["build-", "Build"],
+  ["provision-", "Provisioning"]
+];
+function job_type_label(job_type) {
+  const text = typeof job_type === "string" ? job_type.trim() : "";
+  if (text.length === 0) {
+    return "\u2014";
+  }
+  for (const [prefix, label] of JOB_TYPE_KINDS) {
+    if (text.startsWith(prefix) === true) {
+      const detail = text.slice(prefix.length);
+      return detail.length > 0 ? label + " \xB7 " + detail : label;
+    }
+  }
+  return "Test \xB7 " + text;
+}
+function run_title(run) {
+  const name = typeof run.job_name === "string" ? run.job_name.trim() : "";
+  if (name.length > 0) {
+    return name;
+  }
+  const label = job_type_label(run.job_type);
+  return label === "\u2014" ? "Run" : label;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/runs-list-view.js
 var RUN_STATES = [
@@ -842,21 +897,35 @@ var PycRunsList = class extends HTMLElement {
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
-        key: "run_id",
-        label: "Run",
-        width: "10rem",
+        // What ran comes first; the short id follows for anyone who must quote it.
+        key: "job_name",
+        label: "Job",
+        width: "20rem",
         render: (run) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-runs-list__run-link");
           link.setAttribute("href", "/runs/" + run.run_id);
-          link.textContent = short_run_id(run.run_id);
-          return link;
+          link.textContent = run_title(run);
+          link.title = run.run_id;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-runs-list__run-id");
+          id.textContent = " " + short_run_id(run.run_id);
+          cell.appendChild(id);
+          return cell;
         }
+      },
+      {
+        key: "job_type",
+        label: "Type",
+        width: "12rem",
+        render: (run) => job_type_label(run.job_type)
       },
       {
         key: "project_id",
         label: "Project",
-        width: "16rem",
+        width: "14rem",
         render: (run) => {
           const project = document.createElement("span");
           project.classList.add("pyc-runs-list__project");
@@ -886,16 +955,11 @@ var PycRunsList = class extends HTMLElement {
         render: (run) => format_timestamp(run.created_at)
       },
       {
-        key: "started_at",
-        label: "Started",
-        width: "12rem",
-        render: (run) => format_timestamp(run.started_at)
-      },
-      {
-        key: "completed_at",
-        label: "Completed",
-        width: "12rem",
-        render: (run) => format_timestamp(run.completed_at)
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (run) => format_duration(run.started_at, run.completed_at, run.state === "running")
       }
     ];
     table.rows = this._runs;

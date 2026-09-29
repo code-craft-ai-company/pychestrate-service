@@ -1,4 +1,5 @@
-import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { job_type_label, run_title } from "../shared/run-labels.js";
 const RUN_STATES = [
   "pending",
   "dispatching",
@@ -815,21 +816,35 @@ class PycRunsList extends HTMLElement {
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
-        key: "run_id",
-        label: "Run",
-        width: "10rem",
+        // What ran comes first; the short id follows for anyone who must quote it.
+        key: "job_name",
+        label: "Job",
+        width: "20rem",
         render: (run) => {
+          const cell = document.createElement("span");
           const link = document.createElement("a");
           link.classList.add("pyc-runs-list__run-link");
           link.setAttribute("href", "/runs/" + run.run_id);
-          link.textContent = short_run_id(run.run_id);
-          return link;
+          link.textContent = run_title(run);
+          link.title = run.run_id;
+          cell.appendChild(link);
+          const id = document.createElement("span");
+          id.classList.add("pyc-runs-list__run-id");
+          id.textContent = " " + short_run_id(run.run_id);
+          cell.appendChild(id);
+          return cell;
         },
+      },
+      {
+        key: "job_type",
+        label: "Type",
+        width: "12rem",
+        render: (run) => job_type_label(run.job_type),
       },
       {
         key: "project_id",
         label: "Project",
-        width: "16rem",
+        width: "14rem",
         render: (run) => {
           const project = document.createElement("span");
           project.classList.add("pyc-runs-list__project");
@@ -859,16 +874,11 @@ class PycRunsList extends HTMLElement {
         render: (run) => format_timestamp(run.created_at),
       },
       {
-        key: "started_at",
-        label: "Started",
-        width: "12rem",
-        render: (run) => format_timestamp(run.started_at),
-      },
-      {
-        key: "completed_at",
-        label: "Completed",
-        width: "12rem",
-        render: (run) => format_timestamp(run.completed_at),
+        key: "duration",
+        label: "Duration",
+        width: "10rem",
+        sortable: false,
+        render: (run) => format_duration(run.started_at, run.completed_at, run.state === "running"),
       },
     ];
     table.rows = this._runs;

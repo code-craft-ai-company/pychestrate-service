@@ -263,6 +263,18 @@ preview tag.
   is absent and `/docs` says the guide is not installed. The catalog pages no
   longer carry a "Documentation" line that would link to themselves.
 
+- The run, build and provisioning lists lead with what ran, not a hash
+  (ORC-11). A run row starts with its job name (its kind when it has none)
+  and the short id after it, then the type spelled out ("Test · testbase",
+  "Build · makefile"), the project, the state, the creation time and how long
+  it ran ("3m 12s", "so far" while running, a dash before it starts). A build
+  row leads with its runner and target ("makefile · docs") and shows its source
+  ("main @ github.com/acme/widgets"); a provisioning row with its action and
+  driver ("apply · terraform"). The Started and Completed columns of the runs
+  list are replaced by Duration (the run's page has them). The server already
+  sent all of it. Branch, commit and who or what triggered a run are not in the
+  API yet, so they are not shown.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a
