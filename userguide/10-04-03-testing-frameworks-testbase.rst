@@ -72,12 +72,14 @@ Running Tests
 -------------
 
 - This repository has only ``singlehost`` suites. The ones under ``phase11`` and ``phase12`` drive a live server (``PYCHESTRATE_TEST_BASE_URL``); everything else runs in-process.
-- Run a focused ``testbase`` suite using::
+- Use ``make test``: ``make test`` runs the whole suite, ``make test SELECT="phase10.test_p26 phase13"`` runs only the modules those selectors name, ``EXCLUDE="phase11 phase12"`` leaves some out, and ``TEST_OUTPUT=<dir>`` names the output folder. It prints the failures when a run fails. ``make lint`` flags the traps below in the Makefile, the workflows, ``AGENTS.md`` and these guides.
+- Running ``testbase`` by hand has two silent traps. ``--includes`` is a string prefix, so ``--includes=...phase1`` also runs every module under ``phase10`` to ``phase19``. ``--excludes`` does nothing: no test is ever excluded. ``development/select-tests`` (which ``make test`` uses) builds one exact ``--includes`` per module, so selecting and excluding work as written. A test module that fails to import is skipped, and the run can still report ``PASSED``: read the module count.
+- To run a focused ``testbase`` suite by hand::
 
     source .venv/bin/activate
     testbase testing run --root source/testroots/ccai --includes=ccai.tests.singlehost --output=<desired output folder>
 
-- Narrow ``--includes`` to a package or module path to run part of the suite; it matches by prefix, so repeat the option to select several.
+- Narrow ``--includes`` to a package or module path to run part of the suite; it matches by prefix (see the trap above), so repeat the option to select several.
 - Always point ``--output`` to a writable directory created for the current run so artifacts do not overlap between executions.
 
 Evaluating Test Results
