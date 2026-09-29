@@ -52,6 +52,7 @@ from ccai.pychestrate.webservice.clients.exceptions import (
     CertificateAuthorityUnavailableError,
     CsrScopeMismatchError,
     CsrValidationError,
+    EnrollmentRejectedError,
 )
 from ccai.pychestrate.webservice.clients.models import (
     Client,
@@ -656,4 +657,47 @@ def test_csr_with_invalid_pem_rejects_with_csr_validation_error():
     testbase.assert_equal(raised, True)
 
     ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def test_a_csr_named_for_another_pod_is_rejected_saying_which_name_the_token_expects():
+    """
+    **Feature: 3-client-enrollment (E2E-30)**
+    **Property: the rejection of a CSR whose Subject CN is not the token's
+    pod name names the pod name the token expects, whichever layer notices
+    the mismatch, and does not spend the token.**
+    """
+    reset_phase2_runtime()
+    ca_adapter.reset_active_ca_for_testing()
+    _install_dev_ca()
+    _engine, session = build_in_memory_session()
+
+    issued = issue_enrollment_token(
+        db_session=session, project_id="00000000-0000-0000-0000-000000000004", pod_name="intended-pod",
+        ttl_seconds=600, one_shot=True, issued_by=None,
+    )
+    message = ""
+    try:
+        redeem_enrollment_token(
+            db_session=session, secret=issued.secret,
+            payload=EnrollmentPayload(
+                pod_name="intended-pod", agent_version="0.1.0", transport_name="http", extras={},
+                csr_pem=_generate_client_csr(common_name="other-pod"),
+            ),
+        )
+    except (EnrollmentRejectedError, CsrScopeMismatchError) as rejection:
+        message = str(rejection)
+    result = redeem_enrollment_token(
+        db_session=session, secret=issued.secret,
+        payload=EnrollmentPayload(
+            pod_name="intended-pod", agent_version="0.1.0", transport_name="http", extras={},
+            csr_pem=_generate_client_csr(common_name="intended-pod"),
+        ),
+    )
+    ca_adapter.reset_active_ca_for_testing()
+
+    testbase.assert_equal(
+        ("intended-pod" in message, len(message) > 0, result.pod_name),
+        (True, True, "intended-pod"),
+    )
     return

@@ -232,6 +232,45 @@ def test_redeem_pod_name_mismatch_rejected():
     return
 
 
+def test_a_wrong_pod_name_is_told_which_name_the_token_expects_and_the_token_still_works():
+    """
+    **Feature: 3-client-enrollment (E2E-30)**
+    **Property: the rejection for a pod name other than the token's carries
+    ``EXPECTED_POD_NAME`` and a hint to enroll again with exactly that name;
+    the rejection does not spend the token, so redeeming it with the right
+    name then succeeds.**
+    """
+    reset_phase1_runtime()
+    _install_pepper()
+    _engine, session = build_in_memory_session()
+
+    project_id = new_uuid()
+    issued = issue_enrollment_token(
+        db_session=session, project_id=project_id, pod_name="expected-pod",
+        ttl_seconds=300, one_shot=True, issued_by=None,
+    )
+
+    message = ""
+    try:
+        redeem_enrollment_token(
+            db_session=session, secret=issued.secret,
+            payload=EnrollmentPayload(pod_name="WRONG-pod", agent_version=None, transport_name=None, extras={}),
+        )
+    except EnrollmentRejectedError as rejection:
+        message = str(rejection)
+    result = redeem_enrollment_token(
+        db_session=session, secret=issued.secret,
+        payload=EnrollmentPayload(pod_name="expected-pod", agent_version=None, transport_name=None, extras={}),
+    )
+
+    testbase.assert_equal(
+        ("REASON: pod_name_mismatch" in message, "EXPECTED_POD_NAME: expected-pod" in message,
+         "enroll again with exactly that name" in message, "WRONG-pod" in message, result.pod_name),
+        (True, True, True, False, "expected-pod"),
+    )
+    return
+
+
 def test_redeem_expired_token_rejected():
     """
     **Feature: 3-client-enrollment (M1)**

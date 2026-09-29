@@ -100,6 +100,9 @@ MAX_TOKEN_TTL_SECONDS: int = 86400
 TOKEN_ISSUER_PROTOCOL: str = "enrollment_token_issuer"
 IDENTITY_VERIFIER_PROTOCOL: str = "client_identity_verifier"
 
+#: Verifier reasons that mean the pod name given is not the one the token names.
+_POD_NAME_REASONS = ("pod_name_mismatch", "scope_mismatch")
+
 
 @dataclass(frozen=True)
 class IssuedEnrollmentToken:
@@ -526,6 +529,16 @@ def redeem_enrollment_token(
         err_msg_lines = ["Enrollment rejected by identity verifier."]
         err_msg_lines.append("TOKEN_ID: {}".format(matched_token_id))
         err_msg_lines.append("REASON: {}".format(report.reason))
+        if report.reason in _POD_NAME_REASONS:
+            # The caller holds the token's secret, so telling it the name
+            # the token was minted for discloses nothing; and a rejection
+            # does not spend the token, so the same one works with the
+            # right name (E2E-30).
+            err_msg_lines.append("EXPECTED_POD_NAME: {}".format(matched_row.pod_name))
+            err_msg_lines.append(
+                "HINT: this token was minted for the pod name above and has not been used up; "
+                "enroll again with exactly that name."
+            )
         err_msg = os.linesep.join(err_msg_lines)
         raise EnrollmentRejectedError(err_msg) from None
 
