@@ -76,16 +76,16 @@
             {% endif %}
         </tr>
         {% else %}
+        {% if search %}
         <tr>
-            {% if search %}
             <td colspan="{{ 4 if can_manage else 3 }}" class="muted center">
                 No tags match "{{ search }}".
                 <a href="{{ url_for('resources.tag_list') }}">Clear filter</a>
             </td>
-            {% else %}
-            {{ ui.empty_state("No tags found", colspan=(4 if can_manage else 3)) }}
-            {% endif %}
         </tr>
+        {% else %}
+        {{ ui.empty_state("No tags found", colspan=(4 if can_manage else 3)) }}
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>

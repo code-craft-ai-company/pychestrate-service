@@ -60,9 +60,7 @@
             </td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No release pipelines.", colspan=6) }}
-        </tr>
+        {{ ui.empty_state("No release pipelines.", colspan=6) }}
         {% endfor %}
     </tbody>
 </table></div>

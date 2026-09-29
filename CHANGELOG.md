@@ -537,6 +537,13 @@ preview tag.
 
 ### Fixed
 
+- Empty tables no longer carry a phantom empty row (ADM-44). `ui.empty_state`
+  with a `colspan` writes a whole `<tr>`, and 21 templates wrapped it in a
+  `<tr>` of their own, which browsers repair by closing the outer row and
+  leaving it empty above the message. The wrappers are gone, and a test
+  renders every template with full and empty lists and fails when a row
+  opens inside a row.
+
 - **Users created through the admin UI could not log in.** The create
   form wrote only the legacy `user` table while the login flow
   authenticates against `identity_users`, so the operator got "User

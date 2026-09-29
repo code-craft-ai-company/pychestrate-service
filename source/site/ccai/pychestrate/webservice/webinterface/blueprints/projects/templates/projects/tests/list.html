@@ -92,9 +92,7 @@
             </td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No test jobs.", colspan=10) }}
-        </tr>
+        {{ ui.empty_state("No test jobs.", colspan=10) }}
         {% endfor %}
     </tbody>
 </table></div>

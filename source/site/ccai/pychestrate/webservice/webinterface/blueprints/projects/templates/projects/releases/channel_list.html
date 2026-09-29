@@ -53,9 +53,7 @@
             <td>{{ channel.updated_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No release channels.", colspan=4) }}
-        </tr>
+        {{ ui.empty_state("No release channels.", colspan=4) }}
         {% endfor %}
     </tbody>
 </table></div>

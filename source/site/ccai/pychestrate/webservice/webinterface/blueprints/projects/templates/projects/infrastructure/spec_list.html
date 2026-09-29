@@ -53,9 +53,7 @@
             </td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No infrastructure specifications.", colspan=7) }}
-        </tr>
+        {{ ui.empty_state("No infrastructure specifications.", colspan=7) }}
         {% endfor %}
     </tbody>
 </table></div>

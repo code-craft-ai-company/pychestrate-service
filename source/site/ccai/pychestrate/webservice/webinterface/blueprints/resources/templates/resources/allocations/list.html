@@ -91,16 +91,16 @@
             </td>
         </tr>
         {% else %}
+        {% if filters_active %}
         <tr>
-            {% if filters_active %}
             <td colspan="8" class="muted center">
                 No active allocations match the current filters.
                 <a href="{{ url_for('resources.allocation_list') }}">Clear filters</a>
             </td>
-            {% else %}
-            {{ ui.empty_state("No active allocations", colspan=8) }}
-            {% endif %}
         </tr>
+        {% else %}
+        {{ ui.empty_state("No active allocations", colspan=8) }}
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>

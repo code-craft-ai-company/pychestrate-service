@@ -92,16 +92,16 @@
             <td>{% if alloc.duration_minutes is not none %}{{ alloc.duration_minutes }} min{% else %}-{% endif %}</td>
         </tr>
         {% else %}
+        {% if filters_active %}
         <tr>
-            {% if filters_active %}
             <td colspan="9" class="muted center">
                 No allocation history matches the current filters.
                 <a href="{{ url_for('resources.allocation_history') }}">Clear filters</a>
             </td>
-            {% else %}
-            {{ ui.empty_state("No allocation history found", colspan=9) }}
-            {% endif %}
         </tr>
+        {% else %}
+        {{ ui.empty_state("No allocation history found", colspan=9) }}
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>

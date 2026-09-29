@@ -51,9 +51,7 @@
             <td>{{ schedule.last_run_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No release schedules.", colspan=6) }}
-        </tr>
+        {{ ui.empty_state("No release schedules.", colspan=6) }}
         {% endfor %}
     </tbody>
 </table></div>

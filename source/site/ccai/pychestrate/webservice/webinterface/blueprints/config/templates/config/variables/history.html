@@ -57,9 +57,7 @@
             </td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No history found", colspan=5) }}
-        </tr>
+        {{ ui.empty_state("No history found", colspan=5) }}
         {% endfor %}
     </tbody>
 </table></div>

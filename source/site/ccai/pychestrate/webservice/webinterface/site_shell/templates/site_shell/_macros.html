@@ -70,6 +70,8 @@
 <div class="pyc-preview-notice" role="note" data-role="preview-notice">{{ caller() }}</div>
 {%- endmacro %}
 
+{#- With ``colspan`` this writes a complete table row (``<tr><td colspan=N>``): call it directly
+    inside ``<tbody>``, never inside a ``<tr>`` of your own (ADM-44). -#}
 {% macro empty_state(title, hint=None, action_url=None, action_label=None, colspan=None) -%}
 {%- if colspan %}<tr><td colspan="{{ colspan }}">{% endif -%}
 <div class="pyc-empty-state" role="status">
