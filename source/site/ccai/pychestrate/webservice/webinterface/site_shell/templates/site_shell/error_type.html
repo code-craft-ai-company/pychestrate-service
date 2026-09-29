@@ -1,0 +1,38 @@
+{#
+    One documented problem type (DOC-14). Public, standalone, and
+    token-driven like chromeless_error.html.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ problem_type.slug }} · Error types · Pychestrate</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/styles/pyc-tokens.css">
+    <link rel="stylesheet" href="/static/styles/pyc-fragment.css">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--pyc-color-app-bg, #f5f5f7);
+            color: var(--pyc-color-on-surface, #1a1a2e);
+            font-family: var(--pyc-font-family-base, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+        }
+        .error-type { max-width: 44rem; margin: 3rem auto; padding: 0 1rem; }
+    </style>
+</head>
+<body>
+    <main class="pyc-admin-page-fragment error-type">
+        <p><a href="/errors">All error types</a></p>
+        <h1>{{ problem_type.title }}{% if problem_type.status %} <small>(HTTP {{ problem_type.status }})</small>{% endif %}</h1>
+        <p><code>{{ problem_type.type }}</code></p>
+        <h2>What it means</h2>
+        <p>{{ problem_type.meaning }}</p>
+        <h2>What to do</h2>
+        <p>{{ problem_type.remedy }}</p>
+        <h2>The response</h2>
+        <p>The body is a problem document. Its <code>type</code> is this page, <code>title</code> is &ldquo;{{ problem_type.title }}&rdquo;, <code>detail</code> explains this occurrence, and <code>instance</code> is the path that was asked for.</p>
+    </main>
+</body>
+</html>

@@ -17,12 +17,61 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
 import logging
 
 from typing import Any
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import Response
+
+
+#: Headers of the response a problem document replaces that are not carried
+#: over (the new body sets its own).
+_REPLACED_HEADERS = ("content-type", "content-length")
+
+
+def framework_error_as_problem(*, request: Any, response: Response) -> Response:
+    """
+        Answer the RFC 7807 problem document for an error the webworks
+        dispatcher built itself.
+
+        The dispatcher answers an unmatched path, a wrong method or an
+        unhandled exception with ``{"detail": ..., "status_code": ...}``
+        (DOC-14), a shape no other error of the REST surface has. Only
+        that exact shape is replaced, so a handler's own JSON error, a
+        problem document, and every non-error response pass through
+        untouched. Headers the framework set (``Allow`` on a 405) are kept.
+
+        :param request: The request being answered.
+        :param response: What the dispatcher returned.
+
+        :returns: The problem-document response, or ``response`` itself.
+    """
+    status = getattr(response, "status_code", 200)
+    if not isinstance(status, int) or status < 400:
+        return response
+    content_type = str(response.headers.get("Content-Type", "") or "").lower()
+    if not content_type.startswith("application/json"):
+        return response
+    try:
+        body = json.loads(response.body.decode("utf-8"))
+    except (ValueError, AttributeError):
+        return response
+    if not (isinstance(body, dict) and set(body) == {"detail", "status_code"} and body["status_code"] == status
+            and isinstance(body["detail"], str)):
+        return response
+
+    from ccai.pychestrate.webservice.api.problem_json_webworks import (  # noqa: E402
+        problem_response_for_http_status,
+    )
+    replacement = problem_response_for_http_status(
+        status=status, detail=body["detail"], instance=getattr(request, "path", None),
+    )
+    for name, value in response.headers.items():
+        if name.lower() not in _REPLACED_HEADERS:
+            replacement.headers[name] = value
+    return replacement
 
 
 def build_wsgi_compat_dispatch(*, app: Any) -> Any:
@@ -98,6 +147,7 @@ def build_wsgi_compat_dispatch(*, app: Any) -> Any:
                 detail="Internal Server Error",
                 instance=getattr(request, "path", None),
             )
+        response = framework_error_as_problem(request=request, response=response)
         if not hasattr(response, "content_type"):
             response.content_type = None
 
@@ -135,4 +185,5 @@ def build_wsgi_compat_dispatch(*, app: Any) -> Any:
 
 __all__ = [
     "build_wsgi_compat_dispatch",
+    "framework_error_as_problem",
 ]

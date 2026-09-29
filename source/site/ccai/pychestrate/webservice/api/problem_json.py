@@ -28,6 +28,14 @@ Documented problem types are exposed via the
 shortcut. Operators can extend the registry with site-specific
 ``type`` URLs by passing ``problem_type=`` to
 :func:`build_problem_response` directly.
+
+The documented ``type`` values are references to pages the service
+itself serves (``/errors/<slug>``, see :mod:`api.error_catalogue`), so
+following one always leads somewhere. A ``type`` is the service-relative
+reference ``/errors/not-found`` unless ``PYCHESTRATE_PUBLIC_BASE_URL`` is
+set, in which case it is the absolute URL under that base (the same rule
+:mod:`public_endpoint` applies to the URLs it signs). They used to name
+``https://docs.pychestrate.io/errors/...``, a site nothing publishes.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -41,7 +49,8 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 
 PROBLEM_JSON_MEDIA_TYPE: str = "application/problem+json"
-PROBLEM_TYPE_BASE_URL: str = "https://docs.pychestrate.io/errors/"
+#: Where the documented problem types live on the service itself.
+PROBLEM_TYPE_BASE_URL: str = "/errors/"
 
 PROBLEM_TYPE_BAD_REQUEST: str = PROBLEM_TYPE_BASE_URL + "bad-request"
 PROBLEM_TYPE_UNAUTHENTICATED: str = PROBLEM_TYPE_BASE_URL + "unauthenticated"
@@ -53,6 +62,126 @@ PROBLEM_TYPE_VALIDATION_FAILED: str = PROBLEM_TYPE_BASE_URL + "validation-failed
 PROBLEM_TYPE_RATE_LIMITED: str = PROBLEM_TYPE_BASE_URL + "rate-limited"
 PROBLEM_TYPE_INTERNAL_SERVER_ERROR: str = PROBLEM_TYPE_BASE_URL + "internal-server-error"
 PROBLEM_TYPE_SERVICE_UNAVAILABLE: str = PROBLEM_TYPE_BASE_URL + "service-unavailable"
+
+
+UNKNOWN_ERROR_SLUG: str = "unknown-error"
+
+
+@dataclass(frozen=True)
+class ProblemTypeInfo:
+    """
+        What the catalogue page of one documented problem type says.
+
+        :param slug: The last segment of the ``type`` reference.
+        :param status: The HTTP status the type goes with (0 for the
+                       catch-all).
+        :param title: The ``title`` member responses of this type carry.
+        :param meaning: What the problem is, in a sentence or two.
+        :param remedy: What the caller can do about it.
+    """
+    slug: str
+    status: int
+    title: str
+    meaning: str
+    remedy: str
+
+
+#: The documented problem types, in status order. The page for each is
+#: ``/errors/<slug>``.
+PROBLEM_TYPES: Tuple[ProblemTypeInfo, ...] = (
+    ProblemTypeInfo(
+        "bad-request", 400, "Bad Request",
+        "The request could not be understood: a malformed body, a missing or misspelt field, or a parameter of the wrong kind.",
+        "Read the detail member, correct the request and send it again.",
+    ),
+    ProblemTypeInfo(
+        "unauthenticated", 401, "Unauthenticated",
+        "The request carries no valid credentials: no API token or session, or the token has expired or been revoked.",
+        "Sign in, or send an Authorization: Bearer header with an API token from Account > API tokens.",
+    ),
+    ProblemTypeInfo(
+        "forbidden", 403, "Forbidden",
+        "The credentials are valid, but the account may not do this: it lacks the permission, or the token is read-only and the request changes something.",
+        "Ask an administrator for the permission the detail member names, or use a token that is allowed to write.",
+    ),
+    ProblemTypeInfo(
+        "not-found", 404, "Not Found",
+        "Nothing is at that address or under that id. The path may be mistyped, the object may have been deleted, or you may not be allowed to know it exists.",
+        "Check the path against the API reference (/api/docs) and check the id.",
+    ),
+    ProblemTypeInfo(
+        "method-not-allowed", 405, "Method Not Allowed",
+        "The path exists, but not for the HTTP method that was used.",
+        "Look up the path in the API reference (/api/docs) and use a method it lists.",
+    ),
+    ProblemTypeInfo(
+        "conflict", 409, "Conflict",
+        "The request is well formed but clashes with the current state: a name that is already taken, an object that is in use, or a state that cannot change from where it is.",
+        "Read the detail member, look at the current state of the object, and change the request or the state.",
+    ),
+    ProblemTypeInfo(
+        "validation-failed", 422, "Validation Failed",
+        "The request was understood, but a value in it is not acceptable.",
+        "Correct the values the detail member lists and send the request again.",
+    ),
+    ProblemTypeInfo(
+        "rate-limited", 429, "Rate Limited",
+        "Too many requests were made in a short time.",
+        "Wait a little and try again, with a longer pause between calls.",
+    ),
+    ProblemTypeInfo(
+        "internal-server-error", 500, "Internal Server Error",
+        "The service failed while handling a request that was valid. The failure is logged.",
+        "Try once more. If it keeps happening, give an administrator the time of the request and its instance member.",
+    ),
+    ProblemTypeInfo(
+        "service-unavailable", 503, "Service Unavailable",
+        "The service, or something it depends on, cannot answer right now: for example while it starts or restarts, or while its database is unreachable.",
+        "Wait and try again. The /readyz address says whether the service is ready.",
+    ),
+    ProblemTypeInfo(
+        UNKNOWN_ERROR_SLUG, 0, "Error",
+        "The response has a status that has no page of its own.",
+        "Use the status and the detail member.",
+    ),
+)
+
+
+def problem_type_info(*, slug: str) -> Optional[ProblemTypeInfo]:
+    """
+        The catalogue entry for ``slug``.
+
+        :param slug: Last segment of a documented ``type``.
+
+        :returns: The entry, or None when the slug is not documented.
+    """
+    for entry in PROBLEM_TYPES:
+        if entry.slug == slug:
+            return entry
+    return None
+
+
+def resolve_problem_type(problem_type: str) -> str:
+    """
+        Make a documented ``type`` reference absolute when the service
+        knows its public address. Other types (an extension's own) and
+        every type when no public base URL is configured are returned
+        unchanged, as the service-relative reference.
+
+        :param problem_type: The ``type`` a builder was given.
+
+        :returns: The ``type`` to put on the wire.
+    """
+    if not problem_type.startswith(PROBLEM_TYPE_BASE_URL):
+        return problem_type
+    try:
+        from ccai.pychestrate.webservice.public_endpoint import resolve_public_base_url  # noqa: E402
+        base = resolve_public_base_url()
+    except Exception:  # noqa: BLE001 -- an error response must never fail for want of a base URL
+        base = None
+    if base is None:
+        return problem_type
+    return base + problem_type
 
 
 _DEFAULT_PROBLEM_BY_STATUS: Dict[int, Tuple[str, str]] = {
@@ -226,7 +355,7 @@ def build_problem_response(
         :returns: :class:`ProblemResponse`.
     """
     document = build_problem_document(
-        problem_type=problem_type,
+        problem_type=resolve_problem_type(problem_type),
         title=title,
         status=status,
         detail=detail,
@@ -268,7 +397,7 @@ def problem_for_http_status(
     if status in _DEFAULT_PROBLEM_BY_STATUS:
         problem_type, title = _DEFAULT_PROBLEM_BY_STATUS[status]
     else:
-        problem_type = PROBLEM_TYPE_BASE_URL + "unknown-error"
+        problem_type = PROBLEM_TYPE_BASE_URL + UNKNOWN_ERROR_SLUG
         title = "Error"
 
     rtnval = build_problem_response(

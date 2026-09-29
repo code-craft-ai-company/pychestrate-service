@@ -130,6 +130,7 @@ from ccai.pychestrate.webservice.api.openapi_document import (
     register_api_docs_routes,
     register_openapi_document_routes,
 )
+from ccai.pychestrate.webservice.api.error_catalogue import register_error_catalogue_routes
 from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
 )
@@ -540,6 +541,8 @@ def register_service_extensions() -> None:
     register_openapi_document_routes(app=app, version_prefix="/api/v1")
     # The same document for people, rendered by ReDoc (/api/docs redirects).
     register_api_docs_routes(app=app, version_prefix="/api/v1")
+    # The pages the type member of an error response points to (public).
+    register_error_catalogue_routes(app=app)
     register_static_routes(
         app=app,
         url_prefix="/static",

@@ -181,6 +181,21 @@ preview tag.
 
 ### Changed
 
+- The `type` of an error response now leads somewhere, and the dispatcher's
+  own errors are problem documents (DOC-14). The documented types named
+  `https://docs.pychestrate.io/errors/...`, a site nothing publishes; they
+  are now `/errors/<slug>` (absolute under `PYCHESTRATE_PUBLIC_BASE_URL` when
+  it is set), and the service serves a public page at each, plus `GET
+  /errors`, saying what the error means and what to do (HTML, or JSON for
+  `Accept: application/json`). An unmatched path, a wrong method and an
+  unhandled exception used to come back as the dispatcher's `{"detail": ...,
+  "status_code": ...}`; they are now `application/problem+json` of the
+  matching type, with the `Allow` header kept on a 405. A client that
+  compared `type` to the old `docs.pychestrate.io` strings must compare the
+  slug. The `docs_url` values of the plugin protocols still name
+  `docs.pychestrate.io/plugin-api/...`: the documentation site has no public
+  address yet.
+
 - The project sections that nothing can fill now say so (PRJ-08). Test
   and infrastructure specifications, release pipelines and the release
   calendar's events are read from the web-UI project model, and no page or

@@ -541,6 +541,18 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "run_selected_pod_id": _by_mode("11111111-1111-4000-8000-000000000001", ""),
     "replay_job": _by_mode(SimpleNamespace(job_id="0f6c2c1e-1111-4000-8000-000000000009"), None),
     # The registry project a web-UI project is linked to (projects.bridge).
+    # The error catalogue pages (api.error_catalogue).
+    "problem_types": _const([
+        {"slug": "not-found", "status": 404, "title": "Not Found", "type": "/errors/not-found",
+         "meaning": "Nothing is at that address.", "remedy": "Check the path."},
+        {"slug": "unknown-error", "status": 0, "title": "Error", "type": "/errors/unknown-error",
+         "meaning": "No page of its own.", "remedy": "Use the status."},
+    ]),
+    "problem_type": _const(
+        {"slug": "not-found", "status": 404, "title": "Not Found", "type": "/errors/not-found",
+         "meaning": "Nothing is at that address.", "remedy": "Check the path."},
+    ),
+    "unknown_slug": _by_mode("nope", ""),
     "registry_project": _by_mode(
         SimpleNamespace(project_id="0f6c2c1e-2222-4000-8000-00000000000a", slug="demo-project"), None,
     ),

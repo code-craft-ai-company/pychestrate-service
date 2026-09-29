@@ -78,3 +78,20 @@ dispatcher rebuilds the body in its content-negotiated shape,
 discarding any body the exception carried.  Therefore handlers must
 **return** problem responses rather than raise them.  The webworks
 helper exposes only return-shaped builders for this reason.
+
+The dispatcher still answers an unmatched path, a wrong method and an
+unhandled exception in that shape (``{"detail": ..., "status_code":
+...}``).  ``wsgi_dispatch.framework_error_as_problem`` rewrites exactly
+that shape as the problem document for its status, keeping the headers
+the dispatcher set (``Allow`` on a 405); a handler's own JSON error is
+never touched.
+
+The ``type`` of a documented problem is a reference to a page the service
+serves itself: ``/errors/not-found``, or the absolute URL under
+``PYCHESTRATE_PUBLIC_BASE_URL`` when that is set.  ``GET /errors`` lists
+the types and ``GET /errors/<slug>`` says what one means and what to do
+about it (HTML for a browser, JSON for ``Accept: application/json``); the
+pages need no sign-in, because the response that leads to one is often a
+401.  The types and their text are ``PROBLEM_TYPES`` in
+``api/problem_json.py``: add an entry there when adding a type.  An
+extension's own problem types keep whatever ``type`` URI they pass.
