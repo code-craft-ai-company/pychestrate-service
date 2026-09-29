@@ -832,6 +832,28 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
             admin_user_id_str,
         )
 
+        # Sign the administrator in (XC-08): they proved control of the setup
+        # token and chose this password moments ago, and typing it again on
+        # the sign-in page would grant the same thing. The ordinary sign-in
+        # path runs (audit, lockout accounting), and any refusal falls back
+        # to the sign-in page below.
+        try:
+            from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (  # noqa: E402
+                sign_in_after_setup,
+            )
+            signed_in = sign_in_after_setup(
+                request=request, username=login_name, password=password,
+            )
+        except Exception:
+            signed_in = None
+        if signed_in is not None:
+            _module_logger.info(
+                "pychestrate.setup.admin_submit.signed_in user_id=%s",
+                admin_user_id_str,
+            )
+            _clear_unlock_cookie(response=signed_in)
+            return signed_in
+
         response = RedirectResponse(url="/login", status_code=303)
         # Tell the new administrator the account exists (audit U-6):
         # queue an info flash on a fresh UI session cookie so the

@@ -1006,6 +1006,115 @@ def handle_login_form(request: Request) -> Response:
     return response
 
 
+_signin_logger = logging.getLogger("pychestrate.ui.signin")
+
+
+def _authenticate_credentials(
+        *,
+        request: Request,
+        db_session: Any,
+        username: str,
+        password: str
+    ) -> Any:
+    """
+        Check a login and password with the SecurityManager, exactly as
+        ``POST /login`` does (audit event, lockout accounting, forced
+        password change, session token). Raises the manager's error on a
+        refusal.
+
+        :param request: The incoming request (for the client address and
+                        user agent the audit trail records).
+        :param db_session: Open SQLAlchemy session.
+        :param username: Login name.
+        :param password: Password.
+
+        :returns: The manager's authentication response.
+    """
+    security_manager = _build_security_manager(db_session=db_session)
+    client_ip = ""
+    user_agent = ""
+    try:
+        # ADM-16: the real client address (forwarding headers are
+        # honoured only from a trusted proxy), not the raw
+        # X-Forwarded-For header a client can set.
+        from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+            request_user_agent,
+            resolve_client_address,
+        )
+        client_ip = resolve_client_address(request=request)
+        user_agent = request_user_agent(request=request)
+    except Exception:
+        client_ip = ""
+        user_agent = ""
+
+    auth_request = _build_auth_request(
+        username=username,
+        password=password,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
+    rtnval = security_manager.authenticate(auth_request)
+    return rtnval
+
+
+def _populate_signed_in_session(*, session: Dict[str, Any], auth_response: Any) -> None:
+    """
+        Record a successful authentication in the UI session.
+
+        :param session: The session dict to fill.
+        :param auth_response: What :func:`_authenticate_credentials` returned.
+    """
+    session[auth_guard.SESSION_USER_ID_KEY] = auth_response.user_id
+    session["username"] = auth_response.username
+    session[auth_guard.SESSION_TOKEN_KEY] = auth_response.token
+    if auth_response.csrf_token is not None and len(auth_response.csrf_token) > 0:
+        session[csrf.SESSION_KEY] = auth_response.csrf_token
+    elif session.get(csrf.SESSION_KEY, None) in (None, ""):
+        session[csrf.SESSION_KEY] = csrf.generate_csrf_token()
+    return
+
+
+def sign_in_after_setup(*, request: Request, username: str, password: str) -> Optional[Response]:
+    """
+        Sign in the administrator the setup wizard has just created, with
+        the password they just chose, through the ordinary sign-in path
+        (XC-08). The wizard calls this only after it has checked the setup
+        token and created the account in the same request, so it grants what
+        typing the password on the sign-in page a moment later would.
+
+        :param request: The wizard's request.
+        :param username: The new administrator's login name.
+        :param password: The password they chose.
+
+        :returns: A redirect to the home page carrying the signed-in session,
+                  or ``None`` when the credentials are not accepted for any
+                  reason (the wizard then sends the person to the sign-in
+                  page, as it did before).
+    """
+    db_session = _resolve_db_session()
+    try:
+        try:
+            auth_response = _authenticate_credentials(
+                request=request, db_session=db_session,
+                username=username, password=password,
+            )
+        except Exception as auth_error:
+            _signin_logger.warning(
+                "pychestrate.setup.sign_in_after_setup.refused reason=%s", type(auth_error).__name__,
+            )
+            return None
+        session: Dict[str, Any] = {}
+        _populate_signed_in_session(session=session, auth_response=auth_response)
+        rtnval = RedirectResponse(url="/", status_code=303)
+        _attach_session_to_response(response=rtnval, session=session)
+        return rtnval
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 def handle_login_submit(request: Request) -> Response:
     """
         ``POST /login`` -- authenticate via SecurityManager and
@@ -1078,32 +1187,11 @@ def handle_login_submit(request: Request) -> Response:
 
     db_session = _resolve_db_session()
     try:
-        security_manager = _build_security_manager(db_session=db_session)
-        client_ip = ""
-        user_agent = ""
         try:
-            # ADM-16: the real client address (forwarding headers are
-            # honoured only from a trusted proxy), not the raw
-            # X-Forwarded-For header a client can set.
-            from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
-                request_user_agent,
-                resolve_client_address,
+            auth_response = _authenticate_credentials(
+                request=request, db_session=db_session,
+                username=username, password=password,
             )
-            client_ip = resolve_client_address(request=request)
-            user_agent = request_user_agent(request=request)
-        except Exception:
-            client_ip = ""
-            user_agent = ""
-
-        auth_request = _build_auth_request(
-            username=username,
-            password=password,
-            client_ip=client_ip,
-            user_agent=user_agent,
-        )
-
-        try:
-            auth_response = security_manager.authenticate(auth_request)
         except Exception as auth_error:
             # ADM-04: a temporary password must be replaced first.
             forced_change = _begin_forced_password_change_or_none(
@@ -1138,18 +1226,11 @@ def handle_login_submit(request: Request) -> Response:
             _attach_session_to_response(response=response, session=session)
             return response
 
-        # Success -- populate the session.
-        session[auth_guard.SESSION_USER_ID_KEY] = auth_response.user_id
-        session["username"] = auth_response.username
-        session[auth_guard.SESSION_TOKEN_KEY] = auth_response.token
-        if auth_response.csrf_token is not None and len(auth_response.csrf_token) > 0:
-            session[csrf.SESSION_KEY] = auth_response.csrf_token
-        elif session.get(csrf.SESSION_KEY, None) in (None, ""):
-            session[csrf.SESSION_KEY] = csrf.generate_csrf_token()
-        # No welcome flash: the shell document the browser lands
-        # on after this redirect never drains the flash queue, so
-        # a queued greeting would surface minutes later on the
-        # next legacy-template page instead.
+        # Success -- populate the session. No welcome flash: the shell
+        # document the browser lands on after this redirect never drains
+        # the flash queue, so a queued greeting would surface minutes
+        # later on the next legacy-template page instead.
+        _populate_signed_in_session(session=session, auth_response=auth_response)
 
         # Honor the ``next`` candidate resolved above only after
         # it passes the same-origin validator (NFR-2 of

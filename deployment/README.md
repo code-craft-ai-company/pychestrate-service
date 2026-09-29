@@ -323,8 +323,9 @@ While setup is pending, every request 302-redirects to
 1. **Paste the token** on the unlock page → submit.
 2. **Create the administrator** (login, email, display name,
    password ≥ 12 chars) → submit.
-3. You land on `/config/login`. Sign in with the credentials you
-   just chose.
+3. You are signed in as that administrator and land on the home page.
+   (If the sign-in is refused, you land on `/login` instead; use the
+   credentials you just chose.)
 
 #### 3. Verify the wizard is one-way
 

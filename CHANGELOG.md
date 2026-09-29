@@ -194,6 +194,15 @@ preview tag.
 
 ### Changed
 
+- The setup wizard signs the new administrator in (XC-08). Finishing it used
+  to send them to the sign-in page to type the password they had just
+  chosen; it now signs them in and opens the home page. It goes through the
+  ordinary sign-in path (`SecurityManager.authenticate`, so the audit trail
+  and lockout accounting see it) and only after the setup token was checked
+  and the account created in the same request. If the credentials are not
+  accepted for any reason, the wizard falls back to the sign-in page as
+  before. `POST /login` shares the same two helpers.
+
 - A missing thing is a 404 page, not a redirect (ADM-22). `/projects/999`,
   `/admin/users/<no such id>` and the other server-rendered pages that look
   a thing up used to answer 303 to the list with a "... not found." flash;

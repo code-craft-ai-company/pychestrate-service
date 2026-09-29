@@ -134,15 +134,18 @@ the setup wizard.
    **Email**, **Display name**, and a **Password** of at least 12
    characters, twice. Choose **Create administrator**.
 
-You arrive at the sign-in page. The wizard is gone for good: the token
-file is deleted and ``/setup/unlock`` now answers "not found".
+You are signed in as the administrator you just created, and arrive at
+the home page. The wizard is gone for good: the token file is deleted and
+``/setup/unlock`` now answers "not found". (If the service cannot sign you
+in for any reason, it sends you to the sign-in page instead; sign in
+there with the same login and password.)
 
 
-Sign in and look around
-=======================
+Look around
+===========
 
-Sign in with the administrator you just created. The home page lists
-every destination, grouped the way the sidebar groups them:
+The home page lists every destination, grouped the way the sidebar groups
+them:
 **Projects**, **Orchestration** (runs, builds, pipelines, the test
 catalog, environments, provisioning), **Insights** (metrics,
 dashboards, SLOs, alert rules), **Fleet** (pods, clients, resources, IP
