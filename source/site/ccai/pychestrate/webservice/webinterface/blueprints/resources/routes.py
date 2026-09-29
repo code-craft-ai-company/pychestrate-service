@@ -111,6 +111,9 @@ _DEFAULT_RESOURCES_PAGE_TITLE = "Pychestrate"
 # Second path segment (/resources/<segment>) -> tab label. Deeper
 # paths inherit their section's label.
 _RESOURCES_SECTION_TITLE_LABELS: Dict[str, str] = {
+    "list": "Resources",
+    "dashboard": "Resources",
+    "import": "Import Resources",
     "pools": "Resource Pools",
     "ip-pools": "IP Pools",
     "allocations": "Allocations",

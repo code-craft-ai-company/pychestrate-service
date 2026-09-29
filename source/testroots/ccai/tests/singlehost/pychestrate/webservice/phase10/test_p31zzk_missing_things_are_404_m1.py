@@ -98,7 +98,7 @@ def test_a_missing_user_and_a_missing_resource_are_404_pages_too():
     **Feature: real 404s (ADM-22)**
     **Property: the same holds for the admin and resources pages: a missing
     user gives 404 "User not found" with "Back to Users"; a missing
-    resource gives 404 with a link back to its list.**
+    resource gives 404 with "Back to Resources".**
     """
     setup = _setup()
     user = _get(setup, "/admin/users/no-such-user")
@@ -107,9 +107,9 @@ def test_a_missing_user_and_a_missing_resource_are_404_pages_too():
     testbase.assert_equal(
         (
             user.status_code, "User not found" in user.text, _back_link(user.text),
-            resource.status_code, "not found" in resource.text, _back_link(resource.text) is not None,
+            resource.status_code, "not found" in resource.text, _back_link(resource.text),
         ),
-        (404, True, ("Back to Users", "/admin/users"), 404, True, True),
+        (404, True, ("Back to Users", "/admin/users"), 404, True, ("Back to Resources", "/resources/list")),
     )
     return
 
