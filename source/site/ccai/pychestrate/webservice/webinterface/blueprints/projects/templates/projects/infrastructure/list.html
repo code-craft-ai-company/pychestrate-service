@@ -18,6 +18,12 @@
     <p>Infrastructure provisioning and management</p>
 </div>
 
+{% call ui.preview_notice() %}
+    Preview: infrastructure jobs run from an infrastructure specification, and
+    infrastructure specifications cannot be created yet &mdash; no page or API
+    manages them &mdash; so this list stays empty.
+{% endcall %}
+
 <div class="toolbar">
     <form method="get" class="actions-row">
         <select name="spec_id" aria-label="Filter by specification" class="form-control w-md">
@@ -82,7 +88,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No infrastructure jobs yet. Jobs appear here when an infrastructure specification runs; they are triggered by watches, pipelines, or the API.", colspan=9) }}
+            {{ ui.empty_state("No infrastructure jobs.", colspan=9) }}
         </tr>
         {% endfor %}
     </tbody>

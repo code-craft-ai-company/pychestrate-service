@@ -176,6 +176,14 @@ project holds: **Members**, **Repositories**, **Builds**,
 **Channels**, **Schedules**, **Release Templates**, **Calendar**,
 **RPA**, and **Watches**. You are the project's owner.
 
+Six of these are labelled "(preview)": **Infrastructure**, **Tests**,
+**Pipelines**, **Channels**, **Schedules** and **Calendar**. Nothing in this
+version can create what they list (test and infrastructure specifications,
+release pipelines, channels, schedules, release events), so their pages stay
+empty and say so. To run tests for a project, use the **Test catalog** and
+**Runs** pages in the sidebar (the project's overview links to both,
+filtered to it). A release is created from a **Release Template**.
+
 
 Add a device to the inventory
 =============================

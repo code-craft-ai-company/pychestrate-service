@@ -4,6 +4,7 @@
 {% block title %}Release Pipelines - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
+{% set pipelines_query = ('?project_id=' ~ registry_project.project_id) if (registry_project is defined and registry_project) else '' %}
 <nav aria-label="Breadcrumb">
     <ol class="breadcrumb">
         <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
@@ -17,6 +18,13 @@
     <h1>Release Pipelines</h1>
     <p>Automated release workflows</p>
 </div>
+
+{% call ui.preview_notice() %}
+    Preview: release pipelines cannot be created yet &mdash; no page or API
+    manages them &mdash; so this list stays empty. Pipelines defined with the
+    REST API are listed on the
+    <a href="/pipelines{{ pipelines_query }}">Pipelines</a> page.
+{% endcall %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
@@ -53,7 +61,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No release pipelines yet. Pipelines are configured via the API.", colspan=6) }}
+            {{ ui.empty_state("No release pipelines.", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>

@@ -75,12 +75,12 @@
                 {% endif %}
                 {% if ui_profile.is_enabled('infra') or request_endpoint.startswith('projects.infra_') %}
                 <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.infra_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("cloud") }} Infrastructure
+                    {{ ui.icon("cloud") }} Infrastructure (preview)
                 </a></li>
                 {% endif %}
                 {% if ui_profile.is_enabled('testing') or request_endpoint.startswith('projects.test_') %}
                 <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.test_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("science") }} Tests
+                    {{ ui.icon("science") }} Tests (preview)
                 </a></li>
                 {% endif %}
 
@@ -89,7 +89,7 @@
                     {{ ui.icon("new_releases") }} Releases
                 </a></li>
                 <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.pipeline_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("account_tree") }} Pipelines
+                    {{ ui.icon("account_tree") }} Pipelines (preview)
                 </a></li>
                 <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" {% if request_endpoint == 'projects.channel_list' %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("rss_feed") }} Channels (preview)
@@ -103,7 +103,7 @@
 
                 <li class="pyc-subnav__section">Planning</li>
                 <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" {% if request_endpoint in ('projects.calendar_view', 'projects.release_event_list', 'projects.release_event_detail') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("calendar_today") }} Calendar
+                    {{ ui.icon("calendar_today") }} Calendar (preview)
                 </a></li>
 
                 <li class="pyc-subnav__section">Automation</li>

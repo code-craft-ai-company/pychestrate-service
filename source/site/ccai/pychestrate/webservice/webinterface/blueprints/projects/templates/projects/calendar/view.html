@@ -132,6 +132,11 @@
     <p>Scheduled releases, merges, and pull requests for {{ project.name }}</p>
 </div>
 
+{% call ui.preview_notice() %}
+    Preview: release, merge and pull events cannot be created yet &mdash; no
+    page or API manages them &mdash; so the calendar stays empty.
+{% endcall %}
+
 <nav class="calendar-nav" aria-label="Calendar month">
     <a href="{{ url_for('projects.calendar_view', project_id=project.id, year=prev_year, month=prev_month) }}" class="btn btn-secondary" rel="prev">
         {{ ui.icon("chevron_left") }} Previous month

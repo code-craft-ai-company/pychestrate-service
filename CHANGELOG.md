@@ -181,6 +181,19 @@ preview tag.
 
 ### Changed
 
+- The project sections that nothing can fill now say so (PRJ-08). Test
+  and infrastructure specifications, release pipelines and the release
+  calendar's events are read from the web-UI project model, and no page or
+  API creates them, yet their empty states said "managed via the API" or
+  "triggered by watches, pipelines, or the API". They carry the "Preview"
+  notice the Channels and Schedules pages already had, the project
+  navigation labels Infrastructure, Tests, Pipelines and Calendar
+  "(preview)", and the Tests and Pipelines pages link to the Test catalog,
+  Runs and Pipelines pages (filtered to the project) where those things do
+  work. The empty Releases list points to Release Templates. The tabs are
+  not hidden and nothing new can be created; that stays a decision for the
+  project-model issues (#353, #365, #402).
+
 - The pod client (`pychestrate-client`) now agrees with `pyc` on what it
   shares (CLI-20, client repository): `enroll` takes `--server-url` like
   `pyc login` (`--service-url` still works), its default state directory is

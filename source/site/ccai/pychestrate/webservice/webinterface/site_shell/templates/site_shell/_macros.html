@@ -63,6 +63,13 @@
 {#- empty_state(title, hint=None, action_url=None, action_label=None,
     colspan=None) -- one empty-state block. Pass colspan to render it
     as a table row inside a <tbody>. #}
+{#- A page whose data nothing in this version can produce says so, in the
+    words the channels and schedules pages already use (audit ORG-F14,
+    PRJ-08). Use it as ``{% call ui.preview_notice() %}...{% endcall %}``. -#}
+{% macro preview_notice() -%}
+<div class="pyc-preview-notice" role="note" data-role="preview-notice">{{ caller() }}</div>
+{%- endmacro %}
+
 {% macro empty_state(title, hint=None, action_url=None, action_label=None, colspan=None) -%}
 {%- if colspan %}<tr><td colspan="{{ colspan }}">{% endif -%}
 <div class="pyc-empty-state" role="status">

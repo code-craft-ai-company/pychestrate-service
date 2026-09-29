@@ -18,6 +18,11 @@
     <p>Scheduled release windows and their phases</p>
 </div>
 
+{% call ui.preview_notice() %}
+    Preview: release events cannot be created yet &mdash; no page or API
+    manages them &mdash; so this list stays empty.
+{% endcall %}
+
 <div class="toolbar toolbar--end">
     <a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="btn btn-secondary">
         {{ ui.icon("calendar_today") }} Calendar View
@@ -56,7 +61,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No release events scheduled", colspan=6) }}
+            {{ ui.empty_state("No release events.", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>

@@ -84,7 +84,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No releases yet. Releases are created by pipelines or via the API.", colspan=7) }}
+            {{ ui.empty_state("No releases yet.", hint="A release is created from a release template.", action_url=url_for('projects.release_template_list', project_id=project.id), action_label="Release Templates", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>

@@ -4,6 +4,7 @@
 {% block title %}Test Specifications - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
+{% set catalog_query = ('?project_id=' ~ registry_project.project_id) if (registry_project is defined and registry_project) else '' %}
 <nav aria-label="Breadcrumb">
     <ol class="breadcrumb">
         <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
@@ -15,8 +16,15 @@
 
 <div class="page-header">
     <h1>Test Specifications</h1>
-    <p>Test configurations (read-only; managed via API)</p>
+    <p>Test configurations</p>
 </div>
+
+{% call ui.preview_notice() %}
+    Preview: test specifications cannot be created yet &mdash; no page or API
+    manages them &mdash; so this list stays empty. To run this project&rsquo;s
+    tests, use its <a href="/test-catalog{{ catalog_query }}">Test catalog</a>;
+    the runs are listed under <a href="/runs{{ catalog_query }}">Runs</a>.
+{% endcall %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
@@ -49,7 +57,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No test specifications yet. Test specifications are managed via the API.", colspan=7) }}
+            {{ ui.empty_state("No test specifications.", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>

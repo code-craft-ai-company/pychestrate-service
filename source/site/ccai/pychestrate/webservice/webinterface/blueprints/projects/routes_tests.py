@@ -57,6 +57,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    _registry_project_for_legacy,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -344,6 +345,9 @@ def handle_test_job_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["project"] = project
+        context["registry_project"] = _registry_project_for_legacy(
+            db_session=db_session, legacy_proj_id=project_id,
+        )
         context["jobs"] = jobs
         context["specs"] = specs
         context["can_manage"] = can_manage
@@ -412,6 +416,9 @@ def handle_test_spec_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["project"] = project
+        context["registry_project"] = _registry_project_for_legacy(
+            db_session=db_session, legacy_proj_id=project_id,
+        )
         context["specs"] = specs
         context["can_manage"] = can_manage
         context["page"] = params["page"]
