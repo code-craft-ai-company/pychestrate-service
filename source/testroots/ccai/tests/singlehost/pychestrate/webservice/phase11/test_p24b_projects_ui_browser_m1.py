@@ -68,6 +68,8 @@ from playwright.sync_api import Browser, BrowserContext, Page
 from ccai import testbase
 
 from ccai.testshared.skip_helper import skip_test
+
+from ccai.tests.singlehost.pychestrate.webservice.phase11._confirm_helpers import auto_confirm
 from ccai.testshared.test_config import BASE_URL
 
 
@@ -470,7 +472,7 @@ def test_project_delete_redirects_to_list(browser: Browser) -> None:
         # The delete form carries data-confirm; the shell asks through
         # an <mj-dialog> ("Continue") and falls back to the native
         # confirm() -- accept whichever appears.
-        page.on("dialog", lambda dlg: dlg.accept())
+        auto_confirm(page)
         page.click("form[action$='/delete'] button.btn-danger")
         continue_button = page.get_by_role("button", name="Continue")
         try:
@@ -887,7 +889,7 @@ def test_repository_delete_removes_from_list(browser: Browser) -> None:
             "form[action*='/delete'] button[type='submit']"
         )
         if page.locator(delete_form_selector).count() > 0:
-            page.on("dialog", lambda dlg: dlg.accept())
+            auto_confirm(page)
             page.click(delete_form_selector)
             page.wait_for_load_state("domcontentloaded")
         else:
@@ -904,7 +906,7 @@ def test_repository_delete_removes_from_list(browser: Browser) -> None:
                 "form[action*='/delete'] button[type='submit']"
             )
             if delete_button.count() > 0:
-                page.on("dialog", lambda dlg: dlg.accept())
+                auto_confirm(page)
                 delete_button.first.click()
                 page.wait_for_load_state("domcontentloaded")
 
@@ -1189,7 +1191,7 @@ def test_release_template_delete(browser: Browser) -> None:
         # The detail page should have a delete form.
         delete_button_sel = "form[action*='/delete'] button[type='submit']"
         if page.locator(delete_button_sel).count() > 0:
-            page.on("dialog", lambda dlg: dlg.accept())
+            auto_confirm(page)
             page.click(delete_button_sel)
             page.wait_for_load_state("domcontentloaded")
         else:

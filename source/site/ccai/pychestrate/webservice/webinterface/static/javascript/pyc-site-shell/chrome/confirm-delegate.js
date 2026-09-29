@@ -37,19 +37,100 @@ function resolve_confirm_message(form, submitter) {
     return trimmed;
 }
 
-async function ask_confirmation(message) {
+/*
+ * The confirmation as a modal <dialog> in the site's own styling: the
+ * message in full, Cancel focused (so a stray Enter does not delete
+ * anything), the acting button named for what it does ("Delete",
+ * "Deactivate"), and Escape means no. <dialog>.showModal() traps focus and
+ * marks the rest of the page inert, which the browser's own confirm() box
+ * does not let a page style or word (XC-15).
+ */
+function ask_with_dialog(message, confirm_label) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.classList.add("pyc-confirm");
+        dialog.setAttribute("aria-labelledby", "pyc-confirm-title");
+        dialog.setAttribute("aria-describedby", "pyc-confirm-message");
+
+        const form = document.createElement("form");
+        form.setAttribute("method", "dialog");
+
+        const title = document.createElement("h2");
+        title.id = "pyc-confirm-title";
+        title.classList.add("pyc-confirm__title");
+        title.textContent = "Please confirm";
+        form.appendChild(title);
+
+        const body = document.createElement("div");
+        body.id = "pyc-confirm-message";
+        body.classList.add("pyc-confirm__message");
+        for (const line of message.split(/\r?\n/)) {
+            if (line.trim().length === 0) {
+                continue;
+            }
+            const paragraph = document.createElement("p");
+            paragraph.textContent = line.trim();
+            body.appendChild(paragraph);
+        }
+        form.appendChild(body);
+
+        const actions = document.createElement("div");
+        actions.classList.add("pyc-confirm__actions");
+        const cancel = document.createElement("button");
+        cancel.type = "submit";
+        cancel.value = "cancel";
+        cancel.autofocus = true;
+        cancel.classList.add("pyc-confirm__button");
+        cancel.setAttribute("data-role", "confirm-cancel");
+        cancel.textContent = "Cancel";
+        const accept = document.createElement("button");
+        accept.type = "submit";
+        accept.value = "confirm";
+        accept.classList.add("pyc-confirm__button", "pyc-confirm__button--danger");
+        accept.setAttribute("data-role", "confirm-accept");
+        accept.textContent = confirm_label;
+        actions.appendChild(cancel);
+        actions.appendChild(accept);
+        form.appendChild(actions);
+        dialog.appendChild(form);
+
+        dialog.addEventListener("close", () => {
+            const accepted = dialog.returnValue === "confirm";
+            dialog.remove();
+            resolve(accepted);
+        });
+        document.body.appendChild(dialog);
+        dialog.showModal();
+    });
+}
+
+async function ask_confirmation(message, confirm_label) {
     const dialog_ctor = typeof customElements !== "undefined"
         ? customElements.get("mj-dialog")
         : undefined;
     if (dialog_ctor !== undefined && typeof dialog_ctor.confirm === "function") {
         try {
-            const result = await dialog_ctor.confirm({ message, confirmLabel: "Continue", cancelLabel: "Cancel" });
+            const result = await dialog_ctor.confirm({ message, confirmLabel: confirm_label, cancelLabel: "Cancel" });
             return result === true;
         } catch (error) {
-            // Fall through to the native dialog.
+            // Fall through to the page's own dialog.
         }
     }
+    if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
+        return ask_with_dialog(message, confirm_label);
+    }
     return window.confirm(message);
+}
+
+/* What the button that will do the deed says: its own text, else "Continue". */
+function resolve_confirm_label(submitter) {
+    if (submitter !== null && submitter !== undefined && typeof submitter.textContent === "string") {
+        const text = submitter.textContent.replace(/\s+/g, " ").trim();
+        if (text.length > 0 && text.length <= 40) {
+            return text;
+        }
+    }
+    return "Continue";
 }
 
 function install_confirm_delegate(root) {
@@ -74,7 +155,7 @@ function install_confirm_delegate(root) {
         }
         event.preventDefault();
         const message = resolve_confirm_message(form, submitter);
-        ask_confirmation(message).then((accepted) => {
+        ask_confirmation(message, resolve_confirm_label(submitter)).then((accepted) => {
             if (accepted !== true) {
                 return;
             }

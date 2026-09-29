@@ -48,6 +48,8 @@ from playwright.sync_api import Browser, BrowserContext, Page
 from ccai import testbase
 
 from ccai.testshared.skip_helper import skip_test
+
+from ccai.tests.singlehost.pychestrate.webservice.phase11._confirm_helpers import auto_confirm
 from ccai.testshared.test_config import BASE_URL
 
 
@@ -549,7 +551,7 @@ def test_admin_deactivate_user_workflow(browser: Browser):
         testbase.assert_true(deact_rows_before.count() >= 1)
 
         # Deactivate the user via the Deactivate button.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         deact_row = page.locator(
             "section.pyc-admin-page-fragment .data-table tr"
         ).filter(has_text=deact_username).first
@@ -940,7 +942,7 @@ def test_admin_delete_variable_workflow(browser: Browser):
         _wait_for_admin_fragment(page=page)
 
         # Submit the Delete form on the detail page.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         del_btn = page.locator(
             "section.pyc-admin-page-fragment button.btn-danger"
         ).filter(has_text="Delete").first
@@ -1119,7 +1121,7 @@ def test_admin_delete_scope_workflow(browser: Browser):
         testbase.assert_true(created_row.count() >= 1)
 
         # Click the Delete button in the row for this scope.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         del_row = page.locator(
             "section.pyc-admin-page-fragment .data-table tr"
         ).filter(has_text=del_scope_name).first
@@ -1370,7 +1372,7 @@ def test_admin_delete_secret_workflow(browser: Browser):
         testbase.assert_true(created_secret.count() >= 1)
 
         # Click the Delete button in the secret's row.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         secret_row = page.locator(
             "section.pyc-admin-page-fragment .data-table tr"
         ).filter(has_text=secret_name).first
@@ -1565,7 +1567,7 @@ def test_admin_revoke_enrollment_token_workflow(browser: Browser):
         )
 
         # Find the PENDING row for this pod and click Revoke.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         token_row = page.locator(
             "section.pyc-admin-page-fragment .data-table tr"
         ).filter(has_text=revoke_pod_name).first

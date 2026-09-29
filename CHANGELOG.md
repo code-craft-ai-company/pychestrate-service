@@ -194,6 +194,17 @@ preview tag.
 
 ### Changed
 
+- A destructive action asks in the site's own dialog (XC-15). Every
+  `data-confirm` form (delete a project, a resource, a user, a variable;
+  deactivate; revoke) asked through the browser's own confirm box, which a page
+  can neither style nor word. The shell now opens a modal `<dialog>`: the message
+  in full (one paragraph per line), Cancel focused so a stray Enter deletes
+  nothing, the acting button named for what it does ("Delete project",
+  "Deactivate"), Escape meaning no, and the rest of the page inert. It follows
+  the light and dark themes. The bundle views that call the browser's confirm
+  directly (pod drain and retire, run cancel, resource actions, webhook and
+  feature-flag toggles) still do; see the issue.
+
 - The `type` of an error response now leads somewhere, and the dispatcher's
   own errors are problem documents (DOC-14). The documented types named
   `https://docs.pychestrate.io/errors/...`, a site nothing publishes; they

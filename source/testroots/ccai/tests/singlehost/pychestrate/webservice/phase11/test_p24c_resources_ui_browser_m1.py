@@ -46,6 +46,8 @@ from playwright.sync_api import Browser, BrowserContext, Page, Response
 from ccai import testbase
 
 from ccai.testshared.skip_helper import skip_test
+
+from ccai.tests.singlehost.pychestrate.webservice.phase11._confirm_helpers import auto_confirm
 from ccai.testshared.test_config import BASE_URL
 
 
@@ -464,7 +466,7 @@ def test_resource_delete_removes_from_list(browser: Browser):
         # Submit the inline delete form by clicking the Delete button
         # in the row that contains our resource name. The template
         # renders a <form> with a confirm() guard -- handle the dialog.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         delete_button = page.locator(
             "tr:has-text('{}') button:has-text('Delete')".format(
                 resource_name
@@ -653,7 +655,7 @@ def test_pool_delete_removes_from_list(browser: Browser):
 
         # Submit the delete form for our pool by clicking its Delete
         # button. Accept the browser confirm dialog if present.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         delete_button = page.locator(
             "tr:has-text('{}') button:has-text('Delete')".format(pool_name)
         ).first
@@ -828,7 +830,7 @@ def test_ip_pool_delete_removes_from_list(browser: Browser):
         testbase.assert_true(pool_name in content)
 
         # Submit the inline delete form.
-        page.on("dialog", lambda dialog: dialog.accept())
+        auto_confirm(page)
         delete_button = page.locator(
             "tr:has-text('{}') button:has-text('Delete')".format(pool_name)
         ).first
@@ -1139,7 +1141,7 @@ def test_reservation_cancel_removes_from_list(browser: Browser):
         cancel_buttons = page.locator("button:has-text('Cancel'), a:has-text('Cancel')").all()
         if len(cancel_buttons) > 0:
             # Accept any confirm dialog and click the first Cancel control.
-            page.on("dialog", lambda dialog: dialog.accept())
+            auto_confirm(page)
             cancel_buttons[0].click()
             page.wait_for_load_state("load", timeout=NAVIGATION_TIMEOUT_MS)
             _assert_no_500(page=page, path="reservation list after cancel")

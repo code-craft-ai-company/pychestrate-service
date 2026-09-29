@@ -1065,3 +1065,59 @@ mj-data-table::part(grid-root) {
     display: flex;
     flex-direction: column;
 }
+
+
+/* ---- The confirmation dialog of a destructive action (XC-15) ---- */
+
+.pyc-confirm {
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--pyc-site-shell-border);
+    border-radius: 0.5rem;
+    background: var(--pyc-site-shell-surface-elevated);
+    color: var(--pyc-site-shell-on-surface-elevated);
+    box-shadow: var(--pyc-site-shell-shadow-elevated);
+}
+
+.pyc-confirm::backdrop {
+    background: var(--pyc-site-shell-backdrop);
+}
+
+.pyc-confirm__title {
+    margin: 0 0 0.75rem;
+    font-size: var(--pyc-site-shell-font-size-brand);
+}
+
+.pyc-confirm__message p {
+    margin: 0 0 0.5rem;
+    overflow-wrap: anywhere;
+}
+
+.pyc-confirm__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.pyc-confirm__button {
+    min-height: 2.5rem;
+    padding: 0.375rem 1rem;
+    border: 1px solid var(--pyc-site-shell-border);
+    border-radius: 0.375rem;
+    background: var(--pyc-site-shell-surface-hover);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.pyc-confirm__button--danger {
+    background: var(--pyc-color-error-surface);
+    color: var(--pyc-color-on-error-surface);
+    border-color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-confirm__button:focus-visible {
+    outline: 2px solid var(--pyc-site-shell-focus-ring);
+    outline-offset: 2px;
+}
