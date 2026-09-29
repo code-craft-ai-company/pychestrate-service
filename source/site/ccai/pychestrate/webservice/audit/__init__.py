@@ -33,6 +33,9 @@ from ccai.pychestrate.webservice.audit.extensions.role_events import (
     ROLE_AUDIT_EVENT_TYPES,
     RoleBindingAuditEvents,
 )
+from ccai.pychestrate.webservice.audit.extensions.reservation_events import (
+    ReservationOverriddenAuditEvents,
+)
 from ccai.pychestrate.webservice.audit.extensions.rpa_events import RPA_AUDIT_EVENT_TYPES
 from ccai.pychestrate.webservice.audit.extensions.ui_profile_events import (
     UiProfileDeploymentChangedAuditEvents,
@@ -65,6 +68,9 @@ def register_builtin_extensions() -> None:
         :returns: None.
     """
     register_factory_implementation(implementation=LocalDatabaseAuditSink)
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ReservationOverriddenAuditEvents
+    )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=UserLifecycleAuditEvents
     )

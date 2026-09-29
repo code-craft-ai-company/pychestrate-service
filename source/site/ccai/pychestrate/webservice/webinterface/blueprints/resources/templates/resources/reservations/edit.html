@@ -40,6 +40,20 @@
             <input type="text" class="form-control" value="{{ mode }}" disabled>
             <p class="form-text">Allocation mode cannot be changed</p>
         </div>
+
+        {% if acting_for_other %}
+        <div class="form-group">
+            <label for="override_reason">Reason *</label>
+            <input type="text" id="override_reason" name="override_reason" class="form-control" required
+                   value="{% if form_data %}{{ form_data.get('override_reason', '') }}{% endif %}"{{ ui.invalid_attrs(errors, 'override_reason', 'override_reason-help') }}>
+            {{ ui.field_error(errors, 'override_reason') }}
+            <p class="form-text" id="override_reason-help">
+                This reservation is {{ reservation.username or 'another person' }}&rsquo;s. You may change it as a
+                resource manager; your reason and their name are recorded in the audit log. They are not
+                notified.
+            </p>
+        </div>
+        {% endif %}
         
         <div class="actions-row">
             <button type="submit" class="btn btn-primary">

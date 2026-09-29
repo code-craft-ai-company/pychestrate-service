@@ -447,7 +447,56 @@ RESERVATION_FIELD_LABELS: Dict[str, str] = {
     "resource_id": "Resource",
     "start_time": "Start Time",
     "end_time": "End Time",
+    "override_reason": "Reason",
 }
+
+def _stage_override_event(
+        *, db_session: Any, actor_user_id: Any, reservation: Any, action: str, reason: str
+    ) -> None:
+    """
+        Stage the audit event for a lab manager acting on someone else's
+        reservation. It is published when the change commits, so a
+        refused change leaves no record and an accepted one cannot lack
+        it.
+
+        :param db_session: The request's session (the manager's commit
+                           publishes the event).
+        :param actor_user_id: The manager.
+        :param reservation: The reservation being changed.
+        :param action: ``cancelled`` or ``changed``.
+        :param reason: What the manager gave.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import new_uuid  # noqa: E402
+    from ccai.pychestrate.webservice.audit.extensions.reservation_events import (  # noqa: E402
+        RESERVATION_OVERRIDDEN_TOPIC,
+    )
+    from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent  # noqa: E402
+    from ccai.pychestrate.webservice.messaging.outbox import enqueue_event  # noqa: E402
+
+    payload = {
+        "reservation_id": int(reservation.id),
+        "resource_id": int(reservation.resource_id) if reservation.resource_id is not None else None,
+        "action": action,
+        "owner_user_id": str(reservation.user_id),
+        "reason": reason,
+        "actor_user_id": str(actor_user_id),
+    }
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(topic=RESERVATION_OVERRIDDEN_TOPIC, payload=payload, source_event_id=new_uuid()),
+    )
+    return
+
+
+#: What a manager is told when they act for another person without a reason.
+CANCEL_FOR_OTHER_NEEDS_REASON: str = (
+    "Give a reason to cancel someone else's reservation; it is recorded in the audit log."
+)
+EDIT_FOR_OTHER_NEEDS_REASON: str = (
+    "Say why you are changing someone else's reservation; it is recorded in the audit log."
+)
 
 #: The input each allocation error is about, by error class name. The
 #: manager's errors carry no field, but their type says which input to
@@ -840,6 +889,8 @@ def handle_reservation_edit(request: Request) -> Response:
         viewer_timezone = ""
         errors: Dict[str, str] = {}
         status_code = 200
+        can_manage = _resources_permission_flags(auth=auth)["can_manage"] is True
+        is_owner = str(getattr(reservation, "user_id", "")) == str(auth.user_id)
 
         if method == "POST":
             status_code = 400
@@ -874,8 +925,16 @@ def handle_reservation_edit(request: Request) -> Response:
                 end_time = _parse_form_datetime(
                     raw=single_form.get("end_time", ""), zone=zone
                 )
+            typed_reason = str(single_form.get("override_reason", "") or "").strip()
+            override_reason = typed_reason if (is_owner is False and can_manage is True and len(typed_reason) > 0) else None
 
-            if zone is None:
+            if is_owner is False and can_manage is True and override_reason is None:
+                errors["override_reason"] = EDIT_FOR_OTHER_NEEDS_REASON
+                if start_time is None:
+                    errors["start_time"] = "Enter a start time."
+                if end_time is None:
+                    errors["end_time"] = "Enter an end time."
+            elif zone is None:
                 flash.add_flash(
                     session=auth.session,
                     message=_unknown_zone_message(zone_name=zone_name),
@@ -888,19 +947,29 @@ def handle_reservation_edit(request: Request) -> Response:
                     errors["end_time"] = "Enter an end time."
             else:
                 try:
-                    allocation_manager.modify_reservation(
-                        reservation_id,
-                        start_time=start_time,
-                        end_time=end_time,
-                        user_id=auth.user_id,
-                    )
+                    modify_arguments: Dict[str, Any] = {
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "user_id": auth.user_id,
+                    }
+                    if override_reason is not None:
+                        modify_arguments["override_reason"] = override_reason
+                        _stage_override_event(
+                            db_session=db_session, actor_user_id=auth.user_id,
+                            reservation=reservation, action="changed", reason=override_reason,
+                        )
+                    allocation_manager.modify_reservation(reservation_id, **modify_arguments)
                     response = _redirect_with_flash(
                         session=auth.session,
                         url=_url_for_module.url_for(
                             "resources.reservation_detail",
                             reservation_id=reservation_id,
                         ),
-                        message="Reservation updated successfully.",
+                        message=(
+                            "Reservation updated. Your reason was recorded in the audit log."
+                            if override_reason is not None
+                            else "Reservation updated successfully."
+                        ),
                         category=flash.CATEGORY_SUCCESS,
                     )
                     return response
@@ -940,6 +1009,7 @@ def handle_reservation_edit(request: Request) -> Response:
         context["viewer_timezone"] = viewer_timezone
         context["errors"] = errors
         context["error_labels"] = RESERVATION_FIELD_LABELS
+        context["acting_for_other"] = is_owner is False and can_manage is True
         response = _render(
             template_name="resources/reservations/edit.html",
             context=context,
@@ -998,21 +1068,46 @@ def handle_reservation_cancel(request: Request) -> Response:
         allocation_manager = _build_allocation_manager(
             db_session=db_session
         )
+        # A lab manager may cancel someone else's reservation, giving a
+        # reason that goes into the audit log with the owner's name.
+        can_manage = _resources_permission_flags(auth=auth)["can_manage"] is True
+        typed_reason = str(single_form.get("reason", "") or "").strip()
+        override_reason = typed_reason if (can_manage is True and len(typed_reason) > 0) else None
         try:
-            allocation_manager.cancel_reservation(
-                reservation_id, auth.user_id
-            )
+            acted_for_other = False
+            if override_reason is not None:
+                held = _find_reservation_by_id(
+                    allocation_manager=allocation_manager, reservation_id=reservation_id,
+                )
+                if held is not None and str(held.user_id) != str(auth.user_id):
+                    acted_for_other = True
+                    _stage_override_event(
+                        db_session=db_session, actor_user_id=auth.user_id,
+                        reservation=held, action="cancelled", reason=override_reason,
+                    )
+            if acted_for_other is True:
+                allocation_manager.cancel_reservation(
+                    reservation_id, auth.user_id, override_reason=override_reason
+                )
+            else:
+                allocation_manager.cancel_reservation(reservation_id, auth.user_id)
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
-                message="Reservation cancelled successfully.",
+                message=(
+                    "Reservation cancelled. Your reason was recorded in the audit log."
+                    if acted_for_other is True
+                    else "Reservation cancelled successfully."
+                ),
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
         except Exception as exc:
             message = _describe_allocation_error(exc=exc)
+            if can_manage is True and getattr(exc, "error_code", "") == "NOT_RESERVATION_OWNER":
+                message = CANCEL_FOR_OTHER_NEEDS_REASON
             if message is None:
                 _LOGGER.exception(
                     "Unexpected error cancelling reservation %s",

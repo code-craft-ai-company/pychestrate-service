@@ -74,15 +74,22 @@
     </div>
     
     <div>
-        {% if reservation.status == 'pending' and (reservation.user_id | string) == (current_user_id | string) %}
+        {% set is_owner = (reservation.user_id | string) == (current_user_id | string) %}
+        {% if reservation.status == 'pending' and (is_owner or can_manage) %}
         <div class="card">
             <h2 class="card-header">Actions</h2>
             <div class="stack">
                 <a href="{{ url_for('resources.reservation_edit', reservation_id=reservation.id) }}" class="btn btn-secondary">
                     {{ ui.icon("edit") }} Edit Reservation
                 </a>
-                <form action="{{ url_for('resources.reservation_cancel', reservation_id=reservation.id) }}" method="post" data-confirm="Cancel this reservation?">
+                <form action="{{ url_for('resources.reservation_cancel', reservation_id=reservation.id) }}" method="post" data-confirm="{% if is_owner %}Cancel this reservation?{% else %}Cancel this person's reservation? Your reason is recorded in the audit log; they are not notified.{% endif %}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    {% if not is_owner %}
+                    <div class="form-group">
+                        <label for="cancel_reason">Reason for cancelling {{ reservation.username or "another person" }}&rsquo;s reservation</label>
+                        <input type="text" id="cancel_reason" name="reason" class="form-control" required>
+                    </div>
+                    {% endif %}
                     <button type="submit" class="btn btn-danger btn-block">
                         {{ ui.icon("cancel") }} Cancel Reservation
                     </button>

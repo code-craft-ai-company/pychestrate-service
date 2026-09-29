@@ -278,6 +278,14 @@ preview tag.
   tried ("You need the resource-management permission to delete a
   resource pool.") instead of a page they cannot open.
 
+- **A lab manager can change or cancel someone else's reservation.**
+  Only the owner could, so a manager who needed a device could not free
+  it. A person with the resource-management permission now gives a
+  reason (next to Cancel, or in the edit form), and it goes into the
+  audit log with the owner's name as its own record. Anyone else is
+  refused as before. The owner is not notified: nothing in the product
+  sends notifications yet.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

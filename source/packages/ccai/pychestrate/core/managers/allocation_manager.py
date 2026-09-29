@@ -1219,15 +1219,26 @@ class AllocationManager:
         
         return self._reservation_to_response(reservation)
     
-    def cancel_reservation(self, reservation_id: int, user_id: str) -> ReservationResponse:
+    def cancel_reservation(
+        self,
+        reservation_id: int,
+        user_id: str,
+        override_reason: Optional[str] = None
+    ) -> ReservationResponse:
         """
         Cancel a pending reservation.
         
         :param reservation_id: The reservation's unique identifier
         :param user_id: The ID of the user cancelling the reservation
+        :param override_reason: Why someone other than the owner is
+                                cancelling it. The caller passes it only
+                                for a person allowed to act for others
+                                (a lab manager); it is recorded with the
+                                owner in the audit event.
         :returns: ReservationResponse with the updated reservation data
         :raises ReservationNotFoundError: If reservation is not found
-        :raises NotAllocationOwnerError: If user is not the reservation owner
+        :raises NotAllocationOwnerError: If user is not the reservation
+                                         owner and gave no override reason
         
         Validates: Requirements 5.4
         """
@@ -1240,12 +1251,10 @@ class AllocationManager:
         if not reservation:
             raise ReservationNotFoundError(f"Reservation with ID '{reservation_id}' not found")
         
-        # Check ownership
-        if str(reservation.user_id) != str(user_id):
-            raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
-                error_code="NOT_RESERVATION_OWNER"
-            )
+        # Check ownership; a manager may act for the owner with a reason
+        override = self._reservation_override(
+            reservation=reservation, user_id=user_id, override_reason=override_reason,
+        )
         
         # Check if reservation can be cancelled
         if reservation.status not in (ReservationStatus.PENDING.value, ReservationStatus.ACTIVE.value):
@@ -1264,20 +1273,63 @@ class AllocationManager:
             self._audit_logger.log_event(
                 event_type='resource_reservation_cancelled',
                 user_id=str(user_id) if user_id else None,
-                details={
-                    "reservation_id": reservation.id,
-                    "resource_id": reservation.resource_id
-                }
+                details=self._with_override(
+                    {
+                        "reservation_id": reservation.id,
+                        "resource_id": reservation.resource_id
+                    },
+                    reservation=reservation,
+                    override=override,
+                )
             )
         
         return self._reservation_to_response(reservation)
     
+    @staticmethod
+    def _reservation_override(
+        reservation: Any,
+        user_id: str,
+        override_reason: Optional[str]
+    ) -> Optional[str]:
+        """
+        Decide whether ``user_id`` may act on ``reservation``.
+
+        The owner may. Anyone else may only when the caller supplies a
+        reason for acting for the owner (the caller checks the person
+        holds the manager permission before passing one).
+
+        :returns: The override reason when someone other than the owner
+                  is acting, else ``None``.
+        :raises NotAllocationOwnerError: For a non-owner with no reason.
+        """
+        if str(reservation.user_id) == str(user_id):
+            return None
+        reason = (override_reason or "").strip()
+        if len(reason) == 0:
+            raise NotAllocationOwnerError(
+                f"User '{user_id}' is not the owner of reservation '{reservation.id}'",
+                error_code="NOT_RESERVATION_OWNER"
+            )
+        return reason
+
+    @staticmethod
+    def _with_override(details: Dict[str, Any], reservation: Any, override: Optional[str]) -> Dict[str, Any]:
+        """
+        Add who the reservation belongs to and why someone else acted on
+        it, when one did, to an audit event's details.
+        """
+        if override is not None:
+            details["acted_for_owner_user_id"] = str(reservation.user_id)
+            details["override_reason"] = override
+        return details
+
     def modify_reservation(
         self,
         reservation_id: int,
         user_id: str,
         start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None
+        end_time: Optional[datetime] = None,
+        override_reason: Optional[str] = None
     ) -> ReservationResponse:
         """
         Modify reservation time window.
@@ -1286,6 +1338,8 @@ class AllocationManager:
         :param user_id: The ID of the user modifying the reservation
         :param start_time: New start time (optional)
         :param end_time: New end time (optional)
+        :param override_reason: Why someone other than the owner is
+                                changing it (see :meth:`cancel_reservation`)
         :returns: ReservationResponse with the updated reservation data
         :raises ReservationNotFoundError: If reservation is not found
         :raises NotAllocationOwnerError: If user is not the reservation owner
@@ -1303,12 +1357,10 @@ class AllocationManager:
         if not reservation:
             raise ReservationNotFoundError(f"Reservation with ID '{reservation_id}' not found")
         
-        # Check ownership
-        if str(reservation.user_id) != str(user_id):
-            raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
-                error_code="NOT_RESERVATION_OWNER"
-            )
+        # Check ownership; a manager may act for the owner with a reason
+        override = self._reservation_override(
+            reservation=reservation, user_id=user_id, override_reason=override_reason,
+        )
         
         # Check if reservation can be modified
         if reservation.status != ReservationStatus.PENDING.value:
@@ -1355,12 +1407,16 @@ class AllocationManager:
             self._audit_logger.log_event(
                 event_type='resource_reservation_modified',
                 user_id=str(user_id) if user_id else None,
-                details={
-                    "reservation_id": reservation.id,
-                    "resource_id": reservation.resource_id,
-                    "new_start_time": str(new_start),
-                    "new_end_time": str(new_end)
-                }
+                details=self._with_override(
+                    {
+                        "reservation_id": reservation.id,
+                        "resource_id": reservation.resource_id,
+                        "new_start_time": str(new_start),
+                        "new_end_time": str(new_end)
+                    },
+                    reservation=reservation,
+                    override=override,
+                )
             )
         
         return self._reservation_to_response(reservation)

@@ -222,10 +222,12 @@ class _FakeAllocation:
 class _FakeReservation:
     def __init__(
             self, *, reservation_id: int,
-            resource_id: int = 1
+            resource_id: int = 1,
+            user_id: str = "u-admin"
         ) -> None:
         self.id: int = reservation_id
         self.resource_id: int = resource_id
+        self.user_id: str = user_id
         self.start_time: datetime = datetime(2026, 5, 4, 10, 0)
         self.end_time: datetime = datetime(2026, 5, 4, 12, 0)
         return
