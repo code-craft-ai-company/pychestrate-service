@@ -91,7 +91,7 @@
     
     <div>
         {% set status = allocation.status %}
-        {% if status == 'active' %}
+        {% if status == 'active' and (allocation.user_id == current_user_id or can_manage) %}
         <div class="card">
             <h2 class="card-header">Actions</h2>
             <div class="stack">
@@ -102,7 +102,7 @@
                         {{ ui.icon("assignment_return") }} Checkin
                     </button>
                 </form>
-                {% else %}
+                {% elif can_manage %}
                 <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=allocation.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="form-group">

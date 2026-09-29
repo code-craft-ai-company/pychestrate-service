@@ -734,6 +734,30 @@ def handle_dashboard(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _editable_project_ids(*, project_manager: Any, user_id: Any, projects: Any) -> List[Any]:
+    """
+        The ids of the listed projects the person may edit, so the list
+        shows Edit only where it would not bounce them. It asks the same
+        question the edit page does (the ``admin`` permission), and any
+        failure to answer counts as "no".
+
+        :param project_manager: Already-built ProjectManager.
+        :param user_id: The signed-in person.
+        :param projects: The projects on this page of the list.
+
+        :returns: The ids of the editable ones.
+    """
+    rtnval: List[Any] = []
+    for project in projects:
+        try:
+            allowed = project_manager.check_permission(project.id, user_id, "admin")
+        except Exception:
+            allowed = False
+        if allowed is True:
+            rtnval.append(project.id)
+    return rtnval
+
+
 def handle_project_list(request: Request) -> Response:
     """
         ``GET /projects/list``.
@@ -770,6 +794,9 @@ def handle_project_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["projects"] = projects
+        context["editable_project_ids"] = _editable_project_ids(
+            project_manager=project_manager, user_id=auth.user_id, projects=projects,
+        )
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages

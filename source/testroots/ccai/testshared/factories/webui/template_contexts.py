@@ -480,6 +480,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     # Forms
     "form_data": _form_data,
     "issue_for": _const(None),
+    "editable_project_ids": _by_mode([1, 2, 3], []),
     "submitted_role": _const(None),
     "form_values": _form_values,
     "error": _by_mode("Invalid token. Re-read the token from the server.", None),

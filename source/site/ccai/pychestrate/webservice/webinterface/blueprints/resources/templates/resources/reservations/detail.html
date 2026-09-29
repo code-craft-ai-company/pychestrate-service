@@ -74,7 +74,7 @@
     </div>
     
     <div>
-        {% if reservation.status == 'pending' %}
+        {% if reservation.status == 'pending' and (reservation.user_id | string) == (current_user_id | string) %}
         <div class="card">
             <h2 class="card-header">Actions</h2>
             <div class="stack">

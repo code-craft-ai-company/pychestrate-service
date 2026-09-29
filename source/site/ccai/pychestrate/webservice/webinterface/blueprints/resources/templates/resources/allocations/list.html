@@ -79,7 +79,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-warning">Checkin</button>
                 </form>
-                {% else %}
+                {% elif can_manage %}
                 <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline; white-space: nowrap;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="text" name="reason" class="form-control" required

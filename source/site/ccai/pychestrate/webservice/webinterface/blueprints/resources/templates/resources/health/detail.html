@@ -4,6 +4,8 @@
 {% block title %}Health - {{ resource.name }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
+{% set typed = form_data or {} %}
+{% set current_status = typed.get('status') or resource.health_status %}
 <div class="page-header">
     <h1>{{ resource.name }} - Health</h1>
     <p>Health status and transition history</p>
@@ -147,17 +149,16 @@
     </div>
     
     <div>
+        {% if can_manage %}
         <div class="card">
             <h2 class="card-header">Update Status</h2>
             {{ ui.error_summary(errors, error_labels) }}
-            {% set typed = form_data or {} %}
             <form method="post" action="{{ url_for('resources.health_update', resource_id=resource.id) }}" data-confirm="Change the health status? Offline and maintenance block new checkouts of this resource.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
                 <div class="form-group">
                     <label for="status">New Status</label>
                     <select id="status" name="status" class="form-control" required{{ ui.invalid_attrs(errors, "status") }}>
-                        {% set current_status = typed.get('status') or resource.health_status %}
                         <option value="online" {% if current_status == 'online' %}selected{% endif %}>Online</option>
                         <option value="offline" {% if current_status == 'offline' %}selected{% endif %}>Offline</option>
                         <option value="degraded" {% if current_status == 'degraded' %}selected{% endif %}>Degraded</option>
@@ -177,10 +178,12 @@
                 </button>
             </form>
         </div>
+        {% endif %}
         
         <div class="card">
             <h2 class="card-header">Actions</h2>
             <div class="stack">
+                {% if can_manage %}
                 <a href="{{ url_for('resources.health_config', resource_id=resource.id) }}" class="btn btn-secondary">
                     {{ ui.icon("settings") }} Configure Health Check
                 </a>
@@ -190,6 +193,7 @@
                         {{ ui.icon("play_arrow") }} Run Health Check
                     </button>
                 </form>
+                {% endif %}
                 <a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}" class="btn btn-secondary">
                     {{ ui.icon("devices") }} View Resource
                 </a>

@@ -10,11 +10,13 @@
 </div>
 
 
+{% if can_manage %}
 <div class="toolbar toolbar--end">
     <a href="{{ url_for('resources.pool_create') }}" class="btn btn-primary">
         {{ ui.icon("add") }} Create Pool
     </a>
 </div>
+{% endif %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
@@ -23,7 +25,7 @@
             <th scope="col">Description</th>
             <th scope="col">Resources</th>
             <th scope="col">Created</th>
-            <th scope="col">Actions</th>
+            {% if can_manage %}<th scope="col">Actions</th>{% endif %}
         </tr>
     </thead>
     <tbody>
@@ -38,6 +40,7 @@
             <td>{{ pool.description or '-' }}</td>
             <td>{{ pool.resource_count }}</td>
             <td>{{ pool.created_at | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+            {% if can_manage %}
             <td>
                 {% if not pool.is_default %}
                 <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?">
@@ -46,12 +49,13 @@
                 </form>
                 {% endif %}
             </td>
+            {% endif %}
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" class="muted center">
+            <td colspan="{{ 5 if can_manage else 4 }}" class="muted center">
                 No pools found.
-                <a href="{{ url_for('resources.pool_create') }}">Create one</a>
+                {% if can_manage %}<a href="{{ url_for('resources.pool_create') }}">Create one</a>{% endif %}
             </td>
         </tr>
         {% endfor %}

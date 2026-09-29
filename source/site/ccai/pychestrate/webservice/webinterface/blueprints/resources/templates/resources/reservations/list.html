@@ -89,7 +89,7 @@
                 {% endif %}
             </td>
             <td>
-                {% if res.status == 'pending' %}
+                {% if res.status == 'pending' and (res.user_id | string) == (current_user_id | string) %}
                 <a href="{{ url_for('resources.reservation_edit', reservation_id=res.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.reservation_cancel', reservation_id=res.id) }}" method="post" data-confirm="Cancel this reservation?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

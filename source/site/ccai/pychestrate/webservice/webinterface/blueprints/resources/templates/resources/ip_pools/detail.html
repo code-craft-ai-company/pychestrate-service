@@ -135,6 +135,7 @@
     </div>
     
     <div>
+        {% if can_manage %}
         <div class="card">
             <h2 class="card-header">Actions</h2>
             <div class="stack">
@@ -149,6 +150,7 @@
                 </form>
             </div>
         </div>
+        {% endif %}
         
         {% if pool.available_count > 0 %}
         <div class="card">

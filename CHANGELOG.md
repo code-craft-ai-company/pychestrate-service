@@ -268,6 +268,14 @@ preview tag.
   input (an inactive account, a device at capacity, a lock-out) stays a
   banner. Sign-in stays generic on purpose.
 
+- **Controls that need permission are shown only to people who hold it.**
+  A lab user without the resource-management permission used to see
+  Create, Edit, Delete, Force check in and Configure on most resources
+  pages and be turned away with "You do not have permission" when they
+  used one. The pages now show those only to managers, and editing or
+  cancelling a reservation only to its owner; the projects list shows
+  Edit only on projects the person may edit.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

@@ -58,11 +58,13 @@
         <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Clear</a>
     </form>
 
+    {% if can_manage %}
     <div class="push-end">
         <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
             {{ ui.icon("add") }} Create Resource
         </a>
     </div>
+    {% endif %}
 </div>
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
@@ -74,7 +76,7 @@
             <th scope="col">Health</th>
             <th scope="col">Capacity</th>
             <th scope="col">Tags</th>
-            <th scope="col">Actions</th>
+            {% if can_manage %}<th scope="col">Actions</th>{% endif %}
         </tr>
     </thead>
     <tbody>
@@ -106,6 +108,7 @@
                 <span class="badge badge-secondary">+{{ resource.tags|length - 3 }}</span>
                 {% endif %}
             </td>
+            {% if can_manage %}
             <td>
                 <a href="{{ url_for('resources.resource_edit', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm="Delete this resource?">
@@ -113,18 +116,19 @@
                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
             </td>
+            {% endif %}
         </tr>
         {% else %}
         <tr>
             {% if filters_active %}
-            <td colspan="7" class="muted center">
+            <td colspan="{{ 7 if can_manage else 6 }}" class="muted center">
                 No resources match the current filters.
                 <a href="{{ url_for('resources.resource_list') }}">Clear filters</a>
             </td>
             {% else %}
-            <td colspan="7" class="muted center">
+            <td colspan="{{ 7 if can_manage else 6 }}" class="muted center">
                 No resources found.
-                <a href="{{ url_for('resources.resource_create') }}">Create one</a>
+                {% if can_manage %}<a href="{{ url_for('resources.resource_create') }}">Create one</a>{% endif %}
             </td>
             {% endif %}
         </tr>

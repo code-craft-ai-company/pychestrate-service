@@ -58,6 +58,7 @@
     <div class="card">
         <h2 class="card-header">Quick Actions</h2>
         <div class="stack">
+            {% if can_manage %}
             <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
                 {{ ui.icon("add") }} Create Resource
             </a>
@@ -67,6 +68,7 @@
             <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-secondary">
                 {{ ui.icon("add_circle") }} Create IP Pool
             </a>
+            {% endif %}
             <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-secondary">
                 {{ ui.icon("event") }} Create Reservation
             </a>

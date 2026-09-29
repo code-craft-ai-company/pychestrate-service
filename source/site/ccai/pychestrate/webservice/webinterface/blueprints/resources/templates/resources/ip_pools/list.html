@@ -10,11 +10,13 @@
 </div>
 
 
+{% if can_manage %}
 <div class="toolbar toolbar--end">
     <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-primary">
         {{ ui.icon("add") }} Create IP Pool
     </a>
 </div>
+{% endif %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
@@ -26,7 +28,7 @@
             <th scope="col">Available</th>
             <th scope="col">Allocated</th>
             <th scope="col">Reserved</th>
-            <th scope="col">Actions</th>
+            {% if can_manage %}<th scope="col">Actions</th>{% endif %}
         </tr>
     </thead>
     <tbody>
@@ -45,6 +47,7 @@
             </td>
             <td>{{ pool.allocated_count | humanize_count }}</td>
             <td>{{ pool.reserved_count | humanize_count }}</td>
+            {% if can_manage %}
             <td>
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.allocated_count > 0 %}This pool has {{ pool.allocated_count }} active IP allocation(s) -- deletion will fail until they are checked in. {% endif %}Delete this IP pool?">
@@ -52,12 +55,13 @@
                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
             </td>
+            {% endif %}
         </tr>
         {% else %}
         <tr>
-            <td colspan="8" class="muted center">
+            <td colspan="{{ 8 if can_manage else 7 }}" class="muted center">
                 No IP pools found.
-                <a href="{{ url_for('resources.ip_pool_create') }}">Create one</a>
+                {% if can_manage %}<a href="{{ url_for('resources.ip_pool_create') }}">Create one</a>{% endif %}
             </td>
         </tr>
         {% endfor %}

@@ -52,7 +52,9 @@
             <td>{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', 'N/A') }}</td>
             <td>
                 <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="btn btn-sm btn-secondary">View</a>
+                {% if project.id in editable_project_ids %}
                 <a href="{{ url_for('projects.project_edit', project_id=project.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                {% endif %}
             </td>
         </tr>
         {% else %}
