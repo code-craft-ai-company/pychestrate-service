@@ -45,6 +45,16 @@ function format_rate(rate) {
   }
   const clamped = Math.min(1, Math.max(0, rate));
   const percent = Math.round(clamped * 100);
+  // A rate that is not exactly 0 or 1 must not read as 0% or 100%: a 99.6%
+  // pass rate is not "100%" and a 0.4% failure rate is not "0%" (ORC-36).
+  if (clamped > 0 && percent === 0) {
+    const rtnval2 = "<1%";
+    return rtnval2;
+  }
+  if (clamped < 1 && percent === 100) {
+    const rtnval2 = ">99%";
+    return rtnval2;
+  }
   const rtnval = String(percent) + "%";
   return rtnval;
 }

@@ -25,8 +25,30 @@ function format_ratio(value) {
     const rtnval2 = "\u2014";
     return rtnval2;
   }
+  if (value >= 1) {
+    const rtnval2 = "100%";
+    return rtnval2;
+  }
+  if (value <= 0) {
+    const rtnval2 = "0%";
+    return rtnval2;
+  }
+  // An objective is judged in nines, so the precision follows the value and
+  // the last digit is cut, not rounded: 99.95% must not read "100.0%" and
+  // 99.996% must not read as perfect (ORC-36).
   const percent = value * 100;
-  const rtnval = percent.toFixed(1) + "%";
+  let decimals = 1;
+  if (percent >= 99.9) {
+    decimals = 3;
+  } else if (percent >= 99) {
+    decimals = 2;
+  }
+  const scale = Math.pow(10, decimals);
+  const cut = Math.floor(percent * scale + 1e-6) / scale;
+  let text = cut.toFixed(decimals);
+  // Drop trailing zeros but keep one decimal ("99.90" reads "99.9").
+  text = text.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/(\.\d)0+$/, "$1");
+  const rtnval = text + "%";
   return rtnval;
 }
 function format_window(seconds) {

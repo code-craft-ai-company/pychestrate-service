@@ -542,6 +542,13 @@ preview tag.
 
 ### Fixed
 
+- SLO and test-rate percentages never read better than they are (ORC-36). An
+  objective of 99.95% was shown as "100.0%" (every SLO ratio was rounded to
+  0.1%), and a 99.6% pass rate as "100%" (whole percents). SLO ratios now keep
+  the precision their nines need (99.95%, 99.996%) and are cut, not rounded, so
+  only exactly 100% reads "100%"; a test rate that is not exactly 0 or 1 reads
+  "<1%" or ">99%".
+
 - A rejected embed shows a page that says what happened (ORC-46). Where an
   embed's signed link is refused (expired, forged, incomplete, unknown key or
   view) the frame showed a bare paragraph in the browser's default style,

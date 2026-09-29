@@ -44,6 +44,14 @@ function format_rate(rate) {
   }
   const clamped = Math.min(1, Math.max(0, rate));
   const percent = Math.round(clamped * 100);
+  if (clamped > 0 && percent === 0) {
+    const rtnval2 = "<1%";
+    return rtnval2;
+  }
+  if (clamped < 1 && percent === 100) {
+    const rtnval2 = ">99%";
+    return rtnval2;
+  }
   const rtnval = String(percent) + "%";
   return rtnval;
 }
@@ -1939,8 +1947,26 @@ function format_ratio(value) {
     const rtnval2 = "\u2014";
     return rtnval2;
   }
+  if (value >= 1) {
+    const rtnval2 = "100%";
+    return rtnval2;
+  }
+  if (value <= 0) {
+    const rtnval2 = "0%";
+    return rtnval2;
+  }
   const percent = value * 100;
-  const rtnval = percent.toFixed(1) + "%";
+  let decimals = 1;
+  if (percent >= 99.9) {
+    decimals = 3;
+  } else if (percent >= 99) {
+    decimals = 2;
+  }
+  const scale = Math.pow(10, decimals);
+  const cut = Math.floor(percent * scale + 1e-6) / scale;
+  let text = cut.toFixed(decimals);
+  text = text.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/(\.\d)0+$/, "$1");
+  const rtnval = text + "%";
   return rtnval;
 }
 function format_window(seconds) {
