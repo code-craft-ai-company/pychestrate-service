@@ -57,7 +57,7 @@ class PaletteDialog {
       this._input.value = "";
       this._input.focus();
     }
-    this._render_status("Type to search pages and actions.");
+    this._render_status("Search pages, projects and actions, or paste a run or build id.");
     this._host.emit("pyc-site-shell-palette-opened", {});
     if (typeof this._host.observePaletteOpened === "function") {
       this._host.observePaletteOpened();
@@ -104,7 +104,7 @@ class PaletteDialog {
     const input = document.createElement("input");
     input.type = "search";
     input.classList.add("pyc-site-shell__palette-input");
-    input.setAttribute("aria-label", "Search pages and actions");
+    input.setAttribute("aria-label", "Search pages, projects and actions");
     input.setAttribute("autocomplete", "off");
     input.setAttribute("role", "combobox");
     input.setAttribute("aria-expanded", "false");
@@ -164,7 +164,7 @@ class PaletteDialog {
       this._flat_results = [];
       this._active_index = -1;
       this._render_status(
-        "Type to search across registered providers."
+        "Search pages, projects and actions, or paste a run or build id."
       );
       return;
     }
@@ -199,7 +199,24 @@ class PaletteDialog {
     this._results_region.replaceChildren();
     this._flat_results = [];
     let total_results = 0;
+    // With several sources, one that matched nothing is not worth a heading and a
+    // "No matches" of its own while another has results (XC-17).
+    const any_results = outcomes.some((outcome) => outcome.error === null && outcome.results.length > 0);
+    const any_error = outcomes.some((outcome) => outcome.error !== null);
+    if (any_results === false && any_error === false) {
+      // Nothing matched anywhere: one line, not a heading and "No matches" per source.
+      this._active_index = -1;
+      if (this._input !== null) {
+        this._input.setAttribute("aria-expanded", "false");
+        this._input.removeAttribute("aria-activedescendant");
+      }
+      this._render_status("No results.");
+      return;
+    }
     for (const outcome of outcomes) {
+      if (any_results === true && outcome.error === null && outcome.results.length === 0) {
+        continue;
+      }
       const section = document.createElement("div");
       section.classList.add("pyc-site-shell__palette-group");
       section.setAttribute("role", "group");

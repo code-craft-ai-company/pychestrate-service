@@ -1633,7 +1633,7 @@ var PaletteDialog = class {
       this._input.value = "";
       this._input.focus();
     }
-    this._render_status("Type to search pages and actions.");
+    this._render_status("Search pages, projects and actions, or paste a run or build id.");
     this._host.emit("pyc-site-shell-palette-opened", {});
     if (typeof this._host.observePaletteOpened === "function") {
       this._host.observePaletteOpened();
@@ -1680,7 +1680,7 @@ var PaletteDialog = class {
     const input = document.createElement("input");
     input.type = "search";
     input.classList.add("pyc-site-shell__palette-input");
-    input.setAttribute("aria-label", "Search pages and actions");
+    input.setAttribute("aria-label", "Search pages, projects and actions");
     input.setAttribute("autocomplete", "off");
     input.setAttribute("role", "combobox");
     input.setAttribute("aria-expanded", "false");
@@ -1740,7 +1740,7 @@ var PaletteDialog = class {
       this._flat_results = [];
       this._active_index = -1;
       this._render_status(
-        "Type to search across registered providers."
+        "Search pages, projects and actions, or paste a run or build id."
       );
       return;
     }
@@ -1775,7 +1775,21 @@ var PaletteDialog = class {
     this._results_region.replaceChildren();
     this._flat_results = [];
     let total_results = 0;
+    const any_results = outcomes.some((outcome) => outcome.error === null && outcome.results.length > 0);
+    const any_error = outcomes.some((outcome) => outcome.error !== null);
+    if (any_results === false && any_error === false) {
+      this._active_index = -1;
+      if (this._input !== null) {
+        this._input.setAttribute("aria-expanded", "false");
+        this._input.removeAttribute("aria-activedescendant");
+      }
+      this._render_status("No results.");
+      return;
+    }
     for (const outcome of outcomes) {
+      if (any_results === true && outcome.error === null && outcome.results.length === 0) {
+        continue;
+      }
       const section = document.createElement("div");
       section.classList.add("pyc-site-shell__palette-group");
       section.setAttribute("role", "group");
@@ -2058,6 +2072,136 @@ function _is_subsequence(needle, haystack) {
   }
   const rtnval = needle_index >= needle.length;
   return rtnval;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/palette/entity-provider.js
+var PROJECTS_PROVIDER_ID = "shell.projects";
+var RECORDS_PROVIDER_ID = "shell.records";
+var ACTIONS_PROVIDER_ID = "shell.actions";
+var PROJECTS_URL2 = "/api/v1/projects?per_page=500";
+var PROJECTS_CACHE_MS = 60 * 1e3;
+var PROJECT_RESULT_LIMIT = 6;
+var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var ACTIONS = [
+  { label: "Create a project", words: "new add project", route: "/projects/create", needs: "/projects" },
+  { label: "Register a device", words: "add new resource checkout check out lab", route: "/resource-pools", needs: "/resource-pools" },
+  { label: "Run tests", words: "test catalog start", route: "/test-catalog", needs: "/test-catalog" },
+  { label: "Trigger a build", words: "build start new", route: "/builds", needs: "/builds" },
+  { label: "Define a pipeline", words: "pipeline create new", route: "/pipelines", needs: "/pipelines" },
+  { label: "Create an API token", words: "token pyc cli new", route: "/account/api-tokens", needs: null },
+  { label: "Preferences", words: "settings profile account", route: "/account/preferences", needs: null },
+  { label: "Switch theme", words: "dark light mode appearance colour color", route: null, needs: null, callback: "toggle_theme" },
+  { label: "Sign out", words: "log out logout leave", route: null, needs: null, callback: "sign_out" }
+];
+function normalise(text) {
+  return typeof text === "string" ? text.trim().toLowerCase() : "";
+}
+function register_entity_palette_providers(palette, options) {
+  let cached = null;
+  let cached_at = 0;
+  async function projects() {
+    const now = Date.now();
+    if (cached !== null && now - cached_at < PROJECTS_CACHE_MS) {
+      return cached;
+    }
+    let found = [];
+    try {
+      const response = await fetch(PROJECTS_URL2, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        const items = Array.isArray(body) ? body : body !== null && Array.isArray(body.items) ? body.items : [];
+        found = items.filter((item) => item !== null && typeof item === "object" && typeof item.project_id === "string");
+      }
+    } catch (reason) {
+      found = [];
+    }
+    cached = found;
+    cached_at = now;
+    return found;
+  }
+  palette.registerProvider({
+    providerId: PROJECTS_PROVIDER_ID,
+    label: "Projects",
+    requiredPermissions: [],
+    query: async (query) => {
+      const wanted = normalise(query);
+      if (wanted.length < 2) {
+        return [];
+      }
+      const hits = [];
+      for (const project of await projects()) {
+        const name = normalise(project.display_name);
+        const slug = normalise(project.slug);
+        let score = 0;
+        if (name.startsWith(wanted) || slug.startsWith(wanted)) {
+          score = 2;
+        } else if (name.includes(wanted) || slug.includes(wanted)) {
+          score = 1;
+        }
+        if (score > 0) {
+          hits.push({ score, project });
+        }
+      }
+      hits.sort((left, right) => right.score - left.score);
+      return hits.slice(0, PROJECT_RESULT_LIMIT).map(({ project }) => {
+        const shown = typeof project.display_name === "string" && project.display_name.length > 0 ? project.display_name : project.slug;
+        const slug = typeof project.slug === "string" && project.slug.length > 0 ? project.slug : project.project_id;
+        return { id: "project:" + project.project_id, label: shown, description: "Project \xB7 " + slug, route: "/projects/" + encodeURIComponent(slug) };
+      });
+    }
+  });
+  palette.registerProvider({
+    providerId: RECORDS_PROVIDER_ID,
+    label: "Open by id",
+    requiredPermissions: [],
+    query: async (query) => {
+      const text = typeof query === "string" ? query.trim() : "";
+      if (UUID_PATTERN.test(text) === false) {
+        return [];
+      }
+      const id = text.toLowerCase();
+      return [
+        { id: "run:" + id, label: "Run " + id.split("-")[0], description: "Open the run with this id", route: "/runs/" + id },
+        { id: "build:" + id, label: "Build " + id.split("-")[0], description: "Open the build with this id", route: "/builds/" + id }
+      ];
+    }
+  });
+  palette.registerProvider({
+    providerId: ACTIONS_PROVIDER_ID,
+    label: "Actions",
+    requiredPermissions: [],
+    query: async (query) => {
+      const wanted = normalise(query);
+      if (wanted.length === 0) {
+        return [];
+      }
+      const reachable = typeof options.get_visible_routes === "function" ? options.get_visible_routes() : [];
+      const results = [];
+      for (const action of ACTIONS) {
+        const haystack = normalise(action.label + " " + action.words);
+        if (haystack.includes(wanted) === false) {
+          continue;
+        }
+        if (action.needs !== null && reachable.some((route) => route === action.needs || route.startsWith(action.needs + "/")) === false) {
+          continue;
+        }
+        const result = { id: "action:" + action.label.toLowerCase().replace(/[^a-z]+/g, "-"), label: action.label, description: "Action" };
+        if (action.route !== null) {
+          result.route = action.route;
+        } else if (typeof options[action.callback] === "function") {
+          result.onActivate = () => options[action.callback]();
+        } else {
+          continue;
+        }
+        results.push(result);
+      }
+      return results;
+    }
+  });
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/permissions/permission-set.js
@@ -3857,6 +4001,23 @@ var PycSiteShell = class extends HTMLElement {
           )
         }
       );
+      register_entity_palette_providers(
+        this._palette_registry,
+        {
+          get_visible_routes: () => {
+            const visible = this._sidebar_registry.visible(this._permission_cache.current());
+            const routes = visible.ungrouped.map((entry) => entry.route);
+            for (const bucket of visible.groups) {
+              for (const entry of bucket.entries) {
+                routes.push(entry.route);
+              }
+            }
+            return routes;
+          },
+          toggle_theme: () => this._toggle_theme(),
+          sign_out: () => this._sign_out()
+        }
+      );
       this._nav_provider_registered = true;
     }
     this._sidebar_renderer = new SidebarRenderer(
@@ -4290,6 +4451,29 @@ var PycSiteShell = class extends HTMLElement {
     } catch (error) {
     }
     this._sync_theme_control();
+    return;
+  }
+  /*
+   * Sign out the way the account menu does: a POST with the CSRF token, or the
+   * confirmation page when the document carries none.
+   */
+  _sign_out() {
+    const csrf_token = this._read_optional_attribute("csrf-token");
+    if (csrf_token === null) {
+      window.location.assign("/logout");
+      return;
+    }
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/logout";
+    form.hidden = true;
+    const token_input = document.createElement("input");
+    token_input.type = "hidden";
+    token_input.name = "csrf_token";
+    token_input.value = csrf_token;
+    form.appendChild(token_input);
+    document.body.appendChild(form);
+    form.submit();
     return;
   }
   _sync_theme_control() {

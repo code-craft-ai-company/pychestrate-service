@@ -158,7 +158,9 @@ The header holds four controls:
 
 * **Ctrl+K** (**Cmd+K** on macOS) opens the command palette. Type part
   of a page name -- for example ``users`` -- and press Enter to go
-  there.
+  there. It also finds a project by name, offers actions such as *Create
+  a project*, *Register a device*, *Switch theme* and *Sign out*, and
+  opens a run or build when you paste its full id.
 * **Theme** switches between the light and dark themes.
 * **Preferences** is where you choose which parts of the interface you
   see (below).

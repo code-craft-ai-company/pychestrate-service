@@ -314,6 +314,17 @@ preview tag.
   access to it". The pipeline page still needs its project in the address
   (pipelines have no run to ask).
 
+- The command palette finds more than pages (XC-17). "checkout", a project's
+  name, "create", "sign out" and "theme" all answered "No results". It now also
+  lists projects by name (under "Projects"), offers actions (Create a project,
+  Register a device, Run tests, Trigger a build, Define a pipeline, Create an
+  API token, Preferences, Switch theme, Sign out; a page-opening action is
+  offered only when its section is in the person's navigation), and opens a run
+  or build from a pasted full id ("Open by id"). A source that matched nothing
+  shows no heading while another has results, and one line ("No results.") when
+  nothing matched anywhere. Users, resources and runs by name or partial id are
+  not searched yet.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

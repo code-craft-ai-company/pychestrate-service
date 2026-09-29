@@ -22,6 +22,7 @@ import { PaletteDialog } from "./palette/palette-dialog.js";
 import {
   register_navigation_palette_provider
 } from "./palette/navigation-provider.js";
+import { register_entity_palette_providers } from "./palette/entity-provider.js";
 import {
   DEFAULT_PERMISSIONS_ENDPOINT,
   PermissionCache
@@ -403,6 +404,24 @@ class PycSiteShell extends HTMLElement {
           get_visible_sidebar: () => this._sidebar_registry.visible(
             this._permission_cache.current()
           )
+        }
+      );
+      // Projects by name, a run or build by id, and actions (XC-17).
+      register_entity_palette_providers(
+        this._palette_registry,
+        {
+          get_visible_routes: () => {
+            const visible = this._sidebar_registry.visible(this._permission_cache.current());
+            const routes = visible.ungrouped.map((entry) => entry.route);
+            for (const bucket of visible.groups) {
+              for (const entry of bucket.entries) {
+                routes.push(entry.route);
+              }
+            }
+            return routes;
+          },
+          toggle_theme: () => this._toggle_theme(),
+          sign_out: () => this._sign_out()
         }
       );
       this._nav_provider_registered = true;
@@ -849,6 +868,29 @@ class PycSiteShell extends HTMLElement {
       // storage unavailable: the choice lasts for this page only
     }
     this._sync_theme_control();
+    return;
+  }
+  /*
+   * Sign out the way the account menu does: a POST with the CSRF token, or the
+   * confirmation page when the document carries none.
+   */
+  _sign_out() {
+    const csrf_token = this._read_optional_attribute("csrf-token");
+    if (csrf_token === null) {
+      window.location.assign("/logout");
+      return;
+    }
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/logout";
+    form.hidden = true;
+    const token_input = document.createElement("input");
+    token_input.type = "hidden";
+    token_input.name = "csrf_token";
+    token_input.value = csrf_token;
+    form.appendChild(token_input);
+    document.body.appendChild(form);
+    form.submit();
     return;
   }
   _sync_theme_control() {
