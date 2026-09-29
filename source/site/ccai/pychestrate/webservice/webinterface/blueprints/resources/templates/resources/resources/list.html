@@ -139,11 +139,13 @@
             </td>
             {% if can_manage %}
             <td>
+                <div class="row-actions">
                 <a href="{{ url_for('resources.resource_edit', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm="Delete this resource?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-quiet-danger">Delete</button>
                 </form>
+                </div>
             </td>
             {% endif %}
         </tr>

@@ -469,6 +469,14 @@ preview tag.
   header cannot silently drop data. Up to 500 devices, 256 KB, needs the
   resource-management permission.
 
+- **The resources pages have room for their tables.** They had two
+  left-hand navigations, the shell's and their own beside the content,
+  which left 837px of a 1440px screen (421px at 1024) and made tables wrap
+  to three lines. The sections now run across the top of the page and the
+  content has the full width. In the resource, IP pool, tag and pool lists
+  Edit and Delete sit side by side, and Delete is outlined rather than a
+  solid red block (the confirmation is unchanged).
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder
