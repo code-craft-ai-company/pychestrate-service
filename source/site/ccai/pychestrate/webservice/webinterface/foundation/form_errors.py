@@ -24,7 +24,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def error_message(exc: BaseException) -> str:
@@ -103,4 +103,66 @@ def password_form_errors(exc: BaseException) -> Tuple[Dict[str, str], List[str]]
         rtnval = ({"password": " ".join(exc.problems)}, [])
     else:
         rtnval = ({}, [error_message(exc)])
+    return rtnval
+
+
+#: Session key under which a refused action form leaves its errors for the
+#: page it redirects back to.
+STASHED_FORM_ERRORS_KEY: str = "form_errors"
+
+#: Longest typed value kept for the redisplay: the session is a cookie.
+MAX_STASHED_VALUE_LENGTH: int = 200
+
+
+def stash_form_errors(
+        *,
+        session: Dict[str, Any],
+        form: str,
+        errors: Dict[str, str],
+        values: Dict[str, str]
+    ) -> None:
+    """
+        Leave a refused form's errors and typed values for the next page.
+
+        Forms on a detail page (check out, change the health status) post
+        to their own address and redirect back to the page, as their
+        successes do. A refusal that names an input goes through the
+        session instead of the flash queue, and the page shows it next to
+        that input. Only the last refusal is kept.
+
+        :param session: The cookie session.
+        :param form: Which form on the page it was; :func:`take_form_errors`
+                     must ask for the same name.
+        :param errors: ``{input name: message}``.
+        :param values: ``{input name: what was typed}``; long values are
+                       cut.
+
+        :returns: None.
+    """
+    session[STASHED_FORM_ERRORS_KEY] = {
+        "form": form,
+        "errors": dict(errors),
+        "values": {name: str(value)[:MAX_STASHED_VALUE_LENGTH] for name, value in values.items()},
+    }
+    return
+
+
+def take_form_errors(*, session: Dict[str, Any], form: str) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+        Collect, and forget, the errors a form left for this page.
+
+        A stash is shown once: it is removed whichever form asks, so an
+        error for a form on another page cannot turn up here later.
+
+        :param session: The cookie session.
+        :param form: The form the page is asking about.
+
+        :returns: ``(errors, typed values)``; both empty when the last
+                  refusal was another form's, or there was none.
+    """
+    stashed = session.pop(STASHED_FORM_ERRORS_KEY, None)
+    if isinstance(stashed, dict) is False or stashed.get("form", None) != form:
+        rtnval: Tuple[Dict[str, str], Dict[str, str]] = ({}, {})
+    else:
+        rtnval = (dict(stashed.get("errors", {})), dict(stashed.get("values", {})))
     return rtnval

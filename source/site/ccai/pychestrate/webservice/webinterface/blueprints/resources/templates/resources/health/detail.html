@@ -149,23 +149,27 @@
     <div>
         <div class="card">
             <h2 class="card-header">Update Status</h2>
+            {{ ui.error_summary(errors, error_labels) }}
+            {% set typed = form_data or {} %}
             <form method="post" action="{{ url_for('resources.health_update', resource_id=resource.id) }}" data-confirm="Change the health status? Offline and maintenance block new checkouts of this resource.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
                 <div class="form-group">
                     <label for="status">New Status</label>
-                    <select id="status" name="status" class="form-control" required>
-                        {% set current_status = resource.health_status %}
+                    <select id="status" name="status" class="form-control" required{{ ui.invalid_attrs(errors, "status") }}>
+                        {% set current_status = typed.get('status') or resource.health_status %}
                         <option value="online" {% if current_status == 'online' %}selected{% endif %}>Online</option>
                         <option value="offline" {% if current_status == 'offline' %}selected{% endif %}>Offline</option>
                         <option value="degraded" {% if current_status == 'degraded' %}selected{% endif %}>Degraded</option>
                         <option value="maintenance" {% if current_status == 'maintenance' %}selected{% endif %}>Maintenance</option>
                     </select>
+                    {{ ui.field_error(errors, "status") }}
                 </div>
                 
                 <div class="form-group">
                     <label for="reason">Reason</label>
-                    <input type="text" id="reason" name="reason" class="form-control" required minlength="3" placeholder="Why the status is changing (recorded in the audit trail)">
+                    <input type="text" id="reason" name="reason" class="form-control" required minlength="3" placeholder="Why the status is changing (recorded in the audit trail)" value="{{ typed.get('reason', '') }}"{{ ui.invalid_attrs(errors, "reason") }}>
+                    {{ ui.field_error(errors, "reason") }}
                 </div>
                 
                 <button type="submit" class="btn btn-primary btn-block">

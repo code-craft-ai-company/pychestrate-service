@@ -259,9 +259,14 @@ preview tag.
   is marked `aria-invalid` and described by it; a summary at the top of
   the form links to each field; the form comes back with what was typed
   and a 400. This covers the admin, resource, project and RPA forms, the
-  four password pages, API token and service account creation, and the
-  project member forms. An error about no single input (an inactive
-  account, a lock-out) stays a banner. Sign-in stays generic on purpose.
+  four password pages, API token and service account creation, the
+  project member forms, and the two action forms whose refusals name an
+  input: checking out an IP address (an address that is reserved, taken
+  or outside the pool) and changing a device's health status (no
+  reason). Those post to their own address and redirect back, so the
+  page they return to shows the message once. An error about no single
+  input (an inactive account, a device at capacity, a lock-out) stays a
+  banner. Sign-in stays generic on purpose.
 
 ### Removed
 

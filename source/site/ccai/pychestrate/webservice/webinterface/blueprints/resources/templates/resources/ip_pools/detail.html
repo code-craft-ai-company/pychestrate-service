@@ -4,6 +4,7 @@
 {% block title %}{{ pool.name }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
+{% set typed = form_data or {} %}
 <div class="page-header">
     <h1>{{ pool.name }}</h1>
     <p>IP pool details and allocations</p>
@@ -152,32 +153,36 @@
         {% if pool.available_count > 0 %}
         <div class="card">
             <h2 class="card-header">Checkout IP</h2>
+            {{ ui.error_summary(errors, error_labels) }}
             <form method="post" action="{{ url_for('resources.ip_pool_checkout', pool_id=pool.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
                 <div class="form-group">
                     <label for="count">Number of IPs</label>
-                    <input type="number" id="count" name="count" class="form-control" min="1" max="{{ pool.available_count }}" value="1">
+                    <input type="number" id="count" name="count" class="form-control" min="1" max="{{ pool.available_count }}" value="{{ typed.get('count') or 1 }}"{{ ui.invalid_attrs(errors, "count") }}>
+                    {{ ui.field_error(errors, "count") }}
                 </div>
                 
                 <div class="form-group">
                     <label for="specific_ip">Specific IP (optional)</label>
-                    <input type="text" id="specific_ip" name="specific_ip" class="form-control" placeholder="Leave empty for auto-assign">
+                    <input type="text" id="specific_ip" name="specific_ip" class="form-control" placeholder="Leave empty for auto-assign" value="{{ typed.get('specific_ip', '') }}"{{ ui.invalid_attrs(errors, "specific_ip") }}>
+                    {{ ui.field_error(errors, "specific_ip") }}
                 </div>
                 
                 <div class="form-group">
                     <label for="job_id">Job ID (optional)</label>
-                    <input type="text" id="job_id" name="job_id" class="form-control">
+                    <input type="text" id="job_id" name="job_id" class="form-control" value="{{ typed.get('job_id', '') }}">
                 </div>
                 
                 <div class="form-group">
                     <label for="timeout_minutes">Timeout (minutes)</label>
-                    <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" min="1">
+                    <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" min="1" value="{{ typed.get('timeout_minutes', '') }}"{{ ui.invalid_attrs(errors, "timeout_minutes") }}>
+                    {{ ui.field_error(errors, "timeout_minutes") }}
                 </div>
                 
                 <div class="form-group">
                     <label for="reason">Reason</label>
-                    <input type="text" id="reason" name="reason" class="form-control">
+                    <input type="text" id="reason" name="reason" class="form-control" value="{{ typed.get('reason', '') }}">
                 </div>
                 
                 <button type="submit" class="btn btn-success btn-block">

@@ -61,6 +61,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -335,6 +336,55 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
     # range / not an IP address / duplicate name / exhausted) are
     # written for people.
     rtnval = _as_sentence(text=exc.message)
+    return rtnval
+
+
+#: The inputs of the "Checkout IP" form, for the error summary.
+IP_CHECKOUT_FIELD_LABELS: Dict[str, str] = {
+    "count": "Number of IPs",
+    "specific_ip": "Specific IP",
+    "timeout_minutes": "Timeout (minutes)",
+}
+
+
+def _ip_checkout_field_errors(
+        *, exc: BaseException, message: Optional[str], specific_ip: str, count: int
+    ) -> Dict[str, str]:
+    """
+        The ``{input: message}`` for a refused checkout when the refusal
+        is about one input the person typed, or an empty dict (the
+        caller then flashes it): a value the manager validated by name,
+        an address that is outside the pool, reserved or taken, or a
+        count the pool cannot supply.
+
+        :param exc: The error the manager raised.
+        :param message: The sentence people are shown for it.
+        :param specific_ip: What was typed in the specific IP input.
+        :param count: How many addresses were asked for.
+
+        :returns: One entry, or an empty dict.
+    """
+    rtnval: Dict[str, str] = {}
+    if message is None:
+        return rtnval
+    try:
+        from ccai.pychestrate.core.managers.ip_pool_manager import (  # noqa: E402
+            IPNotAvailableError,
+            IPNotInPoolError,
+            IPPoolExhaustedError,
+            IPPoolValidationError,
+            IPReservedError,
+        )
+    except ImportError:
+        return rtnval
+
+    field = getattr(exc, "field", None)
+    if isinstance(exc, IPPoolValidationError) is True and field in IP_CHECKOUT_FIELD_LABELS:
+        rtnval = {field: message}
+    elif isinstance(exc, (IPNotAvailableError, IPNotInPoolError, IPReservedError)) is True and len(specific_ip) > 0:
+        rtnval = {"specific_ip": message}
+    elif isinstance(exc, IPPoolExhaustedError) is True and count > 1:
+        rtnval = {"count": message}
     return rtnval
 
 
@@ -676,6 +726,10 @@ def handle_ip_pool_detail(request: Request) -> Response:
         context["pool"] = pool
         context["allocations"] = allocations
         context["available_ips"] = available_ips
+        errors, typed = form_errors.take_form_errors(session=auth.session, form="ip_checkout")
+        context["errors"] = errors
+        context["error_labels"] = IP_CHECKOUT_FIELD_LABELS
+        context["form_data"] = typed
         response = _render(
             template_name="resources/ip_pools/detail.html",
             context=context,
@@ -1037,6 +1091,26 @@ def handle_ip_pool_checkout(request: Request) -> Response:
             return response
         except Exception as exc:
             message = _describe_ip_pool_error(exc=exc)
+            errors = _ip_checkout_field_errors(
+                exc=exc, message=message, specific_ip=specific_ip, count=count,
+            )
+            if len(errors) > 0:
+                form_errors.stash_form_errors(
+                    session=auth.session, form="ip_checkout", errors=errors,
+                    values={
+                        "count": str(count), "specific_ip": specific_ip, "job_id": job_id,
+                        "timeout_minutes": str(single_form.get("timeout_minutes", "") or ""),
+                        "reason": reason,
+                    },
+                )
+                response = RedirectResponse(
+                    url=_url_for_module.url_for(
+                        "resources.ip_pool_detail", pool_id=pool_id
+                    ),
+                    status_code=303,
+                )
+                _attach_session_to_response(response=response, session=auth.session)
+                return response
             if message is None:
                 _LOGGER.exception(
                     "Unexpected error checking out IP from pool %s",

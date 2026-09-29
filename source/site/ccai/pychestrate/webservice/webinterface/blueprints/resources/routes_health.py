@@ -51,6 +51,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -291,6 +292,37 @@ def _health_field_errors(*, exc: BaseException) -> Dict[str, str]:
     return rtnval
 
 
+#: The inputs of the "Update Status" form, for the error summary.
+STATUS_FIELD_LABELS: Dict[str, str] = {
+    "status": "New Status",
+    "reason": "Reason",
+}
+
+#: Which input of the status form a refusal is about, by error code.
+_STATUS_ERROR_FIELDS: Dict[str, str] = {
+    "INVALID_HEALTH_STATUS": "status",
+    "HEALTH_CHANGE_REASON_REQUIRED": "reason",
+}
+
+
+def _status_form_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{input: message}`` for a refused status change, or an empty
+        dict when the refusal is about neither input (an unknown
+        resource, say): the caller then flashes it.
+
+        :param exc: The error the monitor raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    rtnval: Dict[str, str] = {}
+    field = _STATUS_ERROR_FIELDS.get(getattr(exc, "error_code", ""), None)
+    message = _describe_health_monitor_error(exc=exc) if isinstance(exc, Exception) else None
+    if field is not None and message is not None:
+        rtnval = {field: message}
+    return rtnval
+
+
 # User-facing copy for typed HealthMonitor errors, by error code (the
 # managers' own messages stay in the log).
 _HEALTH_ERROR_COPY: Dict[str, str] = {
@@ -449,6 +481,10 @@ def handle_health_detail(request: Request) -> Response:
         context["per_page"] = per_page
         context["total_pages"] = total_pages
         context["page_window"] = page_window
+        errors, typed = form_errors.take_form_errors(session=auth.session, form="health_status")
+        context["errors"] = errors
+        context["error_labels"] = STATUS_FIELD_LABELS
+        context["form_data"] = typed
 
         response = _render(
             template_name="resources/health/detail.html",
@@ -718,6 +754,20 @@ def handle_health_update(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            errors = _status_form_errors(exc=exc)
+            if len(errors) > 0:
+                form_errors.stash_form_errors(
+                    session=auth.session, form="health_status", errors=errors,
+                    values={"status": status_str, "reason": reason},
+                )
+                response = RedirectResponse(
+                    url=_url_for_module.url_for(
+                        "resources.health_detail", resource_id=resource_id
+                    ),
+                    status_code=303,
+                )
+                _attach_session_to_response(response=response, session=auth.session)
+                return response
             message = _describe_health_monitor_error(exc=exc)
             if message is None:
                 _LOGGER.exception(
