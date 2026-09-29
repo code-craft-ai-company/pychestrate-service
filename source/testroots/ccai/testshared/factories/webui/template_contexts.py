@@ -480,6 +480,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     # Forms
     "form_data": _form_data,
     "issue_for": _const(None),
+    "next_reservation_by_other": _one(ReservationResponse),
     "selected_availability": _by_mode("available", ""),
     "holders": _by_mode({}, {}),
     "addable_resources": _many(ResourceResponse),

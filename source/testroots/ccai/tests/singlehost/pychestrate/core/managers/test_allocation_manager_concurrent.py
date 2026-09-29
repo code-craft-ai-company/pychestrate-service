@@ -97,6 +97,16 @@ def create_mock_session_for_checkout(resource, existing_allocations=None):
     call_count = [0]
     
     def query_side_effect(model):
+        if getattr(model, "__name__", "") == "Reservation":
+            # A check-out looks for other people's reservations; none here.
+            reservation_query = Mock()
+            reservation_query.configure(recursive=True)
+            reservation_filter = Mock()
+            reservation_filter.configure(recursive=True)
+            reservation_filter.mock_context().mock_method('all', return_value=[])
+            reservation_query.mock_context().mock_method('filter', return_value=reservation_filter)
+            return reservation_query
+
         call_count[0] += 1
         mock_query = Mock()
         mock_query.configure(recursive=True)
@@ -151,6 +161,16 @@ def test_checkout_uses_database_locking():
     for_update_called = [False]
     
     def query_side_effect(model):
+        if getattr(model, "__name__", "") == "Reservation":
+            # A check-out looks for other people's reservations; none here.
+            reservation_query = Mock()
+            reservation_query.configure(recursive=True)
+            reservation_filter = Mock()
+            reservation_filter.configure(recursive=True)
+            reservation_filter.mock_context().mock_method('all', return_value=[])
+            reservation_query.mock_context().mock_method('filter', return_value=reservation_filter)
+            return reservation_query
+
         mock_query = Mock()
         mock_query.configure(recursive=True)
         

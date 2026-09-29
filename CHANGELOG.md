@@ -323,6 +323,16 @@ preview tag.
   it. A resource that marks metadata keys as sensitive is found by name
   and description only.
 
+- **A check-out no longer runs into someone else's reservation.** It
+  never looked at reservations: an administrator checked out a reserved
+  phone for three days across two pending reservations. A check-out
+  whose window (now until its timeout, or with no end when it has none)
+  overlaps another person's pending reservation is now refused, naming
+  who reserved it and when and how to check out anyway (with a timeout
+  that ends before then). The person who holds the reservation is never
+  in their own way, and two shared windows do not clash. The checkout
+  card names the reservation up front.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

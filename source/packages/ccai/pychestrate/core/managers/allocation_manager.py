@@ -574,6 +574,20 @@ class AllocationManager:
         expected_checkin = None
         if request.timeout_minutes:
             expected_checkin = now + timedelta(minutes=request.timeout_minutes)
+
+        # Someone else's reservation in the window this check-out would
+        # cover comes first: it used to be ignored, and a device reserved
+        # for tomorrow could be taken for three days.
+        in_the_way = self._reservations_in_the_way(
+            resource_id=resource_id, start_time=now, end_time=expected_checkin,
+            mode=mode, user_id=user_id,
+        )
+        if len(in_the_way) > 0:
+            raise ReservationConflictError(
+                f"Resource '{resource.name}' is reserved by another user for part of that time",
+                conflicting_reservations=in_the_way,
+                error_code="RESERVED_FOR_OTHERS"
+            )
         
         # Create metadata snapshot
         metadata_snapshot = dict(resource.metadata_json) if resource.metadata_json else {}
@@ -1498,6 +1512,47 @@ class AllocationManager:
             limit=limit
         )
     
+    def _reservations_in_the_way(
+        self,
+        resource_id: int,
+        start_time: datetime,
+        end_time: Optional[datetime],
+        mode: str,
+        user_id: str
+    ) -> List[ReservationResponse]:
+        """
+        Pending reservations of other people that a check-out from
+        ``start_time`` to ``end_time`` would run into.
+
+        A check-out without a timeout has no end, so any later reservation
+        of someone else is in its way. The person who holds the reservation
+        is never in their own way. As for reservations against each other,
+        two shared windows do not clash.
+
+        :param resource_id: The resource being checked out
+        :param start_time: When the check-out begins (now)
+        :param end_time: When it is due back, or ``None`` for no timeout
+        :param mode: ``exclusive`` or ``shared``
+        :param user_id: Who is checking out
+        :returns: The reservations in the way, earliest first
+        """
+        from ccai.pychestrate.core.orm import Reservation, ReservationStatus
+
+        conditions = [
+            Reservation.resource_id == resource_id,
+            Reservation.status == ReservationStatus.PENDING.value,
+            Reservation.user_id != user_id,
+            Reservation.end_time > start_time,
+        ]
+        if end_time is not None:
+            conditions.append(Reservation.start_time < end_time)
+        found = self._db_session.query(Reservation).filter(*conditions).all()
+        rtnval = []
+        for reservation in sorted(found, key=lambda row: row.start_time):
+            if mode == "exclusive" or reservation.mode == "exclusive":
+                rtnval.append(self._reservation_to_response(reservation))
+        return rtnval
+
     def check_reservation_conflicts(
         self,
         resource_id: int,

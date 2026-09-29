@@ -187,6 +187,14 @@
         {% if resource.current_allocations < resource.capacity %}
         <div class="card">
             <h2 class="card-header">Checkout Resource</h2>
+            {% if next_reservation_by_other %}
+            <p class="alert alert-warning" role="status" data-role="reserved-notice">
+                Reserved by {{ next_reservation_by_other.username or 'someone else' }} from
+                {{ next_reservation_by_other.start_time | format_datetime('%Y-%m-%d %H:%M', '-') }} to
+                {{ next_reservation_by_other.end_time | format_datetime('%Y-%m-%d %H:%M', '-') }}.
+                Check it out with a timeout that ends before then; a check-out that runs into a reservation is refused.
+            </p>
+            {% endif %}
             <form method="post" action="{{ url_for('resources.resource_checkout', resource_id=resource.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 

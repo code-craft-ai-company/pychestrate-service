@@ -844,6 +844,19 @@ def _describe_allocation_error(*, exc: Exception) -> Optional[str]:
             )
         return rtnval
 
+    if isinstance(exc, ReservationConflictError) and getattr(exc, "error_code", "") == "RESERVED_FOR_OTHERS":
+        first = exc.conflicting_reservations[0] if len(exc.conflicting_reservations) > 0 else None
+        if first is None:
+            return "Someone else has reserved this resource for part of that time."
+        holder = getattr(first, "username", None) or "Someone else"
+        rtnval = (
+            "{} has reserved this from {} to {}. Check it out with a timeout"
+            " that ends before then, or reserve a time of your own.".format(
+                holder, _format_utc(value=first.start_time), _format_utc(value=first.end_time),
+            )
+        )
+        return rtnval
+
     if isinstance(exc, ReservationConflictError):
         held = []
         for conflict in exc.conflicting_reservations[:3]:
@@ -1333,6 +1346,15 @@ def handle_resource_detail(request: Request) -> Response:
         context["resource"] = resource
         context["active_allocations"] = active_allocations
         context["upcoming_reservations"] = upcoming_reservations
+        # The first reservation of someone else: a check-out that runs into
+        # it is refused, so the checkout card says so up front.
+        context["next_reservation_by_other"] = next(
+            (
+                item for item in upcoming_reservations
+                if str(getattr(item, "user_id", "")) != str(auth.user_id)
+            ),
+            None,
+        )
         response = _render(
             template_name="resources/resources/detail.html",
             context=context,
