@@ -217,6 +217,16 @@ preview tag.
   bundle's own not-found view with a 200, because the page's script looks the
   id up.
 
+- A project's builds are on the Builds page (PRJ-07). Nothing in this version
+  picks up a build made on the project's own Builds page, so every one waited
+  in "pending" while its log page said "Live: refreshing every 10s". The
+  project sidebar's Builds entry now opens the site-wide Builds page filtered
+  to the project (`/projects/{id}/open/builds`), where builds dispatch. The
+  older build pages stay reachable by address with a notice saying a build
+  started there is not run and linking to the Builds page, and the log of a
+  build that has not started says "Waiting: nothing has started this job"
+  instead of "Live".
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

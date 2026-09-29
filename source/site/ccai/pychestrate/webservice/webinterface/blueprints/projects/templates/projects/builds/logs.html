@@ -29,6 +29,6 @@
 
 <div class="card">
     <h2 class="card-header">Execution log{% if selected_step %} &middot; step <code>{{ selected_step }}</code>{% endif %}</h2>
-    {{ ui.log_viewer(logs, running=(build.status.value in ('running', 'pending')), filename='build-' ~ build.id ~ '.log') }}
+    {{ ui.log_viewer(logs, running=(build.status.value == 'running'), waiting=(build.status.value in ('pending', 'queued')), filename='build-' ~ build.id ~ '.log') }}
 </div>
 {% endblock %}

@@ -971,6 +971,7 @@ def handle_project_create(request: Request) -> Response:
 #: filtered to the project, so a person in a project reaches the pages
 #: that can hold its data (PRJ-08) without knowing the registry's ids.
 WORKSPACE_LINK_PATHS: Dict[str, str] = {
+    "builds": "/builds",
     "runs": "/runs",
     "pipelines": "/pipelines",
     "test-catalog": "/test-catalog",
