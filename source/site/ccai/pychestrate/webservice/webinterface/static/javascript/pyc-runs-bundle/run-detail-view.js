@@ -1006,6 +1006,9 @@ class PycRunDetail extends HTMLElement {
     bar.setAttribute("aria-valuemin", "0");
     bar.setAttribute("aria-valuemax", "100");
     bar.setAttribute("aria-valuenow", String(Math.round(percent)));
+    // A progress bar needs a name and a value a person can hear (ORC-24).
+    bar.setAttribute("aria-label", "Run progress");
+    bar.setAttribute("aria-valuetext", String(Math.round(percent)) + "% complete");
     const fill = document.createElement("div");
     fill.classList.add("pyc-run-detail__bar-fill");
     // A finished run's bar takes its outcome's tone: a failed run's

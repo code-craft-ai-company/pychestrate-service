@@ -542,6 +542,15 @@ preview tag.
 
 ### Fixed
 
+- Two more accessibility fixes in the bundle views (ORC-24). The run's progress
+  bar had the `progressbar` role and its numbers but no name (a screen reader
+  announced an unnamed progress bar); it is now "Run progress", with a value
+  text ("42% complete"). And the timeseries chart no longer leaves focusable
+  elements inside its `aria-hidden` SVG: `<mj-chart>` hides the SVG from
+  assistive technology (its data is also in an accessible table) but makes
+  every data point tabbable, so a keyboard user could tab to points a screen
+  reader cannot see; the points are taken out of the tab order after each render.
+
 - Sortable table headers sort from the keyboard (ORC-24, WCAG 2.1.1). The
   vendored `mj-data-table` sorts a column only when its header is clicked (its
   keyboard handling covers the arrows, Home, End and Escape), so Enter and

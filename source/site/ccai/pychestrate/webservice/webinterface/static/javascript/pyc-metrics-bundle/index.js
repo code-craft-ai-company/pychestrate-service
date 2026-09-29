@@ -946,6 +946,17 @@ function build_chart_element(points, metric_name) {
       }
     ]
   };
+  const keep_svg_out_of_tab_order = () => {
+    const root = chart.shadowRoot;
+    if (root === null) {
+      return;
+    }
+    for (const element of Array.from(root.querySelectorAll("svg [tabindex]"))) {
+      element.removeAttribute("tabindex");
+    }
+    return;
+  };
+  chart.addEventListener("mj-chart-render", keep_svg_out_of_tab_order);
   return chart;
 }
 function extract_catalog(body) {

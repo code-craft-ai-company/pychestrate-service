@@ -1925,6 +1925,8 @@ var PycRunDetail = class extends HTMLElement {
     bar.setAttribute("aria-valuemin", "0");
     bar.setAttribute("aria-valuemax", "100");
     bar.setAttribute("aria-valuenow", String(Math.round(percent)));
+    bar.setAttribute("aria-label", "Run progress");
+    bar.setAttribute("aria-valuetext", String(Math.round(percent)) + "% complete");
     const fill = document.createElement("div");
     fill.classList.add("pyc-run-detail__bar-fill");
     fill.setAttribute("data-tone", progress_bar_tone(this._run));

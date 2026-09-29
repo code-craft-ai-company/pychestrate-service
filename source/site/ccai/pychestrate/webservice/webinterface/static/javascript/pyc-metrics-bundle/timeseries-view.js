@@ -322,6 +322,22 @@ function build_chart_element(points, metric_name) {
       },
     ],
   };
+  // <mj-chart> hides its SVG from assistive technology (the same data is in
+  // its accessible table) but its renderers make every data point focusable,
+  // which leaves focusable elements inside an aria-hidden tree: a keyboard
+  // user tabs to something a screen reader cannot see (axe aria-hidden-focus,
+  // ORC-24). The points are taken out of the tab order after each render.
+  const keep_svg_out_of_tab_order = () => {
+    const root = chart.shadowRoot;
+    if (root === null) {
+      return;
+    }
+    for (const element of Array.from(root.querySelectorAll("svg [tabindex]"))) {
+      element.removeAttribute("tabindex");
+    }
+    return;
+  };
+  chart.addEventListener("mj-chart-render", keep_svg_out_of_tab_order);
   return chart;
 }
 function extract_catalog(body) {
