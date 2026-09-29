@@ -174,6 +174,17 @@ function build_account_menu(options, display_name) {
   tokens_link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__tokens-link");
   tokens_link.textContent = "API tokens";
   panel.appendChild(tokens_link);
+  const help_links = [
+    { text: "API reference", href: "/api/docs", css: "pyc-site-shell__api-reference-link" },
+    { text: "Error types", href: "/errors", css: "pyc-site-shell__error-types-link" }
+  ];
+  help_links.forEach((entry) => {
+    const link = document.createElement("a");
+    link.href = entry.href;
+    link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__help-link", entry.css);
+    link.textContent = entry.text;
+    panel.appendChild(link);
+  });
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");

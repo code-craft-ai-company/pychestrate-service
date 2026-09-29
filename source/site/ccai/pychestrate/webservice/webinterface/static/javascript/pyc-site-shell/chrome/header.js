@@ -145,6 +145,20 @@ function build_account_menu(options, display_name) {
     tokens_link.textContent = "API tokens";
     panel.appendChild(tokens_link);
 
+    // Where to read about the product (DOC-20): the pages the service
+    // serves itself, so each link leads somewhere that exists.
+    const help_links = [
+        {text: "API reference", href: "/api/docs", css: "pyc-site-shell__api-reference-link"},
+        {text: "Error types", href: "/errors", css: "pyc-site-shell__error-types-link"},
+    ];
+    help_links.forEach((entry) => {
+        const link = document.createElement("a");
+        link.href = entry.href;
+        link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__help-link", entry.css);
+        link.textContent = entry.text;
+        panel.appendChild(link);
+    });
+
     // Sign out POSTs to /logout with the CSRF token the shell
     // document carries (csrf-token attribute). Without a token the
     // control falls back to GET /logout, which renders a

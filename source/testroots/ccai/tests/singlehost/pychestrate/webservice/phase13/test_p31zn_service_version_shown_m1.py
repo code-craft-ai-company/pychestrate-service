@@ -108,3 +108,29 @@ def test_the_account_menu_shows_the_release_under_sign_out(browser: Browser):
     finally:
         page.context.close()
     return
+
+
+def test_the_account_menu_links_to_the_pages_the_service_documents_itself_with(browser: Browser):
+    """
+    **Feature: documentation links (DOC-20)**
+    **Property: the account menu has "API reference" (/api/docs) and "Error
+    types" (/errors) links between API tokens and Sign out, so the product
+    points to documentation that exists.**
+    """
+    page = open_shell_page(browser, path="/", **DESKTOP)
+    try:
+        page.click(".pyc-site-shell__account-button")
+        page.wait_for_timeout(150)
+        panel = page.locator(".pyc-site-shell__account-panel")
+        order = page.evaluate(
+            "() => Array.from(document.querySelectorAll('.pyc-site-shell__account-panel > *')).map(e => e.textContent.trim().split('\\n')[0].trim())"
+        )
+        testbase.assert_equal(
+            (panel.get_by_role("link", name="API reference").get_attribute("href"),
+             panel.get_by_role("link", name="Error types").get_attribute("href"),
+             order.index("API tokens") < order.index("API reference") < order.index("Error types") < order.index("Sign out")),
+            ("/api/docs", "/errors", True),
+        )
+    finally:
+        page.context.close()
+    return

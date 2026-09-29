@@ -29,6 +29,11 @@ preview tag.
 
 ### Added
 
+- The account menu links to documentation that exists (DOC-20): "API
+  reference" (`/api/docs`) and "Error types" (`/errors`), between API tokens
+  and Sign out. There is no link to the user guide yet: the documentation
+  site has no public address.
+
 - The running release is visible (DOC-13). The account menu in the site
   shell ends with "Pychestrate <release>", read from `pyproject.toml`, and
   `GET /api/v1/system/health` names it (`version`) for callers who may see
