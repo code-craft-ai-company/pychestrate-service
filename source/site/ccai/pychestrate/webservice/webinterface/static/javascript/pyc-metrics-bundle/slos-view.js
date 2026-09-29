@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import {
   announce_session_expired,
   list_load_message_for_status
@@ -139,6 +140,26 @@ function slo_create_message_for_status(status, detail) {
     return rtnval2;
   }
   const rtnval = "Failed to create SLO (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function slo_delete_message_for_status(status, name) {
+  if (status === 204 || status === 200) {
+    const rtnval2 = "SLO \u201C" + name + "\u201D deleted.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That SLO no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to delete SLOs.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to delete.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to delete the SLO (HTTP " + String(status) + ").";
   return rtnval;
 }
 function parse_definition_config(raw) {
@@ -652,9 +673,11 @@ class PycSlos extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
-        width: "12rem",
+        width: "16rem",
         sortable: false,
         render: (slo) => {
+          const actions = document.createElement("span");
+          actions.classList.add("pyc-metrics__row-actions");
           const status_button = document.createElement("mj-button");
           status_button.classList.add("pyc-metrics__button");
           status_button.setAttribute("type", "button");
@@ -664,12 +687,84 @@ class PycSlos extends HTMLElement {
             status_button.toggleAttribute("disabled", true);
             void self._on_load_status(slo, status_button);
           });
-          return status_button;
+          actions.appendChild(status_button);
+          const delete_button = document.createElement("mj-button");
+          delete_button.classList.add("pyc-metrics__button");
+          delete_button.setAttribute("type", "button");
+          delete_button.setAttribute("data-role", "delete-slo");
+          delete_button.textContent = "Delete";
+          delete_button.addEventListener("click", () => {
+            void self._on_delete(slo, delete_button);
+          });
+          actions.appendChild(delete_button);
+          return actions;
         }
       }
     ];
     table.rows = this._slos;
     return table;
+  }
+  /**
+   * Delete one SLO after asking. The dialog names what goes with it (its
+   * target and burn-rate state) and that it cannot be undone (ORC-26).
+   *
+   * @param slo The SLO to delete.
+   * @param button The row action button, disabled while the request runs.
+   */
+  async _on_delete(slo, button) {
+    const confirmed = await confirm_action(
+      this,
+      "Delete the SLO \u201C" + slo.name + "\u201D?\nIts target and its burn-rate state are removed. This cannot be undone.",
+      "Delete SLO"
+    );
+    if (confirmed !== true) {
+      return;
+    }
+    button.toggleAttribute("disabled", true);
+    const outcome = await this._do_delete(slo);
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true || outcome.status === 404) {
+      this._status.delete(slo.slo_id);
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * ``DELETE`` one SLO. Exposed so unit tests can drive it without a dialog.
+   *
+   * @param slo The SLO to delete.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async deleteSlo(slo) {
+    const rtnval = await this._do_delete(slo);
+    return rtnval;
+  }
+  async _do_delete(slo) {
+    if (this._state.projectId.length === 0) {
+      return { ok: false, status: 0, message: "Select a project before deleting an SLO." };
+    }
+    let status = 0;
+    try {
+      const response = await fetch(build_slo_detail_url(this._state.projectId, slo.slo_id), {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.slo_delete_failed",
+        { reason: String(reason) }
+      );
+      return { ok: false, status: 0, message: "Failed to reach the SLO service." };
+    }
+    const ok = status === 204 || status === 200;
+    return { ok, status, message: slo_delete_message_for_status(status, slo.name) };
   }
   /**
    * Run the "Burn-rate Status" action for one SLO -- read the
@@ -1102,6 +1197,7 @@ export {
   format_window,
   parse_definition_config,
   slo_create_message_for_status,
+  slo_delete_message_for_status,
   slo_problem_detail,
   slo_status_label,
   slo_status_tone

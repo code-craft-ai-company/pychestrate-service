@@ -365,3 +365,10 @@ pyc-alert-rules {
 .pyc-metrics__projects-notice--error {
     color: var(--pyc-metrics-error-fg);
 }
+
+/* Row actions side by side: a status refresh and a delete (ORC-26) */
+.pyc-metrics__row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}

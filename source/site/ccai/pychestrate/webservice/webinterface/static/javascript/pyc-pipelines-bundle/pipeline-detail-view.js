@@ -1,3 +1,4 @@
+import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
@@ -11,6 +12,26 @@ const COLUMN_GAP = 80;
 const ROW_GAP = 24;
 const CANVAS_PADDING = 20;
 const PROJECTS_API_PATH = "/api/v1/projects";
+function pipeline_delete_message_for_status(status, name) {
+  if (status === 204 || status === 200) {
+    const rtnval2 = "Pipeline \u201C" + name + "\u201D deleted.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This pipeline no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to delete pipelines.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to delete.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to delete the pipeline (HTTP " + String(status) + ").";
+  return rtnval;
+}
 function pipeline_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -203,6 +224,9 @@ class PycPipelineDetail extends HTMLElement {
   _error_status;
   _is_dag;
   _root;
+  _deleted;
+  _delete_notice;
+  _delete_pending;
   constructor() {
     super();
     this._pipeline_id = "";
@@ -214,6 +238,9 @@ class PycPipelineDetail extends HTMLElement {
     this._error_status = 0;
     this._is_dag = true;
     this._root = null;
+    this._deleted = false;
+    this._delete_notice = "";
+    this._delete_pending = false;
   }
   /**
    * Observed attributes -- ``pipeline-id`` and ``project-id`` may
@@ -424,6 +451,21 @@ class PycPipelineDetail extends HTMLElement {
       body.replaceChildren(...children);
       return;
     }
+    if (this._deleted === true) {
+      const gone = document.createElement("p");
+      gone.classList.add("pyc-pipeline-detail__deleted");
+      gone.setAttribute("data-role", "deleted-state");
+      const text = document.createElement("span");
+      text.textContent = this._delete_notice + " ";
+      gone.appendChild(text);
+      const list_link = document.createElement("a");
+      list_link.classList.add("pyc-pipeline-detail__back-link");
+      list_link.setAttribute("href", "/pipelines?project_id=" + encodeURIComponent(this._project_id));
+      list_link.textContent = "Back to pipelines";
+      gone.appendChild(list_link);
+      body.replaceChildren(gone);
+      return;
+    }
     const fragment = document.createDocumentFragment();
     fragment.appendChild(this._build_summary(this._pipeline));
     fragment.appendChild(this._build_dag_section(this._pipeline.stages));
@@ -458,7 +500,27 @@ class PycPipelineDetail extends HTMLElement {
     name_value.textContent = pipeline.name;
     set_entity_title(String(pipeline.name ?? "") || "Pipeline " + short_id(pipeline.pipeline_id));
     id_row.appendChild(name_value);
+    const delete_button = document.createElement("mj-button");
+    delete_button.classList.add("pyc-pipeline-detail__delete");
+    delete_button.setAttribute("type", "button");
+    delete_button.setAttribute("data-role", "delete-pipeline");
+    delete_button.textContent = "Delete";
+    if (this._delete_pending === true) {
+      delete_button.toggleAttribute("disabled", true);
+    }
+    delete_button.addEventListener("click", () => {
+      void this._on_delete();
+    });
+    id_row.appendChild(delete_button);
     section.appendChild(id_row);
+    if (this._delete_notice.length > 0) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-pipeline-detail__notice");
+      notice.setAttribute("data-role", "delete-notice");
+      notice.setAttribute("role", "alert");
+      notice.textContent = this._delete_notice;
+      section.appendChild(notice);
+    }
     const grid = document.createElement("dl");
     grid.classList.add("pyc-pipeline-detail__grid");
     this._append_field(grid, "Project", pipeline.project_id);
@@ -476,6 +538,63 @@ class PycPipelineDetail extends HTMLElement {
     this._append_field(grid, "Cached", format_timestamp(pipeline.cached_at));
     section.appendChild(grid);
     return section;
+  }
+  /**
+   * Delete this pipeline definition after asking (ORC-26). The dialog says
+   * what goes and that it cannot be undone; on success the page says so and
+   * links back to the list.
+   */
+  async _on_delete() {
+    if (this._pipeline === null || this._delete_pending === true) {
+      return;
+    }
+    const name = typeof this._pipeline.name === "string" && this._pipeline.name.trim().length > 0 ? this._pipeline.name.trim() : short_id(this._pipeline.pipeline_id);
+    const confirmed = await confirm_action(
+      this,
+      "Delete the pipeline \u201C" + name + "\u201D?\nThe saved definition is removed from this project. This cannot be undone.",
+      "Delete pipeline"
+    );
+    if (confirmed !== true) {
+      return;
+    }
+    this._delete_pending = true;
+    this._delete_notice = "";
+    this._render_body();
+    const outcome = await this.deletePipeline(name);
+    this._delete_pending = false;
+    this._delete_notice = outcome.message;
+    this._deleted = outcome.ok === true || outcome.status === 404;
+    this._render_body();
+    return;
+  }
+  /**
+   * ``DELETE`` this pipeline definition. Exposed so unit tests can drive it
+   * without a dialog.
+   *
+   * @param name The name to use in the outcome message.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async deletePipeline(name) {
+    let status = 0;
+    try {
+      const response = await fetch(pipeline_detail_url(this._project_id, this._pipeline_id), {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.pipelines.delete_failed",
+        { reason: String(reason) }
+      );
+      return { ok: false, status: 0, message: "Couldn't reach the server, so the pipeline was not deleted." };
+    }
+    return { ok: status === 204 || status === 200, status, message: pipeline_delete_message_for_status(status, name) };
   }
   /**
    * Append one labelled field to a definition-list grid.
@@ -703,6 +822,7 @@ export {
   compute_dag_columns,
   compute_dag_layout,
   detail_load_message_for_status,
+  pipeline_delete_message_for_status,
   pipeline_detail_url,
   pipeline_id_from_path,
   project_id_from_search

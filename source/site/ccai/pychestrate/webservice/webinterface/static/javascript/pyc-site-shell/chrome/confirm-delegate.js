@@ -175,6 +175,19 @@ function install_confirm_delegate(root) {
             }, 0);
         });
     }, true);
+    // A bundle view (which is not a form) asks for the same dialog with a
+    // "pyc-confirm-request" event (see shared/confirm.js): the shell answers by
+    // cancelling the event, so the view knows a dialog was shown and does not
+    // fall back to the browser's own confirm box.
+    target.addEventListener("pyc-confirm-request", (event) => {
+        const detail = event.detail;
+        if (detail === null || typeof detail !== "object" || typeof detail.message !== "string" || typeof detail.resolve !== "function") {
+            return;
+        }
+        event.preventDefault();
+        const label = typeof detail.confirm_label === "string" && detail.confirm_label.trim().length > 0 ? detail.confirm_label.trim() : "Continue";
+        ask_confirmation(detail.message, label).then((accepted) => detail.resolve(accepted === true));
+    });
     return;
 }
 

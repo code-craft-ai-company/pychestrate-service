@@ -421,3 +421,18 @@ pyc-pipeline-detail {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     font-variant-numeric: tabular-nums;
 }
+
+/* Deleting a pipeline (ORC-26) */
+.pyc-pipeline-detail__delete {
+    margin-inline-start: auto;
+}
+
+.pyc-pipeline-detail__notice,
+.pyc-pipeline-detail__deleted {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-pipeline-detail__notice {
+    color: var(--pyc-pipelines-error-fg);
+}

@@ -194,6 +194,22 @@ preview tag.
 
 ### Changed
 
+- SLOs and pipelines can be deleted from their pages (ORC-26, XC-15). The API
+  has always allowed it and nothing in the UI did. The SLO list has a Delete
+  action per row; the pipeline page has a Delete button. Both ask first: "Delete
+  the SLO \u201cx\u201d? Its target and its burn-rate state are removed. This
+  cannot be undone." / "Delete the pipeline \u201cx\u201d? The saved definition
+  is removed from this project. This cannot be undone." The dialog is the
+  shell's own (Cancel focused, the deed on the button, Escape means no), which
+  bundle views now reach with a `pyc-confirm-request` event through
+  `shared/confirm.js`; when nothing answers the event the helper uses the
+  browser's confirm box, so a confirmation never disappears. A refusal, a
+  missing record and an unreachable server each get their own message. The
+  other bundle views still call `window.confirm` directly. Not changed: guards
+  and outbound webhooks (the API's DELETE only disables them, and their views
+  already have enable/disable), and there is still no way to edit an SLO or
+  re-describe a pipeline in place.
+
 - A build's files open in the browser and its log is on the page (ORC-12).
   The manifest stores each uploaded file's path in the run's result tree, and
   the build page linked that path as it stood, so "Download" opened nothing.

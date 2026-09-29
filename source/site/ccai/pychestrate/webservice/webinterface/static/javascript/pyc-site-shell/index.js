@@ -485,6 +485,15 @@ function install_confirm_delegate(root) {
       }, 0);
     });
   }, true);
+  target.addEventListener("pyc-confirm-request", (event) => {
+    const detail = event.detail;
+    if (detail === null || typeof detail !== "object" || typeof detail.message !== "string" || typeof detail.resolve !== "function") {
+      return;
+    }
+    event.preventDefault();
+    const label = typeof detail.confirm_label === "string" && detail.confirm_label.trim().length > 0 ? detail.confirm_label.trim() : "Continue";
+    ask_confirmation(detail.message, label).then((accepted) => detail.resolve(accepted === true));
+  });
   return;
 }
 
