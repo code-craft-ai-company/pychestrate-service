@@ -115,6 +115,25 @@ def test_the_sidebar_reaches_runs_pipelines_and_the_test_catalog_for_this_projec
     return
 
 
+def test_every_sidebar_entry_draws_an_icon_the_site_has():
+    """
+    **Feature: a project sidebar without dead ends (PRJ-08)**
+    **Property: each entry in the project sidebar names an icon that exists,
+    so none renders as a bare dot.**
+    """
+    template = strict_environment().get_template("projects/base.html")
+    with open(template.filename, encoding="utf-8") as handle:
+        source = handle.read()
+    macros = strict_environment().get_template("site_shell/_macros.html")
+    with open(macros.filename, encoding="utf-8") as handle:
+        macro_source = handle.read()
+    known = set(re.findall(r'^\s*"([a-z_]+)":\s*"M', macro_source, re.M))
+    used = re.findall(r'ui\.icon\("([a-z_]+)"\)', source)
+
+    testbase.assert_equal(sorted(set(name for name in used if name not in known)), [])
+    return
+
+
 def test_the_project_overview_points_its_tests_card_at_runs():
     """
     **Feature: a project sidebar without dead ends (PRJ-08)**

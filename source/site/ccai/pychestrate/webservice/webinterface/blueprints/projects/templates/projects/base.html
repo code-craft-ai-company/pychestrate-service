@@ -82,7 +82,7 @@
                     (PRJ-08). #}
                 {% if ui_profile.is_enabled('build') or ui_profile.is_enabled('testing') or ui_profile.is_enabled('rpa') %}
                 <li><a href="{{ url_for('projects.project_workspace_link', project_id=project.id, destination='runs') }}">
-                    {{ ui.icon("play_circle") }} Runs
+                    {{ ui.icon("play_arrow") }} Runs
                 </a></li>
                 {% endif %}
                 {% if ui_profile.is_enabled('build') %}
