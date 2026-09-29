@@ -277,6 +277,9 @@ class _FakeProjectManager:
         _FakeProjectManager.last_instance = self
         return
 
+    def accessible_project_ids(self, user_id: Any) -> Optional[List[Any]]:
+        return [project.id for project in self.list_projects_response]
+
     def list_projects(
             self, user_id: str, **kwargs: Any
         ) -> Any:

@@ -444,6 +444,7 @@ def handle_release_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = releases_result.total
         context["selected_status"] = status
         context["selected_channel_id"] = channel_id
 
@@ -589,6 +590,7 @@ def handle_pipeline_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = pipelines_result.total
 
         response = _render(
             template_name="projects/releases/pipeline_list.html",

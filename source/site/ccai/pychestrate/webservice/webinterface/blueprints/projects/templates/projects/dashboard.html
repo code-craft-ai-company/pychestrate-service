@@ -22,7 +22,7 @@
 
 <div class="card">
     <div class="card-header split">
-        <span>Recent Projects</span>
+        <span>Projects</span>
         <a href="{{ url_for('projects.project_create') }}" class="btn btn-primary btn-sm">
             {{ ui.icon("add") }} New Project
         </a>
@@ -57,6 +57,9 @@
             {% endfor %}
         </tbody>
     </table></div>
+    {% if project_total > projects | length %}
+    <p class="muted" data-role="projects-limit">Showing {{ projects | length }} of {{ project_total }} projects. <a href="{{ url_for('projects.project_list') }}">View all {{ project_total }}</a></p>
+    {% endif %}
     {% else %}
     <p class="muted center pad-lg">
         No projects yet. <a href="{{ url_for('projects.project_create') }}">Create your first project</a>

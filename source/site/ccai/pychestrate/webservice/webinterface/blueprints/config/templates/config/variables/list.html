@@ -52,7 +52,7 @@
             <td>
                 <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
-                <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable?">
+                <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>

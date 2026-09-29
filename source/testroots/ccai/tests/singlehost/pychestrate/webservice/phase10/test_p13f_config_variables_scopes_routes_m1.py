@@ -255,6 +255,8 @@ class _FakeVariableStore:
         self.update_variable_calls: List[Any] = []
         self.delete_variable_calls: List[Any] = []
         self.get_change_history_calls: List[Any] = []
+        # What the history holds for any name; None means one entry.
+        self.change_history_response: Optional[List[Any]] = None
         self.create_variable_raises: Optional[Exception] = None
         self.update_variable_raises: Optional[Exception] = None
         self.delete_variable_raises: Optional[Exception] = None
@@ -307,6 +309,8 @@ class _FakeVariableStore:
         self.get_change_history_calls.append(
             (name, offset, limit)
         )
+        if self.change_history_response is not None:
+            return self.change_history_response
         return [{"id": 1, "name": name}]
 
 
@@ -1147,21 +1151,23 @@ def test_handle_variable_history_renders_with_history():
     return
 
 
-def test_handle_variable_history_redirects_when_missing():
-    """
-    **Feature: webworks config variables port T3.9**
-    **Property: A name not found redirects to the list.**
-    """
+def _history_of_a_missing_variable(*, history: List[Any]) -> Any:
+    """Ask for the history of "ghost", a name with no variable, when the store holds ``history`` for it."""
     _reset_global_state()
     sm_patch = None
     vs_patch = None
     try:
-        _install_stub_environment()
+        env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        vs_patch = _patch_variable_store()
+
+        def _seed(instance: _FakeVariableStore) -> None:
+            instance.change_history_response = history
+            return
+
+        vs_patch = _patch_variable_store(configure=_seed)
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1169,14 +1175,41 @@ def test_handle_variable_history_redirects_when_missing():
             path_params={"name": "ghost"},
         )
         response = config_routes_variables.handle_variable_history(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
+        rtnval = (response, env)
+        return rtnval
     finally:
         for p in (vs_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
+
+
+def test_handle_variable_history_redirects_when_missing():
+    """
+    **Feature: webworks config variables port T3.9**
+    **Property: A name with no variable and no history redirects to the
+    list.**
+    """
+    response, _env = _history_of_a_missing_variable(history=[])
+
+    testbase.assert_equal(isinstance(response, RedirectResponse), True)
+    return
+
+
+def test_handle_variable_history_of_a_deleted_variable_still_renders():
+    """
+    **Feature: variables (ADM-36)**
+    **Property: a name with no variable but with history (a deleted
+    variable) renders the history page, marked as deleted, instead of
+    redirecting away from the record of what it held.**
+    """
+    response, env = _history_of_a_missing_variable(history=[{"id": 1, "name": "ghost"}])
+    ctx = env.last_template.render_calls[0]
+
+    testbase.assert_equal(
+        (response.status_code, ctx["variable"], ctx["variable_name"], ctx["variable_deleted"]),
+        (200, None, "ghost", True),
+    )
     return
 
 

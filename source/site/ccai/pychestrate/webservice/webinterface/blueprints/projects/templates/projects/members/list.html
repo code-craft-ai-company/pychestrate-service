@@ -64,7 +64,7 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('projects.member_list', page, total_pages, {'project_id': project.id}) }}
+{{ ui.pagination('projects.member_list', page, total_pages, {'per_page': per_page, 'project_id': project.id}, total=total) }}
 
 <div class="card mt">
     <h2 class="card-header">Access through global roles</h2>

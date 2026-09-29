@@ -1,0 +1,38 @@
+{#-
+    A "Show values" / "Hide values" toggle for values that are masked by
+    default because they may hold credentials (audit finding ADM-36: the
+    variables list masked them, the detail and history pages did not).
+
+    Mark each value up as
+        <span data-role="mask" class="masked">&bull;&bull;&bull;&bull;</span>
+        <span data-role="secret" hidden>the value</span>
+    and add <button type="button" data-reveal-all="#container-id">. Include
+    this once per page, after the markup. Without script the values stay
+    hidden, which is the safe side; the variables list, which needs no
+    script for its own values, has a per-row button.
+-#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var buttons = document.querySelectorAll("button[data-reveal-all]");
+    for (var index = 0; index < buttons.length; index++) {
+        buttons[index].addEventListener("click", function (event) {
+            var button = event.currentTarget;
+            var scope = document.querySelector(button.getAttribute("data-reveal-all"));
+            if (scope === null) {
+                return;
+            }
+            var showing = button.getAttribute("aria-pressed") !== "true";
+            var masks = scope.querySelectorAll("[data-role='mask']");
+            var secrets = scope.querySelectorAll("[data-role='secret']");
+            for (var m = 0; m < masks.length; m++) {
+                masks[m].hidden = showing;
+            }
+            for (var s = 0; s < secrets.length; s++) {
+                secrets[s].hidden = !showing;
+            }
+            button.setAttribute("aria-pressed", showing ? "true" : "false");
+            button.textContent = showing ? "Hide values" : "Show values";
+        });
+    }
+})();
+</script>

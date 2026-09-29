@@ -424,6 +424,27 @@ preview tag.
   boxes are labelled (a crawl of every reachable server-rendered page
   found no other unlabelled input).
 
+- **Project lists keep their page size and show totals; the dashboard
+  covers every project.** Every project list dropped the page size when
+  paging and none said how many rows there were; they now keep it and
+  show "Page 1 of N · T total". The dashboard built Recent Builds and
+  Recent Tests from the first ten projects only, with two queries for
+  each, so activity in the eleventh project and beyond never appeared.
+  It now reads across all of a person's projects with one query each,
+  and says when it lists ten of more projects, with a link to the rest.
+
+- **Variables: strict booleans, kept history, masked values.** "yes",
+  "on" and "1" silently became true (and "no", "off", "0" false) in a
+  boolean variable, though the form says to use true or false; only true
+  and false, in any case, are accepted now, and anything else is refused
+  beside the value field. Deleting a variable made its history
+  unreachable ("Variable not found") although the rows are kept; the
+  history of a deleted variable is shown, marked as deleted, and the
+  delete message says where to find it. The list masked values behind a
+  Show button while the detail and history pages printed them; all three
+  now hide values until asked (the detail and history pages have one Show
+  values button each).
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

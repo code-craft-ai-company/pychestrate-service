@@ -452,6 +452,7 @@ def handle_release_template_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = result.total
 
         response = _render(
             template_name="projects/release_templates/list.html",

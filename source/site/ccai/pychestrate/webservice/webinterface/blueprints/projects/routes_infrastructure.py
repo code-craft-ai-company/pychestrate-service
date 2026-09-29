@@ -356,6 +356,7 @@ def handle_infra_job_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = jobs_result.total
         context["selected_status"] = status
         context["selected_spec_id"] = spec_id
 
@@ -422,6 +423,7 @@ def handle_infra_spec_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = specs_result.total
 
         response = _render(
             template_name="projects/infrastructure/spec_list.html",

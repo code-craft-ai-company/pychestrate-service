@@ -978,6 +978,25 @@ class ProjectManager:
                 }
             )
     
+    def accessible_project_ids(self, user_id: str) -> Optional[List[int]]:
+        """
+        The ids of the projects a person can see, for a query across all of
+        them (the dashboard's recent activity).
+
+        :param user_id: The user's ID
+        :returns: None when a global role gives access to every project,
+            otherwise the ids of the projects the person is a member of
+        """
+        from ccai.pychestrate.core.orm import ProjectMember
+
+        if self.get_global_role(user_id) is not None:
+            return None
+        rows = self._db_session.query(ProjectMember.project_id).filter(
+            ProjectMember.user_id == user_id
+        ).all()
+        rtnval = [row[0] for row in rows]
+        return rtnval
+
     def list_projects(
         self,
         user_id: str,

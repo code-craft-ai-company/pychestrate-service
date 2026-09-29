@@ -856,6 +856,7 @@ def handle_watch_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = watches_result.total
         _add_watch_labels(context=context)
 
         response = _render(

@@ -636,15 +636,22 @@ def _created_at_sort_key(*, item: Any) -> Any:
     return created_at
 
 
+#: Projects the dashboard lists; the rest are behind "View all".
+DASHBOARD_PROJECT_LIMIT = 10
+
+
 def _collect_recent_activity(
-        *, db_session: Any, projects: List[Any], limit: int = 10
+        *, db_session: Any, project_ids: Optional[List[Any]], limit: int = 10
     ) -> Dict[str, List[Any]]:
     """
-        Gather the most recent builds and test jobs across the
-        user's projects for the dashboard activity panels.
+        Gather the most recent builds and test jobs across all of the
+        user's projects for the dashboard activity panels: one query for
+        each, not two per project (which also left out every project past
+        the dashboard's first ten).
 
         :param db_session: Open SQLAlchemy session.
-        :param projects: The user's projects (already bounded).
+        :param project_ids: The ids of the projects the person can see, or
+                            None for every project.
         :param limit: Maximum rows per activity list.
 
         :returns: Dict with ``builds`` and ``tests`` lists,
@@ -653,29 +660,19 @@ def _collect_recent_activity(
     build_manager = _build_build_manager(db_session=db_session)
     test_manager = _build_test_manager(db_session=db_session)
 
-    recent_builds: List[Any] = []
-    recent_tests: List[Any] = []
-    for project in projects:
-        builds = build_manager.list_builds(
-            project_id=project.id, limit=limit
-        ).builds
-        recent_builds.extend(builds)
-
-        jobs = test_manager.list_jobs(
-            project_id=project.id, limit=limit
-        ).jobs
-        recent_tests.extend(jobs)
-
-    recent_builds.sort(
-        key=lambda item: _created_at_sort_key(item=item), reverse=True
-    )
-    recent_tests.sort(
-        key=lambda item: _created_at_sort_key(item=item), reverse=True
-    )
-
+    builds = build_manager.list_builds(
+        project_ids=project_ids, limit=limit
+    ).builds
+    jobs = test_manager.list_jobs(
+        project_ids=project_ids, limit=limit
+    ).jobs
     rtnval = {
-        "builds": recent_builds[:limit],
-        "tests": recent_tests[:limit],
+        "builds": sorted(
+            builds, key=lambda item: _created_at_sort_key(item=item), reverse=True
+        )[:limit],
+        "tests": sorted(
+            jobs, key=lambda item: _created_at_sort_key(item=item), reverse=True
+        )[:limit],
     }
     return rtnval
 
@@ -692,7 +689,7 @@ def handle_dashboard(request: Request) -> Response:
     try:
         project_manager = _build_project_manager(db_session=db_session)
         projects_response = project_manager.list_projects(
-            auth.user_id, limit=10
+            auth.user_id, limit=DASHBOARD_PROJECT_LIMIT
         )
         projects = projects_response.projects
         project_total = getattr(projects_response, "total", None)
@@ -700,7 +697,8 @@ def handle_dashboard(request: Request) -> Response:
             project_total = len(projects)
 
         recent_activity = _collect_recent_activity(
-            db_session=db_session, projects=projects
+            db_session=db_session,
+            project_ids=project_manager.accessible_project_ids(auth.user_id),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -800,6 +798,7 @@ def handle_project_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = projects_result.total
         context["search"] = search
 
         response = _render(
@@ -1389,6 +1388,7 @@ def handle_member_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = members_result.total
 
         response = _render(
             template_name="projects/members/list.html",

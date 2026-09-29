@@ -1,15 +1,21 @@
 {% extends "config/base.html" %}
 {% import "site_shell/_macros.html" as ui %}
 
-{% block title %}{{ variable.name }} History - Pychestrate Configuration{% endblock %}
+{% block title %}{{ variable_name }} History - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Variable History: {{ variable.name }}</h1>
+    <h1>Variable History: {{ variable_name }}</h1>
     <p>View change history for this variable</p>
 </div>
 
-<div class="table-scroll" tabindex="0"><table class="data-table">
+{% if variable_deleted %}
+<p class="alert alert-warning" role="status" data-role="variable-deleted">This variable has been deleted. Its history is kept, so you can still see what it held and who changed it.</p>
+{% endif %}
+
+<p class="mb-sm"><button type="button" class="btn btn-sm btn-secondary" data-reveal-all="#history-values" aria-pressed="false" data-role="reveal-values">Show values</button> <span class="muted small">Values may hold credentials, so they are hidden until you ask.</span></p>
+
+<div class="table-scroll" tabindex="0" id="history-values"><table class="data-table">
     <thead>
         <tr>
             <th scope="col">Changed At</th>
@@ -24,10 +30,10 @@
             <td>{{ entry.changed_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
             <td>{{ entry.changed_by or '-' }}</td>
             <td class="truncate">
-                {{ format_value(value=entry.old_value, var_type=variable.var_type) if entry.old_value is not none else '-' }}
+                {% if entry.old_value is not none %}<span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><span data-role="secret" hidden>{{ format_value(value=entry.old_value, var_type=(variable.var_type if variable else none)) }}</span>{% else %}-{% endif %}
             </td>
             <td class="truncate">
-                {{ format_value(value=entry.new_value, var_type=variable.var_type) if entry.new_value is not none else '-' }}
+                {% if entry.new_value is not none %}<span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><span data-role="secret" hidden>{{ format_value(value=entry.new_value, var_type=(variable.var_type if variable else none)) }}</span>{% else %}-{% endif %}
             </td>
         </tr>
         {% else %}
@@ -38,12 +44,19 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('config.variable_history', page, total_pages, {'name': variable.name, 'per_page': per_page}, total=total) }}
+{{ ui.pagination('config.variable_history', page, total_pages, {'name': variable_name, 'per_page': per_page}, total=total) }}
 <p class="muted">{{ total }} change{{ '' if total == 1 else 's' }} recorded</p>
 
 <div class="mt">
-    <a href="{{ url_for('config.variable_detail', name=variable.name) }}" class="btn btn-secondary">
+    {% if variable_deleted %}
+    <a href="{{ url_for('config.variable_list') }}" class="btn btn-secondary">
+        {{ ui.icon("arrow_back") }} Back to Variables
+    </a>
+    {% else %}
+    <a href="{{ url_for('config.variable_detail', name=variable_name) }}" class="btn btn-secondary">
         {{ ui.icon("arrow_back") }} Back to Variable
     </a>
+    {% endif %}
 </div>
+{% include "site_shell/_reveal_values.html" %}
 {% endblock %}

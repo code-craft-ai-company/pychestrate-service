@@ -9,7 +9,8 @@
     <p>View variable details</p>
 </div>
 
-<div class="card narrow">
+<div class="card narrow" id="variable-values">
+    <p class="mb-sm"><button type="button" class="btn btn-sm btn-secondary" data-reveal-all="#variable-values" aria-pressed="false" data-role="reveal-values">Show values</button> <span class="muted small">Hidden until you ask: values may hold credentials.</span></p>
     <table class="btn-block">
         <tr>
             <th scope="row">Name</th>
@@ -22,12 +23,13 @@
         <tr>
             <th scope="row">Value</th>
             <td>
-                <pre class="pre-wrap">{{ format_value(value=variable.value, var_type=variable.var_type) }}</pre>
+                <span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                <pre class="pre-wrap" data-role="secret" hidden>{{ format_value(value=variable.value, var_type=variable.var_type) }}</pre>
             </td>
         </tr>
         <tr>
             <th scope="row">Default</th>
-            <td>{% if variable.default_value is not none %}<pre class="pre-wrap">{{ format_value(value=variable.default_value, var_type=variable.var_type) }}</pre>{% else %}-{% endif %}</td>
+            <td>{% if variable.default_value is not none %}<span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><pre class="pre-wrap" data-role="secret" hidden>{{ format_value(value=variable.default_value, var_type=variable.var_type) }}</pre>{% else %}-{% endif %}</td>
         </tr>
         <tr>
             <th scope="row">Description</th>
@@ -55,7 +57,7 @@
     <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-secondary">
         {{ ui.icon("history") }} View History
     </a>
-    <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable?">
+    <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger">
             {{ ui.icon("delete") }} Delete
@@ -63,4 +65,5 @@
     </form>
     <a href="{{ url_for('config.variable_list') }}" class="btn btn-secondary">Back to List</a>
 </div>
+{% include "site_shell/_reveal_values.html" %}
 {% endblock %}

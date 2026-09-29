@@ -218,6 +218,14 @@ def format_variable_value(*, value: Any, var_type: Any) -> str:
     if value is None:
         return ""
 
+    if var_type is None:
+        # A deleted variable's history has no type to go by: show a
+        # structure as JSON and a boolean as true / false.
+        if isinstance(value, bool) is True:
+            var_type = "boolean"
+        elif isinstance(value, (dict, list)) is True:
+            var_type = "json"
+
     type_name = _variable_type_name(var_type=var_type)
     if type_name == "json":
         try:
@@ -707,7 +715,13 @@ def handle_variable_delete(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.variable_list"),
-                message='Variable "{}" deleted successfully.'.format(name),
+                message=(
+                    'Variable "{}" deleted successfully. Its history is kept:'
+                    " open {} to read it."
+                ).format(
+                    name,
+                    _url_for_module.url_for("config.variable_history", name=name),
+                ),
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
@@ -742,15 +756,6 @@ def handle_variable_history(request: Request) -> Response:
 
         variable_store = _build_variable_store(db_session=db_session)
         variable = variable_store.get_variable(name)
-        if variable is None:
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=_url_for_module.url_for("config.variable_list"),
-                message="Variable not found.",
-                category=flash.CATEGORY_ERROR,
-            )
-            return response
-
         history = variable_store.get_change_history(
             name, offset=offset, limit=params["per_page"]
         )
@@ -758,6 +763,17 @@ def handle_variable_history(request: Request) -> Response:
             history_total = int(variable_store.count_change_history(name))
         except Exception:
             history_total = len(history)
+        # The history is kept when a variable is deleted (its rows are
+        # keyed by name), so it can still be read: only a name that never
+        # existed has nothing to show.
+        if variable is None and history_total == 0:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.variable_list"),
+                message="Variable not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
         per_page = params["per_page"]
         total_pages = max(1, (history_total + per_page - 1) // per_page)
 
@@ -769,6 +785,8 @@ def handle_variable_history(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variable"] = variable
+        context["variable_name"] = name
+        context["variable_deleted"] = variable is None
         context["format_value"] = format_variable_value
         context["history"] = history
         context["page"] = params["page"]

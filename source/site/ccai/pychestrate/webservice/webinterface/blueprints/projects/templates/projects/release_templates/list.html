@@ -63,5 +63,5 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('projects.release_template_list', page, total_pages, {'project_id': project.id, 'per_page': per_page}) }}
+{{ ui.pagination('projects.release_template_list', page, total_pages, {'project_id': project.id, 'per_page': per_page}, total=total) }}
 {% endblock %}

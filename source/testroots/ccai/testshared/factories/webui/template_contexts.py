@@ -964,6 +964,11 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     # Resources audit fixes (RES-02 / RES-17): the IANA zone a
     # reservation form's times are typed in ("" = fresh form, UTC).
+    # A deleted variable's history is kept and shown (ADM-36).
+    "config/variables/": {
+        "variable_name": _const("ui.example"),
+        "variable_deleted": _by_mode(True, False),
+    },
     # Enrollment tokens as the route's rows (ADM-40): datetimes, not ISO text.
     "config/enrollment/": {
         "tokens": _token_rows_fixture,

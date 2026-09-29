@@ -1323,7 +1323,8 @@ class BuildManager:
         spec_id: int = None,
         status: JobStatus = None,
         offset: int = 0,
-        limit: int = 50
+        limit: int = 50,
+        project_ids: list = None
     ) -> BuildListResponse:
         """
         List builds with filtering.
@@ -1333,6 +1334,8 @@ class BuildManager:
         :param status: Optional status filter
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
+        :param project_ids: Optional list of project IDs, any of which matches
+            (one query across a person's projects; an empty list matches none)
         :returns: BuildListResponse with paginated build list
         
         Validates: Requirements 5.6
@@ -1344,6 +1347,9 @@ class BuildManager:
         # Apply filters
         if project_id is not None:
             query = query.filter(ProjectBuild.project_id == project_id)
+        
+        if project_ids is not None:
+            query = query.filter(ProjectBuild.project_id.in_(list(project_ids)))
         
         if spec_id is not None:
             query = query.filter(ProjectBuild.spec_id == spec_id)

@@ -291,10 +291,13 @@ class GlobalVariableStore:
                 raise ValueError(f"'{value_str}' is not a valid float")
         
         elif var_type == VariableType.BOOLEAN:
+            # Only the two words the form's help text names: "yes", "on"
+            # and "1" used to become true without a word, and a typo such
+            # as "ture" is refused rather than guessed at.
             lower_val = value_str.lower().strip()
-            if lower_val in ('true', '1', 'yes', 'on'):
+            if lower_val == 'true':
                 return True
-            elif lower_val in ('false', '0', 'no', 'off'):
+            elif lower_val == 'false':
                 return False
             else:
                 raise ValueError(f"'{value_str}' is not a valid boolean (use 'true' or 'false')")
