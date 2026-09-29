@@ -194,6 +194,19 @@ preview tag.
 
 ### Changed
 
+- A person refused access is told whom to ask (XC-21). "Ask an administrator"
+  never said who that is. `PYCHESTRATE_ADMIN_CONTACT` names a contact (an
+  email address, a team, a chat channel; described in the environment
+  reference). The no-access screen shows it, as a mail link with the subject
+  and the person's account already written when it is an address, and the
+  "you do not have access" page adds "To ask for access, contact ...". The
+  dashboards editor's read-only notice uses the same sentence through
+  `shared/admin-contact.js`. With no contact configured nothing is added. Not
+  changed: the roughly thirty per-action "You do not have permission to ..."
+  messages in the bundle views, and there is still no request-access action
+  that notifies an administrator (nothing in the service sends
+  notifications yet).
+
 - Dashboards keep their project, the layout editor can be reached, and Save
   follows the changes (ORC-16, ORC-33). The dashboards list chose a project
   but the detail page and the editor always loaded from the first one, so a

@@ -61,7 +61,7 @@ BOARD_RECORD: Dict[str, Any] = {
 
 
 def _open(
-        browser: Browser, path: str, *, permissions: Optional[List[str]] = WRITE
+        browser: Browser, path: str, *, permissions: Optional[List[str]] = WRITE, admin_contact: str = ""
     ) -> Tuple[Any, List[str], List[Dict[str, Any]]]:
     """
         Open ``path`` with two projects, of which only the second holds the
@@ -85,6 +85,7 @@ def _open(
             "/api/v1/metrics/catalog": {"items": [{"name": "pychestrate_runs_total", "kind": "counter", "label_names": []}]},
             "/api/v1/me/permissions": {"permissions": permissions if permissions is not None else []},
         },
+        admin_contact=admin_contact,
     )
     if permissions is None:
         context.route(
@@ -307,4 +308,23 @@ def test_a_long_metric_name_stays_inside_its_tile_card(browser: Browser):
         ("granted_total_by_pool_and_lab" in boxes["text"], boxes["title_right"] <= boxes["card_right"] + 1, boxes["overflow"] <= 1),
         (True, True, True),
     )
+    return
+
+
+def test_the_read_only_notice_names_whom_to_ask_when_a_contact_is_configured(browser: Browser):
+    """
+    **Feature: whom to ask for access (XC-21)**
+    **Property: the read-only editor notice ends with the installation's access
+    contact when the shell document carries one.**
+    """
+    page, _requested, _patched = _open(
+        browser, "/dashboards/{}/edit?project_id={}".format(BOARD, BETA), permissions=READ_ONLY, admin_contact="ops@lab.example"
+    )
+    try:
+        page.wait_for_selector('[data-role="read-only-notice"]')
+        notice = page.locator('[data-role="read-only-notice"]').inner_text()
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(notice.endswith("To ask for access, contact ops@lab.example."), True)
     return

@@ -4228,6 +4228,16 @@ var PycAlertRules = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/admin-contact.js
+function access_request_sentence() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const shell = document.querySelector("pyc-site-shell");
+  const contact = shell === null ? "" : (shell.getAttribute("admin-contact") || "").trim();
+  return contact.length > 0 ? "To ask for access, contact " + contact + "." : "";
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboard-editor-view.js
 var PROJECTS_API_PATH5 = "/api/v1/projects";
 var PROJECTS_LIST_URL5 = PROJECTS_API_PATH5 + "?per_page=500";
@@ -4746,7 +4756,7 @@ var PycDashboardEditor = class extends HTMLElement {
       const notice = document.createElement("p");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "read-only-notice");
-      notice.textContent = "You can view this layout but not change it. Ask an administrator for dashboard write access.";
+      notice.textContent = ["You can view this layout but not change it. Ask an administrator for dashboard write access.", access_request_sentence()].filter((part) => part.length > 0).join(" ");
       region.appendChild(notice);
       return;
     }

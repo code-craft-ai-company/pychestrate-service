@@ -38,6 +38,7 @@ from ccai.pychestrate.webservice.webinterface.foundation.templating import (
     render_template_response,
 )
 
+from ccai.pychestrate.webservice.webinterface.site_shell.admin_contact import admin_contact
 from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import (
     bundles_for,
 )
@@ -200,6 +201,7 @@ def render_shell_document(
         "user_login_name": session_view.get("username", ""),
         "service_version": _service_version_for_shell(),
         "user_guide_url": _user_guide_url_for_shell(),
+        "admin_contact": admin_contact(),
     }
     rtnval = render_template_response(
         template_name=SHELL_TEMPLATE_NAME,

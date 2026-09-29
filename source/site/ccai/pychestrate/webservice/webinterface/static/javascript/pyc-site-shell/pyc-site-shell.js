@@ -1014,7 +1014,10 @@ class PycSiteShell extends HTMLElement {
           preserved.push(child);
         }
       }
-      this._main_region.replaceChildren(...preserved, build_empty_state());
+      this._main_region.replaceChildren(...preserved, build_empty_state({
+        admin_contact: this._read_optional_attribute("admin-contact"),
+        user_login_name: this._read_optional_attribute("user-login-name"),
+      }));
       this._emit(
         "pyc-site-shell-empty-state-rendered",
         {}

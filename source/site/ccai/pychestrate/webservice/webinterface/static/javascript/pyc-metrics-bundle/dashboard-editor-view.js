@@ -12,6 +12,7 @@ import {
   DASHBOARDS_WRITE_PERMISSION,
   project_id_for_page
 } from "./dashboards-view.js";
+import { access_request_sentence } from "../shared/admin-contact.js";
 import { may } from "../shared/permissions.js";
 import { query_value } from "../shared/view-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -534,7 +535,7 @@ class PycDashboardEditor extends HTMLElement {
       const notice = document.createElement("p");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "read-only-notice");
-      notice.textContent = "You can view this layout but not change it. Ask an administrator for dashboard write access.";
+      notice.textContent = ["You can view this layout but not change it. Ask an administrator for dashboard write access.", access_request_sentence()].filter((part) => part.length > 0).join(" ");
       region.appendChild(notice);
       return;
     }

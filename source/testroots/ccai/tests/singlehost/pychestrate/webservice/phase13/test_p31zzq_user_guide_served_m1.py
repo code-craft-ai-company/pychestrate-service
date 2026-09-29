@@ -211,7 +211,7 @@ def test_the_shell_document_carries_the_guides_address_only_when_there_is_one():
     template = strict_environment().get_template("site_shell/shell_document.html")
     base = dict(
         page_title="P", initial_route="/", bundle_names=["pyc-site-shell"], bundle_stylesheets=[], content_html="",
-        csrf_token="", user_display_name="", user_login_name="", service_version="",
+        csrf_token="", user_display_name="", user_login_name="", service_version="", admin_contact="",
     )
     with_guide = template.render(user_guide_url="/docs/", **base)
     without = template.render(user_guide_url="", **base)

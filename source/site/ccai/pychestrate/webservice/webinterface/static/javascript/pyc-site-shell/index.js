@@ -1,5 +1,23 @@
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/empty-state.js
-function build_empty_state() {
+var EMAIL_PATTERN = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/;
+function build_request_link(contact, login_name) {
+  const lines = ["Hello,", "", "Please give my Pychestrate account a role so I can use it."];
+  if (login_name.length > 0) {
+    lines.push("", "Account: " + login_name);
+  }
+  const link = document.createElement("a");
+  link.setAttribute(
+    "href",
+    "mailto:" + contact + "?subject=" + encodeURIComponent("Pychestrate access request") + "&body=" + encodeURIComponent(lines.join("\n"))
+  );
+  link.setAttribute("data-role", "request-access");
+  link.textContent = "Email " + contact + " to request access";
+  return link;
+}
+function build_empty_state(options) {
+  const settings = options !== null && typeof options === "object" ? options : {};
+  const contact = typeof settings.admin_contact === "string" ? settings.admin_contact.trim() : "";
+  const login_name = typeof settings.user_login_name === "string" ? settings.user_login_name.trim() : "";
   const panel = document.createElement("mj-empty-state");
   panel.setAttribute("heading", "Your account has no access yet");
   panel.setAttribute("role", "status");
@@ -10,6 +28,18 @@ function build_empty_state() {
   body.classList.add("pyc-site-shell__empty-state-body");
   body.textContent = "Ask an administrator to grant you a role so you can use Pychestrate.";
   panel.appendChild(body);
+  if (contact.length > 0) {
+    const who = document.createElement("p");
+    who.setAttribute("slot", "description");
+    who.classList.add("pyc-site-shell__empty-state-body");
+    who.setAttribute("data-role", "admin-contact");
+    if (EMAIL_PATTERN.test(contact) === true) {
+      who.appendChild(build_request_link(contact, login_name));
+    } else {
+      who.textContent = "To ask for access, contact " + contact + ".";
+    }
+    panel.appendChild(who);
+  }
   return panel;
 }
 
@@ -4580,7 +4610,10 @@ var PycSiteShell = class extends HTMLElement {
           preserved.push(child);
         }
       }
-      this._main_region.replaceChildren(...preserved, build_empty_state());
+      this._main_region.replaceChildren(...preserved, build_empty_state({
+        admin_contact: this._read_optional_attribute("admin-contact"),
+        user_login_name: this._read_optional_attribute("user-login-name")
+      }));
       this._emit(
         "pyc-site-shell-empty-state-rendered",
         {}

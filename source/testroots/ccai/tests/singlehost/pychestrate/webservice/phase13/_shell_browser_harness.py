@@ -132,7 +132,7 @@ def bundle_stylesheets_for(bundle_names: List[str]) -> List[str]:
     return rtnval
 
 
-def render_shell_html(*, path: str, bundle_names: List[str]) -> str:
+def render_shell_html(*, path: str, bundle_names: List[str], admin_contact: str = "") -> str:
     """
         Render the site-shell document the way
         ``render_shell_document`` does for ``path``.
@@ -140,6 +140,8 @@ def render_shell_html(*, path: str, bundle_names: List[str]) -> str:
         :param path: Request path the document is rendered for.
         :param bundle_names: Bundles to import (``pyc-site-shell``
                              first).
+        :param admin_contact: The access contact the document carries
+                              (``PYCHESTRATE_ADMIN_CONTACT``); empty for none.
 
         :returns: HTML text.
     """
@@ -156,6 +158,7 @@ def render_shell_html(*, path: str, bundle_names: List[str]) -> str:
         "user_login_name": SHELL_USER_LOGIN_NAME,
         "service_version": SHELL_SERVICE_VERSION,
         "user_guide_url": SHELL_USER_GUIDE_URL,
+        "admin_contact": admin_contact,
     }
     rtnval = template.render(**context)
     return rtnval
@@ -199,7 +202,8 @@ def install_site_routes(
         *,
         bundle_names: List[str],
         api_stubs: Optional[ApiStubs] = None,
-        blocked_paths: Optional[List[str]] = None
+        blocked_paths: Optional[List[str]] = None,
+        admin_contact: str = ""
     ) -> None:
     """
         Route every request to :data:`FAKE_ORIGIN` for a browser
@@ -214,6 +218,7 @@ def install_site_routes(
                           ``{"items": [], "meta": {"total": 0}}``.
         :param blocked_paths: Paths whose requests are aborted (to
                               observe the page before a script runs).
+        :param admin_contact: The access contact the shell document carries.
 
         :returns: None.
     """
@@ -260,7 +265,7 @@ def install_site_routes(
                 "body": b"<!DOCTYPE html><title>fixture</title>",
             }
         else:
-            html = render_shell_html(path=path, bundle_names=bundle_names)
+            html = render_shell_html(path=path, bundle_names=bundle_names, admin_contact=admin_contact)
             response = {
                 "status": 200,
                 "headers": {"Content-Type": "text/html; charset=utf-8"},

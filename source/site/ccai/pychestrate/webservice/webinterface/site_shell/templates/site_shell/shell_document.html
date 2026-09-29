@@ -60,6 +60,9 @@
         {%- if user_guide_url %}
         user-guide-url="{{ user_guide_url }}"
         {%- endif %}
+        {%- if admin_contact %}
+        admin-contact="{{ admin_contact }}"
+        {%- endif %}
         brand-label="Pychestrate">
         {%- if content_html %}
         {{ content_html|safe }}

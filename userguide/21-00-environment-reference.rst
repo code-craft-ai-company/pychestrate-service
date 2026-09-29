@@ -130,6 +130,14 @@ Running the server
        Empty makes the issuer host-less and the URLs relative to the
        service, which only works when nothing has to reach back in from
        elsewhere.
+   * - ``PYCHESTRATE_ADMIN_CONTACT``
+     - empty
+     - Whom a person should ask for access: an email address, a chat
+       handle or a team name (at most 200 characters). The no-access
+       screen shows it, as a ready-written email when it is an address,
+       and the "you do not have access" page adds "To ask for access,
+       contact <contact>." Empty adds nothing, so no page names someone
+       the installation did not name.
    * - ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES``
      - ``127.0.0.1`` and ``::1``
      - Comma-separated addresses or networks of the reverse proxies the
