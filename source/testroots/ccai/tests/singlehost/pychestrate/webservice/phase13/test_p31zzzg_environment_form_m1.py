@@ -129,7 +129,7 @@ def test_the_form_offers_the_loaded_kind_and_its_fields_and_sends_them_as_attrib
         (options, typed_kind, json_box, labels, posts),
         (
             ["k8s-cluster"], 0, 0,
-            ["Cluster id *", "Region *", "API endpoint *", "Node pools", "Capability tags"],
+            ["Cluster id *", "Region *", "API endpoint *", "Node pools", "Capability tags (comma-separated)"],
             [{
                 "name": "prod-east", "kind_name": "k8s-cluster",
                 "attrs": {"cluster_id": "prod-east-1", "region": "us-east-1", "api_endpoint": "https://k8s.example.test:6443", "node_pool_count": 3, "capability_tags": ["gpu", "arm64", "gpu"]},
@@ -174,4 +174,48 @@ def test_without_a_kind_list_the_form_falls_back_and_its_examples_are_valid(brow
         page.context.close()
 
     testbase.assert_equal((kind_placeholder, json_placeholder, "terraform" in (kind_placeholder or "")), ("kind name", "{}", False))
+    return
+
+
+def test_the_kind_fields_sit_on_their_own_row_at_a_readable_width(browser: Browser):
+    """
+    **Feature: registry-fed forms (ORC-17)**
+    **Property: the kind's fields are laid out on their own full-width row below
+    the name and kind (not squeezed beside them), each input is wide enough to
+    read an example in, and the labels use the same type as the name field's
+    (they once inherited the monospace style of the read-only attributes box).**
+    """
+    page, _posts = _open(browser, [K8S])
+    try:
+        page.wait_for_timeout(500)
+        boxes = page.evaluate(
+            """() => {
+                const rect = (selector) => document.querySelector(selector).getBoundingClientRect();
+                const form = rect('[data-role="register-form"]');
+                const name = rect('[data-role="register-name"]');
+                const kind = rect('[data-role="register-kind"]');
+                const region = rect('[data-role="register-attrs-region"]');
+                const widths = [...document.querySelectorAll('[data-role^="register-field-"]')].map((el) => el.getBoundingClientRect().width);
+                const font = (el) => getComputedStyle(el).fontFamily;
+                return {
+                    form_width: form.width, region_width: region.width, region_top: region.top,
+                    controls_bottom: Math.max(name.bottom, kind.bottom), narrowest: Math.min(...widths), count: widths.length,
+                    field_font: font(document.querySelector('[data-role="register-attrs-region"] label')),
+                    name_font: font(document.querySelector('[data-role="register-form"] label')),
+                };
+            }"""
+        )
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (
+            boxes["count"],
+            boxes["region_top"] >= boxes["controls_bottom"] - 1,
+            boxes["region_width"] >= boxes["form_width"] * 0.95,
+            boxes["narrowest"] >= 200,
+            boxes["field_font"] == boxes["name_font"],
+        ),
+        (5, True, True, True, True),
+    )
     return

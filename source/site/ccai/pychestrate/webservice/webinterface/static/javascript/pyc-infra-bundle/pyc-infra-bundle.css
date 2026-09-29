@@ -497,6 +497,18 @@ pyc-guards {
     word-break: break-all;
 }
 
+/* the register form's kind-specific fields: their own full-width row, wrapping */
+.pyc-infra__attr-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1rem;
+    flex-basis: 100%;
+}
+
+.pyc-infra__attr-fields > .pyc-infra__field--wide {
+    grid-column: 1 / -1;
+}
+
 .pyc-infra__attrs {
     margin: 0;
     padding: 0.75rem 1rem;

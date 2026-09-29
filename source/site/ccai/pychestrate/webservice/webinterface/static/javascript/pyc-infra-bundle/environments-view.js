@@ -1128,7 +1128,7 @@ class PycEnvironments extends HTMLElement {
     kind_region.setAttribute("data-role", "register-kind-region");
     form.appendChild(kind_region);
     const attrs_region = document.createElement("div");
-    attrs_region.classList.add("pyc-infra__attrs");
+    attrs_region.classList.add("pyc-infra__attr-fields");
     attrs_region.setAttribute("data-role", "register-attrs-region");
     form.appendChild(attrs_region);
     const submit_button = document.createElement("mj-button");
@@ -1242,7 +1242,7 @@ class PycEnvironments extends HTMLElement {
     for (const field of fields) {
       const label = document.createElement("label");
       label.classList.add("pyc-infra__field");
-      label.textContent = field.label + (field.required === true ? " *" : "");
+      label.textContent = field.label + (field.type === "tags" ? " (comma-separated)" : "") + (field.required === true ? " *" : "");
       const input = document.createElement("mj-text-field");
       input.classList.add("pyc-infra__input");
       input.setAttribute("type", field.type === "number" ? "number" : "text");
