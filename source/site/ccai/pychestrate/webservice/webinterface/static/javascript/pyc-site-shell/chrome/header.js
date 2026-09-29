@@ -175,6 +175,15 @@ function build_account_menu(options, display_name) {
         form.submit();
     });
     panel.appendChild(logout_button);
+
+    // Which release is running, for support and bug reports (DOC-13).
+    const service_version = typeof options.service_version === "string" ? options.service_version : "";
+    if (service_version.length > 0) {
+        const version_label = document.createElement("span");
+        version_label.classList.add("pyc-site-shell__service-version");
+        version_label.textContent = "Pychestrate " + service_version;
+        panel.appendChild(version_label);
+    }
     actions.appendChild(panel);
 
     wire_account_disclosure(actions, account_button, panel);

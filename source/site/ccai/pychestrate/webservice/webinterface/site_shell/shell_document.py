@@ -198,12 +198,27 @@ def render_shell_document(
         "csrf_token": session_view.get("csrf_token", ""),
         "user_display_name": session_view.get("display_name", session_view.get("username", "")),
         "user_login_name": session_view.get("username", ""),
+        "service_version": _service_version_for_shell(),
     }
     rtnval = render_template_response(
         template_name=SHELL_TEMPLATE_NAME,
         context=context,
     )
     return rtnval
+
+
+def _service_version_for_shell() -> str:
+    """
+        The running release for the account menu, or an empty string when
+        it cannot be read (the shell then shows no version line).
+    """
+    from ccai.pychestrate.webservice.public_endpoint import UNKNOWN_RELEASE, service_release  # noqa: E402
+
+    try:
+        release = service_release()
+    except Exception:  # noqa: BLE001 -- a missing version must never stop a page rendering
+        return ""
+    return "" if release == UNKNOWN_RELEASE else release
 
 
 def get_shell_template_search_path() -> str:

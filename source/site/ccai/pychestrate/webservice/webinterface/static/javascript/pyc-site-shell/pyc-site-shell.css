@@ -356,6 +356,17 @@ pyc-site-shell:not(:defined)::before {
     overflow-wrap: anywhere;
 }
 
+/* The running release, under the actions. */
+.pyc-site-shell__account-panel .pyc-site-shell__service-version {
+    display: block;
+    padding: 0.5rem calc(var(--mj-space-3, 0.75rem) + 1px) 0.25rem;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--pyc-site-shell-divider);
+    font-size: 0.8125em;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+}
+
 /* Text aligned with the small mj-buttons around it (1px border
  * plus --mj-space-3 padding). */
 .pyc-site-shell__account-panel .pyc-site-shell__preferences-link {

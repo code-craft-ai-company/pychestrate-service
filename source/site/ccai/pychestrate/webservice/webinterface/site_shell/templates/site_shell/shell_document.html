@@ -54,6 +54,9 @@
         {%- if csrf_token %}
         csrf-token="{{ csrf_token }}"
         {%- endif %}
+        {%- if service_version %}
+        service-version="{{ service_version }}"
+        {%- endif %}
         brand-label="Pychestrate">
         {%- if content_html %}
         {{ content_html|safe }}

@@ -58,6 +58,7 @@ from ccai.webworks.routing.response import JSONResponse, Response
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from ccai.pychestrate.webservice.public_endpoint import service_release
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
@@ -344,6 +345,7 @@ def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     generated_at = datetime.now(timezone.utc).isoformat()
     rtnval = {
         "status": overall,
+        "version": service_release(),
         "generated_at": generated_at,
         "subsystems": subsystems,
     }

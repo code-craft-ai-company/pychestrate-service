@@ -485,6 +485,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "bundle_stylesheets": _by_mode(["pyc-admin-bundle"], []),
     "user_display_name": _by_mode("Ada Admin", ""),
     "user_login_name": _by_mode("admin", ""),
+    "service_version": _by_mode("0.0.7-preview", ""),
     "status_code": _const(404),
     "title": _const("Page not found"),
     "message": _const("The address may be mistyped, or the page may have moved."),

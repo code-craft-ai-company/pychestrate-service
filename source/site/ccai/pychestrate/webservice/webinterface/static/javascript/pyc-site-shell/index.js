@@ -200,6 +200,13 @@ function build_account_menu(options, display_name) {
     form.submit();
   });
   panel.appendChild(logout_button);
+  const service_version = typeof options.service_version === "string" ? options.service_version : "";
+  if (service_version.length > 0) {
+    const version_label = document.createElement("span");
+    version_label.classList.add("pyc-site-shell__service-version");
+    version_label.textContent = "Pychestrate " + service_version;
+    panel.appendChild(version_label);
+  }
   actions.appendChild(panel);
   wire_account_disclosure(actions, account_button, panel);
   return actions;
@@ -3624,6 +3631,7 @@ var PycSiteShell = class extends HTMLElement {
       user_display_name: this._read_optional_attribute("user-display-name"),
       user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
+      service_version: this._read_optional_attribute("service-version"),
       on_theme_toggle: () => {
         this._toggle_theme();
       },

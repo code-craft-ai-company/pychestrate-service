@@ -29,6 +29,14 @@ preview tag.
 
 ### Added
 
+- The running release is visible (DOC-13). The account menu in the site
+  shell ends with "Pychestrate <release>", read from `pyproject.toml`, and
+  `GET /api/v1/system/health` names it (`version`) for callers who may see
+  the details; the status-only form that monitors get carries no version.
+  The CHANGELOG already has a section for every tag, the ROADMAP table
+  says which number means what, and the Sphinx release comes from
+  `pyproject.toml`.
+
 - **RPA orchestration** (`specs/6-rpa-orchestration`): Robotic Process
   Automation joins builds, tests, and infrastructure as a fourth job
   domain. Administrators register versioned job types (simple process

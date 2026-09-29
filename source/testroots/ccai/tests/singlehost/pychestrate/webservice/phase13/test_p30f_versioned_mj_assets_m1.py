@@ -55,6 +55,7 @@ def _render_shell_document() -> str:
         csrf_token="",
         user_display_name="",
         user_login_name="",
+        service_version="",
     )
     return rtnval
 

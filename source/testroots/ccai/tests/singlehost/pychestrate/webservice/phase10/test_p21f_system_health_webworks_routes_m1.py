@@ -330,3 +330,31 @@ def test_register_system_health_routes_wired_in_service_extensions():
     )
     testbase.assert_equal(has_call, True)
     return
+
+
+def test_the_full_health_document_names_the_running_release_and_the_status_only_form_does_not():
+    """
+    **Feature: release communication (DOC-13)**
+    **Property: a caller with ``system:ui.admin.view`` gets ``version``, the
+    release the service reads from ``pyproject.toml``; the status-only form
+    for everyone else carries no version, so an anonymous monitor learns
+    nothing about what is running.**
+    """
+    from ccai.pychestrate.webservice.public_endpoint import service_release
+
+    _activate_permission_patch(allowed=True)
+    try:
+        full = _decode_body(system_health_routes.handle_system_health(_FakeRequest()))
+    finally:
+        _deactivate_permission_patch()
+    _activate_permission_patch(allowed=False)
+    try:
+        restricted = _decode_body(system_health_routes.handle_system_health(_FakeRequest()))
+    finally:
+        _deactivate_permission_patch()
+
+    testbase.assert_equal(
+        (full["version"] == service_release(), full["version"] != "unknown", "version" in restricted),
+        (True, True, False),
+    )
+    return

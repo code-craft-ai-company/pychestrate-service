@@ -253,6 +253,7 @@ paths:
             application/json:
               example:
                 status: ok
+                version: 0.0.7-preview
                 generated_at: '2026-09-28T23:58:25.920974+00:00'
                 subsystems:
                 - name: database
@@ -6513,6 +6514,9 @@ components:
           type: string
           enum: [ok, degraded, error]
           description: Worst subsystem status.
+        version:
+          type: string
+          description: The running service release (`pyproject.toml`). Present with `subsystems`, not in the restricted form.
         generated_at: { type: string, format: date-time }
         details:
           type: string
