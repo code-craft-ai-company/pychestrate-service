@@ -1,3 +1,4 @@
+import { format_instant, parse_timestamp } from "../../shared/datetime.js";
 /*
  * The shell-rendered landing view for the bare "/" route. No
  * feature bundle claims "/", so without this the main region
@@ -343,8 +344,8 @@ function build_recent_runs(runs) {
         const when = document.createElement("span");
         when.classList.add("pyc-site-shell__recent-run-time");
         const stamp = run.completed_at || run.started_at || run.created_at;
-        const parsed = stamp ? new Date(stamp) : null;
-        when.textContent = parsed !== null && Number.isNaN(parsed.getTime()) === false ? parsed.toLocaleString() : "";
+        const parsed = stamp ? parse_timestamp(stamp) : null;
+        when.textContent = parsed !== null ? format_instant(parsed) : "";
         item.appendChild(when);
         list.appendChild(item);
     }

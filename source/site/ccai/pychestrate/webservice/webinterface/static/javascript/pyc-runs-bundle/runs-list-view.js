@@ -1,3 +1,4 @@
+import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const RUN_STATES = [
   "pending",
   "dispatching",
@@ -125,12 +126,12 @@ function format_timestamp(value) {
     const rtnval2 = "\u2014";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 function state_badge_tone(run_state) {
@@ -692,7 +693,7 @@ class PycRunsList extends HTMLElement {
       return;
     }
     this._refresh_stamp.hidden = false;
-    this._refresh_stamp.textContent = "as of " + this._last_refreshed_at.toLocaleTimeString();
+    this._refresh_stamp.textContent = "as of " + format_clock_instant(this._last_refreshed_at);
     return;
   }
   /**

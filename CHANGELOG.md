@@ -542,6 +542,17 @@ preview tag.
 
 ### Fixed
 
+- Bundle pages show times the way the glossary says (XC-14). The runs, builds,
+  pipelines, pods, clients, environments, guards, catalog, secrets, webhooks
+  and release-channel views (and the home page's recent runs) printed the
+  browser's default format ("9/22/2026, 4:34:12 PM": 12-hour, no zone, a
+  different shape per locale), and read a server time without a zone as the
+  viewer's local time, shifting it by their UTC offset. They now share one
+  formatter (`shared/datetime.js`, bundled into each): "2026-09-22 16:34 PDT",
+  24-hour, in the viewer's zone, with a zone-less server time read as UTC.
+  The "as of" refresh stamps read "16:21:05 PDT", and a secret's rotation date
+  is "2026-09-22".
+
 - Plain words on the run pages (ORC-38). The build and provisioning-run detail
   pages said "Layer-5 run" beside a bare UUID; they now say "Run" and the id
   links to the run's page. "Repro digest" (builds list and detail) is "Inputs

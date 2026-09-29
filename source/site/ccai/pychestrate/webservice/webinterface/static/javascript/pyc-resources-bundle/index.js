@@ -1,31 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-pools-view.js
-var DEFAULT_PER_PAGE = 50;
-var RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
-var PROJECTS_API_PATH = "/api/v1/projects";
-var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
-var RESOURCE_POOLS_WRITE_PERMISSION = "system:resource_pools.write";
-var RESOURCES_WRITE_PERMISSION = "system:resources.write";
-function build_resource_pools_url(project_id, page, per_page) {
-  const params = new URLSearchParams();
-  params.set("project_id", project_id);
-  params.set("page", String(page));
-  params.set("per_page", String(per_page));
-  const rtnval = RESOURCE_POOLS_API_PATH + "?" + params.toString();
-  return rtnval;
-}
-function short_id(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    const rtnval2 = "";
-    return rtnval2;
-  }
-  const dash_index = value.indexOf("-");
-  if (dash_index <= 0) {
-    const rtnval2 = value;
-    return rtnval2;
-  }
-  const rtnval = value.slice(0, dash_index);
-  return rtnval;
-}
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
 var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
 function pad_two(number) {
@@ -66,6 +39,12 @@ function zone_label(instant) {
   const rtnval = "UTC" + sign + pad_two(Math.floor(magnitude / 60)) + ":" + pad_two(magnitude % 60);
   return rtnval;
 }
+function format_instant(instant) {
+  const date_part = instant.getFullYear() + "-" + pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate());
+  const time_part = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
+  const rtnval = date_part + " " + time_part + " " + zone_label(instant);
+  return rtnval;
+}
 function format_timestamp(value) {
   if (value === null || value === void 0 || value.length === 0) {
     const rtnval2 = "\u2014";
@@ -76,9 +55,36 @@ function format_timestamp(value) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const date_part = parsed.getFullYear() + "-" + pad_two(parsed.getMonth() + 1) + "-" + pad_two(parsed.getDate());
-  const time_part = pad_two(parsed.getHours()) + ":" + pad_two(parsed.getMinutes());
-  const rtnval = date_part + " " + time_part + " " + zone_label(parsed);
+  const rtnval = format_instant(parsed);
+  return rtnval;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-pools-view.js
+var DEFAULT_PER_PAGE = 50;
+var RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
+var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
+var RESOURCE_POOLS_WRITE_PERMISSION = "system:resource_pools.write";
+var RESOURCES_WRITE_PERMISSION = "system:resources.write";
+function build_resource_pools_url(project_id, page, per_page) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  params.set("page", String(page));
+  params.set("per_page", String(per_page));
+  const rtnval = RESOURCE_POOLS_API_PATH + "?" + params.toString();
+  return rtnval;
+}
+function short_id(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const dash_index = value.indexOf("-");
+  if (dash_index <= 0) {
+    const rtnval2 = value;
+    return rtnval2;
+  }
+  const rtnval = value.slice(0, dash_index);
   return rtnval;
 }
 function parse_capability_tags(raw) {

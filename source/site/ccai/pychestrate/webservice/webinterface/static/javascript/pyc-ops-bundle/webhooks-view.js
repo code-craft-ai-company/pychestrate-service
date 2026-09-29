@@ -1,3 +1,4 @@
+import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 const WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 const TEST_EVENT_HISTORY_REFRESH_MS = 1500;
@@ -50,12 +51,12 @@ function format_webhook_timestamp(value) {
     const rtnval2 = "—";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 function delivery_outcome_tone(outcome) {

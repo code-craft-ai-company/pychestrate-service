@@ -1,3 +1,4 @@
+import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import {
   announce_session_expired,
   format_clock_time,
@@ -67,12 +68,12 @@ function format_timestamp(value) {
     const rtnval2 = "—";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 function status_tone(status) {

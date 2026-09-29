@@ -1,3 +1,4 @@
+import { format_timestamp } from "../shared/datetime.js";
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -25,79 +26,6 @@ function short_id(value) {
     return rtnval2;
   }
   const rtnval = value.slice(0, dash_index);
-  return rtnval;
-}
-// An ISO date-time whose text carries no zone designator ("Z" or
-// "+hh:mm") at the end.
-const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
-const ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
-function pad_two(number) {
-  const rtnval = (number < 10 ? "0" : "") + String(number);
-  return rtnval;
-}
-/*
- * Parse a REST timestamp. The server stores UTC; a timestamp that
- * arrives without a zone designator is therefore UTC, never the
- * viewer's local time (``new Date()`` would read it as local and
- * shift every time by the viewer's UTC offset -- audit finding
- * RES-20). Returns null when the value is not a date-time.
- */
-function parse_timestamp(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    const rtnval2 = null;
-    return rtnval2;
-  }
-  let text = value.trim();
-  if (ISO_DATE_TIME_PATTERN.test(text) === true && ZONE_DESIGNATOR_PATTERN.test(text) === false) {
-    text = text.replace(" ", "T") + "Z";
-  }
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime()) === true) {
-    const rtnval2 = null;
-    return rtnval2;
-  }
-  const rtnval = parsed;
-  return rtnval;
-}
-/*
- * The short name of the viewer's zone at ``instant`` ("PDT",
- * "GMT+2"), or a numeric "UTC-07:00" when the browser cannot name it.
- */
-function zone_label(instant) {
-  try {
-    const parts = new Intl.DateTimeFormat(void 0, { timeZoneName: "short" }).formatToParts(instant);
-    for (const part of parts) {
-      if (part.type === "timeZoneName" && part.value.length > 0) {
-        const rtnval2 = part.value;
-        return rtnval2;
-      }
-    }
-  } catch (error) {
-  }
-  const offset_minutes = -instant.getTimezoneOffset();
-  const sign = offset_minutes >= 0 ? "+" : "-";
-  const magnitude = Math.abs(offset_minutes);
-  const rtnval = "UTC" + sign + pad_two(Math.floor(magnitude / 60)) + ":" + pad_two(magnitude % 60);
-  return rtnval;
-}
-/*
- * The resources views' one timestamp formatter: the glossary's
- * date-time form (``YYYY-MM-DD HH:MM``, 24-hour) in the viewer's
- * zone, with the zone spelled out ("2026-09-22 16:34 PDT").
- */
-function format_timestamp(value) {
-  if (value === null || value === void 0 || value.length === 0) {
-    const rtnval2 = "—";
-    return rtnval2;
-  }
-  const parsed = parse_timestamp(value);
-  if (parsed === null) {
-    const rtnval2 = value;
-    return rtnval2;
-  }
-  const date_part = parsed.getFullYear() + "-" + pad_two(parsed.getMonth() + 1) + "-" + pad_two(parsed.getDate());
-  const time_part = pad_two(parsed.getHours()) + ":" + pad_two(parsed.getMinutes());
-  const rtnval = date_part + " " + time_part + " " + zone_label(parsed);
   return rtnval;
 }
 function parse_capability_tags(raw) {

@@ -1,3 +1,4 @@
+import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const BUILD_STATES = [
   "pending",
   "running",
@@ -60,12 +61,12 @@ function format_timestamp(value) {
     const rtnval2 = "\u2014";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 function build_state_tone(build_state) {

@@ -1,3 +1,51 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
+var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+function pad_two(number) {
+  const rtnval = (number < 10 ? "0" : "") + String(number);
+  return rtnval;
+}
+function parse_timestamp(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  let text = value.trim();
+  if (ISO_DATE_TIME_PATTERN.test(text) === true && ZONE_DESIGNATOR_PATTERN.test(text) === false) {
+    text = text.replace(" ", "T") + "Z";
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+function zone_label(instant) {
+  try {
+    const parts = new Intl.DateTimeFormat(void 0, { timeZoneName: "short" }).formatToParts(instant);
+    for (const part of parts) {
+      if (part.type === "timeZoneName" && part.value.length > 0) {
+        const rtnval2 = part.value;
+        return rtnval2;
+      }
+    }
+  } catch (error) {
+  }
+  const offset_minutes = -instant.getTimezoneOffset();
+  const sign = offset_minutes >= 0 ? "+" : "-";
+  const magnitude = Math.abs(offset_minutes);
+  const rtnval = "UTC" + sign + pad_two(Math.floor(magnitude / 60)) + ":" + pad_two(magnitude % 60);
+  return rtnval;
+}
+function format_instant(instant) {
+  const date_part = instant.getFullYear() + "-" + pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate());
+  const time_part = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
+  const rtnval = date_part + " " + time_part + " " + zone_label(instant);
+  return rtnval;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-catalog-bundle/catalog-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
@@ -35,12 +83,12 @@ function format_timestamp(value) {
     const rtnval2 = "\u2014";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 function has_next_page(state) {

@@ -1,3 +1,4 @@
+import { format_instant, pad_two, parse_timestamp } from "../shared/datetime.js";
 const SECRET_SCOPE_KINDS = [
   "ORG",
   "PROJECT",
@@ -45,12 +46,12 @@ function format_timestamp(value) {
     const rtnval2 = "—";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleString();
+  const rtnval = format_instant(parsed);
   return rtnval;
 }
 /**
@@ -66,16 +67,13 @@ function format_date_compact(value) {
     const rtnval2 = "—";
     return rtnval2;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) === true) {
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
     const rtnval2 = value;
     return rtnval2;
   }
-  const rtnval = parsed.toLocaleDateString(void 0, {
-    year: "numeric",
-    month: "short",
-    day: "numeric"
-  });
+  // The glossary's date form, in the viewer's zone: 2026-09-22.
+  const rtnval = parsed.getFullYear() + "-" + pad_two(parsed.getMonth() + 1) + "-" + pad_two(parsed.getDate());
   return rtnval;
 }
 const SCOPE_LABELS = {
