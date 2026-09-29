@@ -41,7 +41,7 @@
 {% endif %}
 
 <div class="card narrow mb">
-    <h3>Mint New Token</h3>
+    <h2 class="card-header">Mint New Token</h2>
     <form method="post"
           action="{{ url_for('config.enrollment_token_mint') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

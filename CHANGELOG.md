@@ -542,6 +542,10 @@ preview tag.
 
 ### Fixed
 
+- The Enrollment Tokens page no longer skips a heading level (WCAG 1.3.1): "Mint
+  New Token" was an h3 straight under the page's h1. A test reads the headings
+  of every server-rendered template, full and empty, and fails on a skipped level.
+
 - The "Skip to main content" link has a target that exists (WCAG 2.4.1). It
   pointed at `#pyc-main-content`, but the shell gave the main region that id
   only inside the link's own click handler, so on every page the target was
