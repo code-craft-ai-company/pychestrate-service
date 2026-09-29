@@ -1295,6 +1295,24 @@ function set_entity_title(entity_label) {
   return;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-project.js
+async function project_of_run(run_id) {
+  try {
+    const response = await fetch("/api/v1/runs/" + encodeURIComponent(run_id), {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === false) {
+      return "";
+    }
+    const body = await response.json();
+    return body !== null && typeof body === "object" && typeof body.project_id === "string" ? body.project_id : "";
+  } catch (reason) {
+    return "";
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/build-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
@@ -1472,6 +1490,12 @@ var PycBuildDetail = class extends HTMLElement {
       this._error_kind = "invalid-id";
       this._render_body();
       return;
+    }
+    if (this._project_id.length === 0) {
+      this._project_id = await project_of_run(this._build_id);
+      if (this._project_id.length > 0) {
+        mirror_to_query({ project_id: this._project_id });
+      }
     }
     if (this._project_id.length === 0) {
       this._loading = false;
@@ -1701,7 +1725,7 @@ var PycBuildDetail = class extends HTMLElement {
       );
       error.setAttribute("data-role", "error-state");
       if (this._error_kind === "missing-project") {
-        error.textContent = "This link is missing its project context \u2014 open the build from the Builds list.";
+        error.textContent = "No build with this id could be found, or you do not have access to it. Open builds from the Builds list.";
       } else if (this._error_kind === "invalid-id") {
         error.textContent = "This build link is not valid \u2014 open the build from the Builds list.";
       } else {

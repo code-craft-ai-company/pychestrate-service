@@ -2857,6 +2857,24 @@ var PycProvisioningList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-project.js
+async function project_of_run(run_id) {
+  try {
+    const response = await fetch("/api/v1/runs/" + encodeURIComponent(run_id), {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === false) {
+      return "";
+    }
+    const body = await response.json();
+    return body !== null && typeof body === "object" && typeof body.project_id === "string" ? body.project_id : "";
+  } catch (reason) {
+    return "";
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
 var PROJECTS_API_PATH4 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
@@ -2994,6 +3012,12 @@ var PycProvisioningDetail = class extends HTMLElement {
     return;
   }
   async _load() {
+    if (is_valid_run_id(this._run_id) === true && this._project_id.length === 0) {
+      this._project_id = await project_of_run(this._run_id);
+      if (this._project_id.length > 0) {
+        mirror_to_query({ project_id: this._project_id });
+      }
+    }
     if (is_valid_run_id(this._run_id) === false || this._project_id.length === 0) {
       this._loading = false;
       this._errored = true;

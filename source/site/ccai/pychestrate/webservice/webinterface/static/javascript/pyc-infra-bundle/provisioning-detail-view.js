@@ -1,5 +1,6 @@
 import { set_entity_title } from "../shared/page-title.js";
-import { keep_list_state_on_back } from "../shared/view-state.js";
+import { project_of_run } from "../shared/run-project.js";
+import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
 import {
   is_terminal_provisioning_state,
   provisioning_state_tone
@@ -141,6 +142,14 @@ class PycProvisioningDetail extends HTMLElement {
     return;
   }
   async _load() {
+    if (is_valid_run_id(this._run_id) === true && this._project_id.length === 0) {
+      // A link copied from anywhere but the list has no project in it: the
+      // run's id names it (E2E-38).
+      this._project_id = await project_of_run(this._run_id);
+      if (this._project_id.length > 0) {
+        mirror_to_query({ project_id: this._project_id });
+      }
+    }
     if (is_valid_run_id(this._run_id) === false || this._project_id.length === 0) {
       this._loading = false;
       this._errored = true;

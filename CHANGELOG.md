@@ -304,6 +304,16 @@ preview tag.
   list otherwise. The other bundle lists (test catalog, environments, pods,
   dashboards) do not do this yet.
 
+- A build or provisioning run opens from its id alone (E2E-38). `/builds/{id}`
+  said "This link is missing its project context" unless the address carried
+  `?project_id=`, so a link shared anywhere but the list did not open. A
+  build's id is also its run's id, and `GET /api/v1/runs/{id}` names the
+  project: the build and provisioning run pages now ask for it when the address
+  does not carry it, and put it in the address so a refresh keeps it. An id no
+  run answers to says "No build with this id could be found, or you do not have
+  access to it". The pipeline page still needs its project in the address
+  (pipelines have no run to ask).
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

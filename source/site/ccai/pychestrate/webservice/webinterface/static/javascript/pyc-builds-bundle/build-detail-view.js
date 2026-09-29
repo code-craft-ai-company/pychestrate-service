@@ -1,5 +1,6 @@
 import { set_entity_title } from "../shared/page-title.js";
-import { keep_list_state_on_back } from "../shared/view-state.js";
+import { project_of_run } from "../shared/run-project.js";
+import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
 import {
   announce_session_expired,
   build_state_tone,
@@ -183,6 +184,14 @@ class PycBuildDetail extends HTMLElement {
       this._error_kind = "invalid-id";
       this._render_body();
       return;
+    }
+    if (this._project_id.length === 0) {
+      // A link copied from anywhere but the list has no project in it: a
+      // build's id is its run's id, and the run names the project (E2E-38).
+      this._project_id = await project_of_run(this._build_id);
+      if (this._project_id.length > 0) {
+        mirror_to_query({ project_id: this._project_id });
+      }
     }
     if (this._project_id.length === 0) {
       this._loading = false;
@@ -412,7 +421,7 @@ class PycBuildDetail extends HTMLElement {
       );
       error.setAttribute("data-role", "error-state");
       if (this._error_kind === "missing-project") {
-        error.textContent = "This link is missing its project context \u2014 open the build from the Builds list.";
+        error.textContent = "No build with this id could be found, or you do not have access to it. Open builds from the Builds list.";
       } else if (this._error_kind === "invalid-id") {
         error.textContent = "This build link is not valid \u2014 open the build from the Builds list.";
       } else {
