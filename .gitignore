@@ -81,8 +81,11 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
+# Sphinx documentation: the whole site is built into .output/docs/site, and
+# these are generated for it (see userguide/conf.py).
 docs/_build/
+userguide/extensions/
+userguide/_reference/
 
 # PyBuilder
 target/

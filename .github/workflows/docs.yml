@@ -3,8 +3,10 @@ name: docs
 # Documentation checks. The first job needs no private dependencies:
 # it builds the user manual with warnings as errors, checks every
 # relative link and anchor in the documentation, and validates the
-# OpenAPI contract. The second installs the service and runs the
-# operator runbook's smoke-test scripts -- extracted from
+# OpenAPI contract. The second installs the service and builds the
+# whole site: the manual plus the REST API reference and the plugin
+# catalog, which need the service's code. The third runs the operator
+# runbook's smoke-test scripts -- extracted from
 # userguide/13-00-alpha-deployment.rst, so the commands operators copy
 # are the commands CI runs -- against a freshly migrated Postgres.
 
@@ -51,6 +53,78 @@ jobs:
         with:
           name: userguide-html
           path: .output/docs/userguide-html
+          retention-days: 7
+
+  docs-site:
+    name: whole site (manual, REST API reference, plugin catalog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Give the runner access to the private codecraftai-* packages
+        env:
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
+          CODECRAFTAI_INDEX_USERNAME: ${{ secrets.CODECRAFTAI_INDEX_USERNAME }}
+          CODECRAFTAI_INDEX_TOKEN: ${{ secrets.CODECRAFTAI_INDEX_TOKEN }}
+        run: |
+          # Same as the runbook-smoke job: see the runbook's
+          # "CI prerequisite: dependency access".
+          if grep -q 'name = "codecraftai"' pyproject.toml; then
+            if [ -z "${CODECRAFTAI_INDEX_USERNAME}" ] || [ -z "${CODECRAFTAI_INDEX_TOKEN}" ]; then
+              echo "::error::pyproject.toml uses the codecraftai package index;" \
+                   "set the CODECRAFTAI_INDEX_USERNAME and CODECRAFTAI_INDEX_TOKEN secrets."
+              exit 1
+            fi
+            echo "POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME=${CODECRAFTAI_INDEX_USERNAME}" >> "$GITHUB_ENV"
+            echo "POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD=${CODECRAFTAI_INDEX_TOKEN}" >> "$GITHUB_ENV"
+          else
+            if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+              echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
+                   "(see the lint-and-build job in test.yml for setup instructions)."
+              exit 1
+            fi
+            git config --global \
+              url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+              "https://github.com/automationmojo/"
+          fi
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      # The REST API reference and the plugin catalog need the service's
+      # code, so this build is the one that publishes a complete site. It
+      # stops when the catalog is empty.
+      - name: Build the whole site with warnings as errors
+        run: |
+          .venv/bin/sphinx-build -W --keep-going -t reference -b html userguide .output/docs/site
+
+      - name: Check the site has all of its parts
+        run: |
+          test -s .output/docs/site/userguide.html
+          test -s .output/docs/site/21-00-environment-reference.html
+          test -s .output/docs/site/api-reference/index.html
+          test -s .output/docs/site/api-reference/openapi.json
+          test -s .output/docs/site/api-reference/redoc.standalone.js
+          test -s .output/docs/site/extensions/protocols/auth_provider.html
+          test -s .output/docs/site/extensions/resources/index.html
+
+      - name: Upload the built site
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site-html
+          path: .output/docs/site
           retention-days: 7
 
   runbook-smoke:

@@ -168,6 +168,17 @@ preview tag.
   without the page changing. It replaces a gap the audit measured: 21
   of 47 variables had no description anywhere.
 
+- **One documentation site.** `make docs` builds the user manual, the
+  environment reference, the REST API reference (ReDoc, searchable, from
+  the OpenAPI document) and the plugin catalog into `.output/docs/site`.
+  The catalog was empty before: the site read it before the built-in
+  extensions were registered, so it came out as an index and two empty
+  pages. It now loads the service the way it starts, finds the 22
+  published entries, and stops the build when either category is empty.
+  The separate `docs/` Sphinx project is gone. The manual alone still
+  builds without the service's dependencies; the full site is built by a
+  new `docs-site` job in CI.
+
 ### Changed
 
 - **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`

@@ -117,11 +117,11 @@ openapi-validate: ## Validate specs/openapi/pychestrate.yaml (needs 'poetry inst
 
 docs: docs-html ## Same as docs-html
 
-docs-html: ## Build the HTML docs into docs/_build (also regenerates docs/extensions/{protocols,resources})
-	$(MAKE) -C docs html SPHINXBUILD="$(abspath $(SPHINXBUILD))"
+docs-html: ## Build the whole site (manual, REST API reference, plugin catalog) into .output/docs/site
+	$(SPHINXBUILD) -W --keep-going -t reference -b html userguide .output/docs/site
 
-docs-clean: ## Remove docs/_build and the generated docs/extensions pages
-	rm -fr docs/_build docs/extensions/protocols docs/extensions/resources
+docs-clean: ## Remove the built site and the pages generated for it
+	rm -fr .output/docs/site userguide/extensions userguide/_reference
 
 # ---------------------------------------------------------------------------
 # Service runtime targets

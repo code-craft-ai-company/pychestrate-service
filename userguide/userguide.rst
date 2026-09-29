@@ -49,6 +49,20 @@ Extending Pychestrate
   extensions, packaging, and a worked example.
 
 
+Reference
+=========
+
+* `REST API <../specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
+  contract for ``/api/v1``. In the built site it opens as a searchable
+  reference; a running service shows the same at ``/api/docs``.
+
+.. only:: reference
+
+   * `Plugin Catalog <extensions/index.rst>`_ -- the factory
+     protocols and resource extensions an extension package can target,
+     with their schema versions and support status.
+
+
 Contributing to Pychestrate
 ===========================
 
