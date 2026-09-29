@@ -67,11 +67,11 @@
                 </tr>
                 <tr>
                     <th scope="row">Created</th>
-                    <td>{{ resource.created_at | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ resource.created_at | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Updated</th>
-                    <td>{{ resource.updated_at | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ resource.updated_at | local_datetime(true, '-') }}</td>
                 </tr>
             </table></div>
         </div>
@@ -105,8 +105,8 @@
                         <td>{{ alloc.username or '-' }}</td>
                         <td>{{ alloc.job_id or '-' }}</td>
                         <td>{{ ui.status_badge(alloc.mode) }}</td>
-                        <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
-                        <td>{{ alloc.expected_checkin | format_datetime('%Y-%m-%d %H:%M:%S', 'None set') }}</td>
+                        <td>{{ alloc.checkout_time | local_datetime(true, '-') }}</td>
+                        <td>{{ alloc.expected_checkin | local_datetime(true, 'None set') }}</td>
                         <td>
                             {% if alloc.user_id|string == current_user_id|string %}
                             <form action="{{ url_for('resources.allocation_checkin', allocation_id=alloc.id) }}" method="post" data-confirm="Check this resource back in?">
@@ -147,8 +147,8 @@
                         <td>{{ res.username or '-' }}</td>
                         <td>{{ res.job_id or '-' }}</td>
                         <td>{{ res.mode }}</td>
-                        <td>{{ res.start_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
-                        <td>{{ res.end_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+                        <td>{{ res.start_time | local_datetime(false, '-') }}</td>
+                        <td>{{ res.end_time | local_datetime(false, '-') }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -190,8 +190,8 @@
             {% if next_reservation_by_other %}
             <p class="alert alert-warning" role="status" data-role="reserved-notice">
                 Reserved by {{ next_reservation_by_other.username or 'someone else' }} from
-                {{ next_reservation_by_other.start_time | format_datetime('%Y-%m-%d %H:%M', '-') }} to
-                {{ next_reservation_by_other.end_time | format_datetime('%Y-%m-%d %H:%M', '-') }}.
+                {{ next_reservation_by_other.start_time | local_datetime(false, '-') }} to
+                {{ next_reservation_by_other.end_time | local_datetime(false, '-') }}.
                 Check it out with a timeout that ends before then; a check-out that runs into a reservation is refused.
             </p>
             {% endif %}
@@ -240,4 +240,5 @@
         {% endif %}
     </div>
 </div>
+{% include "resources/reservations/_local_times.html" %}
 {% endblock %}

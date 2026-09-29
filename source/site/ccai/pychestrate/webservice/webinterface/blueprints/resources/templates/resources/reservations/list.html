@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Reservations</h1>
-    <p>Future resource reservations</p>
+    <p>Resource reservations</p>
 </div>
 
 
@@ -19,19 +19,28 @@
             {% endfor %}
         </select>
 
-        <input type="datetime-local" name="start_after" class="form-control w-md" value="{{ start_after }}" aria-label="Starting after (UTC)">
+        <select name="status" class="form-control w-md" aria-label="Filter by status">
+            {% for choice in status_filters %}
+            <option value="{{ choice.key }}" {% if selected_reservation_status == choice.key %}selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+        </select>
+
+        <input type="datetime-local" name="start_after" class="form-control w-md" value="{{ start_after }}" aria-label="Starting after" aria-describedby="reservation-zone-note">
         <span>to</span>
-        <input type="datetime-local" name="end_before" class="form-control w-md" value="{{ end_before }}" aria-label="Ending before (UTC)">
-        <span class="muted">UTC</span>
+        <input type="datetime-local" name="end_before" class="form-control w-md" value="{{ end_before }}" aria-label="Ending before" aria-describedby="reservation-zone-note">
 
         <button type="submit" class="btn btn-secondary">
             {{ ui.icon("filter_list") }} Filter
         </button>
 
         <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">Clear</a>
+        {% include "resources/reservations/_viewer_zone.html" %}
     </form>
 
     <div class="push-end">
+        <a href="{{ url_for('resources.availability_calendar') }}" class="btn btn-secondary" data-role="open-calendar">
+            {{ ui.icon("calendar_today") }} Availability
+        </a>
         <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-primary">
             {{ ui.icon("add") }} Create Reservation
         </a>
@@ -65,8 +74,8 @@
             <td><a href="{{ url_for('resources.resource_detail', resource_id=res.resource_id) }}">{{ res.resource_name }}</a></td>
             <td>{{ res.username or '-' }}</td>
             <td>{{ res.job_id or '-' }}</td>
-            <td>{{ res.start_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
-            <td>{{ res.end_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+            <td>{{ res.start_time | local_datetime }}</td>
+            <td>{{ res.end_time | local_datetime }}</td>
             <td>
                 {% set mode = res.mode %}
                 {% if mode == 'exclusive' %}
@@ -112,12 +121,17 @@
             {% if filters_active %}
             <td colspan="9" class="muted center">
                 No reservations match the current filters.
+                {% if selected_reservation_status == 'open' %}
+                Finished ones are hidden:
+                <a href="{{ url_for('resources.reservation_list', status='all', resource_id=selected_resource_id, start_after=(start_after or none), end_before=(end_before or none), tz=(viewer_timezone or none)) }}" data-role="show-finished">show them too</a>.
+                {% endif %}
                 <a href="{{ url_for('resources.reservation_list') }}">Clear filters</a>
             </td>
             {% else %}
             <td colspan="9" class="muted center">
-                No reservations found.
+                No pending or active reservations.
                 <a href="{{ url_for('resources.reservation_create') }}">Create one</a>
+                or <a href="{{ url_for('resources.reservation_list', status='all') }}">show finished ones too</a>.
             </td>
             {% endif %}
         </tr>
@@ -125,5 +139,6 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.reservation_list', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'start_after': (start_after or none)}, total=None) }}
+{{ ui.pagination('resources.reservation_list', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'start_after': (start_after or none), 'end_before': (end_before or none), 'status': selected_reservation_status, 'tz': (viewer_timezone or none)}, total=None) }}
+{% include "resources/reservations/_local_times.html" %}
 {% endblock %}

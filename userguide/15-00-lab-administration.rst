@@ -89,6 +89,37 @@ long.
 * A reservation that starts exactly when another ends is accepted.
 * You can change a reservation's times from its page, or cancel it.
 
+The reservation list shows **Pending and active** reservations by default, so
+cancelled and completed ones do not pile up. Choose another **status**
+(Pending, Active, Completed, Cancelled or All) to see them, and narrow the list
+by resource and by a start and end time. The times you type in the filter are
+in your browser's time zone, like the form's. Reservation times on the list,
+on a reservation's page and on a device's page are shown in that zone too, with
+the zone abbreviation, for example ``2026-09-30 09:00 PDT``, and the UTC time as
+the tooltip. Without JavaScript, or in a UTC browser, they are shown in UTC.
+The message for a clashing reservation still gives its times in UTC.
+
+
+See when devices are free
+=========================
+
+**Resources**, **Availability** draws one week, Monday to Monday, as a row per
+device. Reservations are blocks (red for exclusive, blue for shared) and current
+check-outs are yellow blocks that run to the check-out's timeout, or to the end of
+the week when it has none. A device with nothing drawn is free. The red line is
+now, and today's column is highlighted. Hover over a block for who has it and
+when.
+
+* Choose a **pool** to show only its devices. Without one, the first 40 devices
+  are shown and the page says how many there are.
+* **Previous week**, **This week** and **Next week** move through time and keep
+  the pool.
+* The week is laid out in your browser's time zone. The first visit reloads once
+  to pick it up, and it is remembered in a cookie named ``pyc_tz``. Add
+  ``tz=Europe/Berlin`` (any IANA zone) to the address to see another zone.
+* The **Bookings this week** table under the drawing lists the same bookings as
+  text, with links to the reservations.
+
 
 IP pools
 ========

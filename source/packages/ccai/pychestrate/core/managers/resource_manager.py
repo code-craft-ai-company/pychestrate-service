@@ -1573,7 +1573,8 @@ class ResourceManager:
 
         :param resource_ids: The resources to look up
         :returns: ``{resource id: [{"username", "user_id", "mode",
-                  "job_id", "expected_checkin"}, ...]}`` for the resources
+                  "job_id", "checkout_time", "expected_checkin"}, ...]}``
+                  for the resources
                   that have an active check-out, longest-held first
         """
         from ccai.pychestrate.core.orm import Allocation, AllocationStatus, User
@@ -1597,6 +1598,7 @@ class ResourceManager:
                 "user_id": str(allocation.user_id),
                 "mode": allocation.mode,
                 "job_id": allocation.job_id,
+                "checkout_time": allocation.checkout_time,
                 "expected_checkin": allocation.expected_checkin,
             })
         return rtnval

@@ -1,0 +1,57 @@
+{#-
+    Shows the times on a reservation page in the viewer's own time zone
+    (audit finding RES-43: the forms took times in the browser's zone
+    but the pages listed UTC). Include it once per page, after the
+    times.
+
+    Times written with the ``local_datetime`` filter are <time
+    data-pyc-local> elements whose text is UTC. The script below asks
+    the browser for its IANA zone and rewrites each one as
+    "YYYY-MM-DD HH:MM PDT", keeping the UTC text as the tooltip. Without
+    script, or in a UTC browser, the page keeps the UTC text, which says
+    UTC.
+-#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var zone = "";
+    try {
+        zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch (error) {
+        zone = "";
+    }
+    if (zone === "" || zone === "UTC" || zone === "Etc/UTC") {
+        return;
+    }
+    var formatters = {};
+    var formatter_for = function (seconds) {
+        var key = seconds ? "s" : "m";
+        if (formatters[key] === undefined) {
+            var options = {
+                timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+                hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short"
+            };
+            if (seconds) {
+                options.second = "2-digit";
+            }
+            formatters[key] = new Intl.DateTimeFormat("en-CA", options);
+        }
+        return formatters[key];
+    };
+    var stamps = document.querySelectorAll("time[data-pyc-local]");
+    for (var index = 0; index < stamps.length; index++) {
+        var stamp = stamps[index];
+        var instant = new Date(stamp.getAttribute("datetime"));
+        if (isNaN(instant.getTime())) {
+            continue;
+        }
+        var seconds = stamp.hasAttribute("data-pyc-seconds");
+        var parts = {};
+        formatter_for(seconds).formatToParts(instant).forEach(function (part) {
+            parts[part.type] = part.value;
+        });
+        stamp.title = stamp.textContent;
+        stamp.textContent = parts.year + "-" + parts.month + "-" + parts.day + " " + parts.hour + ":" + parts.minute
+            + (seconds ? ":" + parts.second : "") + " " + parts.timeZoneName;
+    }
+})();
+</script>

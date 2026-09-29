@@ -1,0 +1,260 @@
+{% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Availability - Pychestrate Resources{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pyc-resources-fragment .avail-scroll {
+        overflow-x: auto;
+        border: 1px solid var(--pyc-color-border);
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+    .pyc-resources-fragment .avail-grid,
+    .pyc-resources-fragment .avail-legend {
+        --avail-lane: 1.6rem;
+    }
+    .pyc-resources-fragment .avail-grid {
+        min-width: 56rem;
+    }
+    .pyc-resources-fragment .avail-row {
+        display: grid;
+        grid-template-columns: 11rem 1fr;
+        border-top: 1px solid var(--pyc-color-border);
+    }
+    .pyc-resources-fragment .avail-row:first-child {
+        border-top: 0;
+    }
+    .pyc-resources-fragment .avail-name {
+        padding: 0.35rem 0.6rem;
+        font-size: var(--pyc-font-size-small, 0.875rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .pyc-resources-fragment .avail-track {
+        position: relative;
+        min-height: calc(var(--lanes, 1) * var(--avail-lane) + 0.4rem);
+        background: var(--pyc-color-surface);
+    }
+    .pyc-resources-fragment .avail-head .avail-track {
+        min-height: 2.1rem;
+        background: var(--pyc-color-surface-elevated);
+    }
+    .pyc-resources-fragment .avail-day {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        padding: 0.45rem 0;
+        text-align: center;
+        font-size: var(--pyc-font-size-xsmall, 0.75rem);
+        font-weight: 600;
+        color: var(--pyc-color-on-surface-muted);
+        border-left: 1px solid var(--pyc-color-border);
+        overflow: hidden;
+        white-space: nowrap;
+    }
+    .pyc-resources-fragment .avail-today {
+        background: var(--pyc-color-accent-surface);
+        color: var(--pyc-color-accent-on-surface);
+    }
+    .pyc-resources-fragment .avail-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--pyc-color-border);
+    }
+    .pyc-resources-fragment .avail-now {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--pyc-color-on-error-surface);
+        z-index: 2;
+    }
+    .pyc-resources-fragment .avail-block {
+        position: absolute;
+        box-sizing: border-box;
+        height: calc(var(--avail-lane) - 0.3rem);
+        margin-top: 0.2rem;
+        padding: 0 0.3rem;
+        border-radius: 3px;
+        border-left: 3px solid transparent;
+        font-size: var(--pyc-font-size-xsmall, 0.75rem);
+        line-height: calc(var(--avail-lane) - 0.3rem);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        z-index: 1;
+    }
+    .pyc-resources-fragment .avail-reserved-exclusive {
+        background: var(--pyc-color-error-surface);
+        color: var(--pyc-color-on-error-surface);
+        border-left-color: var(--pyc-color-on-error-surface);
+    }
+    .pyc-resources-fragment .avail-reserved-shared {
+        background: var(--pyc-color-accent-surface);
+        color: var(--pyc-color-accent-on-surface);
+        border-left-color: var(--pyc-color-accent-on-surface);
+    }
+    .pyc-resources-fragment .avail-checked-out {
+        background: var(--pyc-color-warning-surface);
+        color: var(--pyc-color-on-warning-surface);
+        border-left-color: var(--pyc-color-on-warning-surface);
+    }
+    .pyc-resources-fragment .avail-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.2rem;
+        margin: 0 0 0.8rem;
+        font-size: var(--pyc-font-size-small, 0.875rem);
+    }
+    .pyc-resources-fragment .avail-legend .avail-block {
+        position: static;
+        display: inline-block;
+        width: 1.6rem;
+        vertical-align: middle;
+        margin: 0 0.3rem 0 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Availability</h1>
+    <p>Free and busy time, one week at a time</p>
+</div>
+
+<div data-avail-zone="{{ zone_name }}" data-avail-zone-chosen="{{ 'yes' if zone_chosen else 'no' }}">
+
+<div class="filter-bar">
+    <form method="get" class="actions-row">
+        <select name="pool_id" class="form-control w-md" aria-label="Pool">
+            <option value="">All resources</option>
+            {% for pool in pools %}
+            <option value="{{ pool.id }}" {% if selected_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="hidden" name="week" value="{{ window.monday.isoformat() }}">
+        {% if zone_chosen %}<input type="hidden" name="tz" value="{{ zone_name }}">{% endif %}
+        <button type="submit" class="btn btn-secondary">{{ ui.icon("filter_list") }} Show</button>
+    </form>
+
+    <div class="push-end">
+        <a href="{{ url_for('resources.availability_calendar', week=window.previous_monday.isoformat(), pool_id=selected_pool_id, tz=(zone_name if zone_chosen else none)) }}" class="btn btn-secondary" rel="prev" data-role="previous-week">&laquo; Previous week</a>
+        <a href="{{ url_for('resources.availability_calendar', week=this_week, pool_id=selected_pool_id, tz=(zone_name if zone_chosen else none)) }}" class="btn btn-secondary" data-role="this-week">This week</a>
+        <a href="{{ url_for('resources.availability_calendar', week=window.next_monday.isoformat(), pool_id=selected_pool_id, tz=(zone_name if zone_chosen else none)) }}" class="btn btn-secondary" rel="next" data-role="next-week">Next week &raquo;</a>
+    </div>
+</div>
+
+<p data-role="week-title"><strong>{{ window.title }}</strong> <span class="muted">&middot; times in {{ zone_name }}{% if zone_name == 'UTC' %}{% endif %}</span></p>
+
+{% if resource_total > rows | length %}
+<p class="muted" data-role="row-limit">Showing the first {{ rows | length }} of {{ resource_total }} resources. Choose a pool to see the rest.</p>
+{% endif %}
+
+{% if rows %}
+<p class="avail-legend" aria-hidden="true">
+    <span><span class="avail-block avail-reserved-exclusive"></span> Reserved (exclusive)</span>
+    <span><span class="avail-block avail-reserved-shared"></span> Reserved (shared)</span>
+    <span><span class="avail-block avail-checked-out"></span> Checked out</span>
+    <span>Free: nothing drawn</span>
+    {% if window.now_percent is not none %}<span>The red line is now</span>{% endif %}
+</p>
+
+<div class="avail-scroll" aria-hidden="true">
+<div class="avail-grid" data-role="availability-grid">
+    <div class="avail-row avail-head">
+        <div class="avail-name"></div>
+        <div class="avail-track">
+            {% for day in window.days %}
+            <div class="avail-day{% if day.is_today %} avail-today{% endif %}" style="left: {{ '%.4f' | format(day.left_percent) }}%; width: {{ '%.4f' | format(day.width_percent) }}%;">{{ day.label }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% for row in rows %}
+    <div class="avail-row" data-resource-id="{{ row.resource_id }}">
+        <div class="avail-name" title="{{ row.name }}">{{ row.name }}{% if row.health_status != 'online' %} <span class="badge badge-secondary">{{ row.health_status }}</span>{% endif %}</div>
+        <div class="avail-track" style="--lanes: {{ row.lanes }};">
+            {% for day in window.days[1:] %}<span class="avail-line" style="left: {{ '%.4f' | format(day.left_percent) }}%;"></span>{% endfor %}
+            {% if window.now_percent is not none %}<span class="avail-now" style="left: {{ '%.4f' | format(window.now_percent) }}%;"></span>{% endif %}
+            {% for block in row.blocks %}
+            <span class="avail-block avail-{{ block.kind }}" data-kind="{{ block.kind }}" style="left: {{ '%.4f' | format(block.left_percent) }}%; width: {{ '%.4f' | format(block.width_percent) }}%; top: calc({{ block.lane }} * var(--avail-lane));" title="{{ block.tooltip }}">{% if block.width_percent >= 4 %}{{ block.who or '' }}{% endif %}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+</div>
+{% else %}
+<p class="muted" data-role="no-resources">There are no resources{% if selected_pool_id %} in this pool{% endif %} to show.</p>
+{% endif %}
+
+{% if rows %}
+<h2>Bookings this week</h2>
+{% if bookings %}
+<div class="table-scroll" tabindex="0"><table class="data-table" data-role="bookings">
+    <thead>
+        <tr>
+            <th scope="col">Resource</th>
+            <th scope="col">Who</th>
+            <th scope="col">What</th>
+            <th scope="col">From</th>
+            <th scope="col">To</th>
+            <th scope="col">Reservation</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for booking in bookings %}
+        <tr>
+            <td><a href="{{ url_for('resources.resource_detail', resource_id=booking.resource_id) }}">{{ booking.resource_name }}</a></td>
+            <td>{{ booking.who or '-' }}</td>
+            <td>{{ booking.kind }}{% if booking.job_id %} <span class="muted">(job {{ booking.job_id }})</span>{% endif %}</td>
+            <td>{{ booking.start_text }}</td>
+            <td>{{ booking.end_text }}</td>
+            <td>{% if booking.reservation_id %}<a href="{{ url_for('resources.reservation_detail', reservation_id=booking.reservation_id) }}">#{{ booking.reservation_id }}</a> <span class="muted">{{ booking.status }}</span>{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% else %}
+<p class="muted" data-role="all-free">Nothing is reserved or checked out this week: everything shown is free.</p>
+{% endif %}
+{% endif %}
+
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    // The week is laid out on the server, in a zone it has to know. Keep the
+    // browser's zone in a cookie, and reload once when that changes it, so
+    // the first visit ends up in the viewer's own zone.
+    var page = document.querySelector("[data-avail-zone]");
+    var zone = "";
+    try {
+        zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch (error) {
+        zone = "";
+    }
+    if (page === null || zone === "") {
+        return;
+    }
+    var match = document.cookie.match(/(?:^|; )pyc_tz=([^;]*)/);
+    var stored = match !== null ? decodeURIComponent(match[1]) : "";
+    if (stored === zone) {
+        return;
+    }
+    var secure = window.location.protocol === "https:" ? "; Secure" : "";
+    // An IANA zone name is plain cookie text (letters, digits, "/", "_", "+", "-"), so it is stored as is.
+    document.cookie = "pyc_tz=" + zone + "; Path=/; Max-Age=31536000; SameSite=Lax" + secure;
+    if (document.cookie.indexOf("pyc_tz=") === -1) {
+        return;
+    }
+    if (page.getAttribute("data-avail-zone-chosen") === "no" && page.getAttribute("data-avail-zone") !== zone) {
+        window.location.reload();
+    }
+})();
+</script>
+{% endblock %}

@@ -355,6 +355,27 @@ preview tag.
   lists are now returned in a fixed order, so pages never repeat or skip a
   device.
 
+- **The reservation list has a status filter and shows times in your
+  zone.** The reservation forms took times in the browser's zone while
+  every page listed UTC, and cancelled reservations stayed in the list
+  for good. The list now shows Pending and active by default, with
+  Pending, Active, Completed, Cancelled and All as choices; its start and
+  end filters are typed in your zone (the same `tz` the forms send); and
+  its pager keeps every filter (it dropped the end filter). Times on the
+  reservation list, the reservation page and the resource page are
+  rewritten by the page's script into your zone (`2026-09-30 09:00 PDT`,
+  with the UTC time as the tooltip); without script they stay UTC and say
+  so.
+
+- **An availability week.** Resources, Availability draws Monday to
+  Monday as a row per device: reservations (exclusive or shared) and
+  current check-outs as blocks, overlapping ones on their own lines,
+  today and now marked, with a pool choice, previous and next week, and
+  a table of the same bookings underneath. The week is laid out in your
+  browser's zone (kept in a `pyc_tz` cookie; a `tz` in the address
+  wins), and a week with a daylight-saving change is 167 or 169 hours
+  long. Allocation pages, health pages and the audit log still show UTC.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

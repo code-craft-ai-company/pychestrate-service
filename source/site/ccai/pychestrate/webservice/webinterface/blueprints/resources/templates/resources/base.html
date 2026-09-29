@@ -67,6 +67,9 @@
                 <li><a href="{{ url_for('resources.reservation_list') }}" {% if request_endpoint.startswith('resources.reservation_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("event") }} Reservations
                 </a></li>
+                <li><a href="{{ url_for('resources.availability_calendar') }}" {% if request_endpoint == 'resources.availability_calendar' %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("calendar_today") }} Availability
+                </a></li>
 
                 <li class="pyc-subnav__section">Monitoring</li>
                 <li><a href="{{ url_for('resources.health_dashboard') }}" {% if request_endpoint.startswith('resources.health_') %}class="active" aria-current="page"{% endif %}>

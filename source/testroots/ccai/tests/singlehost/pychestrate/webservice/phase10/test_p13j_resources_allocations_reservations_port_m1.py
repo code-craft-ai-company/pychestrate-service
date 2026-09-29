@@ -567,8 +567,9 @@ def test_register_allocations_routes_attaches_documented_routes():
 def test_register_reservations_routes_attaches_documented_routes():
     """
     **Feature: webworks resources port T7.2 (E3)**
-    **Property: register_reservations_routes attaches the five
-    reservation routes at /resources/reservations*.**
+    **Property: register_reservations_routes attaches the six
+    reservation routes at /resources/reservations* (the list, create,
+    the availability calendar, a reservation, its edit and its cancel).**
     """
     _reset_global_state()
     try:
@@ -582,6 +583,7 @@ def test_register_reservations_routes_attaches_documented_routes():
         expected = {
             ("/resources/reservations", ("GET",)),
             ("/resources/reservations/create", ("GET", "POST")),
+            ("/resources/reservations/calendar", ("GET",)),
             (
                 "/resources/reservations/{reservation_id}",
                 ("GET",),
@@ -1013,11 +1015,15 @@ def test_handle_reservation_list_passes_filters_through():
         am = _FakeAllocationManager.last_instance
         kwargs = am.list_reservations_calls[0]
         testbase.assert_equal(kwargs["resource_id"], 3)
+        # Typed times are read in the viewer's zone (UTC when the
+        # request carries no ``tz``) and come back as aware UTC.
         testbase.assert_equal(
-            kwargs["start_after"], datetime(2026, 5, 1, 0, 0)
+            kwargs["start_after"],
+            datetime(2026, 5, 1, 0, 0, tzinfo=timezone.utc),
         )
         testbase.assert_equal(
-            kwargs["end_before"], datetime(2026, 5, 31, 23, 59)
+            kwargs["end_before"],
+            datetime(2026, 5, 31, 23, 59, tzinfo=timezone.utc),
         )
     finally:
         for p in (rm_patch, am_patch, sm_patch):

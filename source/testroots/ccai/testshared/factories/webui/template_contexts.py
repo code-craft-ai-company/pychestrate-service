@@ -31,8 +31,10 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from ccai.testshared.factories.webui.dataclass_fixtures import (
     FIXTURE_DATE,
@@ -43,6 +45,7 @@ from ccai.testshared.factories.webui.dataclass_fixtures import (
     build_fixture_list,
 )
 
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import availability_view
 from ccai.pychestrate.core.managers.allocation_manager import (
     AllocationResponse,
     ReservationResponse,
@@ -278,6 +281,61 @@ def _api_token_minted(mode: str) -> Any:
         "login_command": "pyc login --server-url https://pyc.example.invalid",
         "curl_command": 'curl -H "Authorization: Bearer $PYC_TOKEN" https://pyc.example.invalid/api/v1/me',
     }
+    return rtnval
+
+
+def _availability_window(mode: str) -> Any:
+    """A week for the availability view: Pacific time when populated (its zone, with "now" inside it), UTC otherwise."""
+    zone: Any = ZoneInfo("America/Los_Angeles") if mode == MODE_POPULATED else timezone.utc
+    rtnval = availability_view.week_window(
+        anchor=date(2026, 9, 30), zone=zone, zone_name="America/Los_Angeles" if mode == MODE_POPULATED else "UTC",
+        now=datetime(2026, 9, 30, 19, 0, tzinfo=timezone.utc) if mode == MODE_POPULATED else datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    return rtnval
+
+
+def _availability_rows(mode: str) -> Any:
+    """Availability rows: two resources with a reservation, a shared one that overlaps it and a check-out; none when sparse."""
+    if mode == MODE_SPARSE:
+        return []
+    window = _availability_window(mode)
+    resources = [
+        SimpleNamespace(id=1, name="lab-phone-1", health_status="online"),
+        SimpleNamespace(id=2, name="lab-phone-2", health_status="offline"),
+    ]
+    reservations = [
+        SimpleNamespace(
+            id=11, resource_id=1, username="quinn", job_id="job-1", mode="exclusive", status="pending",
+            start_time=datetime(2026, 9, 30, 18, 0, tzinfo=timezone.utc), end_time=datetime(2026, 9, 30, 22, 0, tzinfo=timezone.utc),
+        ),
+        SimpleNamespace(
+            id=12, resource_id=1, username="riley", job_id=None, mode="shared", status="active",
+            start_time=datetime(2026, 9, 30, 20, 0, tzinfo=timezone.utc), end_time=datetime(2026, 10, 1, 4, 0, tzinfo=timezone.utc),
+        ),
+    ]
+    holders = {2: [{
+        "username": "sam", "job_id": None, "mode": "exclusive",
+        "checkout_time": datetime(2026, 9, 29, 15, 0, tzinfo=timezone.utc), "expected_checkin": None,
+    }]}
+    rows = availability_view.build_rows(resources=resources, reservations=reservations, holders=holders, window=window)
+    for row in rows:
+        for block in row.blocks:
+            block.tooltip = "{} by {}".format(block.kind, block.who)
+    return rows
+
+
+def _availability_bookings(mode: str) -> Any:
+    if mode == MODE_SPARSE:
+        return []
+    rtnval = [{
+        "resource_id": 1, "resource_name": "lab-phone-1", "who": "quinn", "kind": "Reserved (exclusive)",
+        "kind_key": "reserved-exclusive", "start_text": "2026-09-30 11:00 PDT", "end_text": "2026-09-30 15:00 PDT",
+        "reservation_id": 11, "status": "pending", "job_id": "job-1",
+    }, {
+        "resource_id": 2, "resource_name": "lab-phone-2", "who": None, "kind": "Checked out",
+        "kind_key": "checked-out", "start_text": "2026-09-29 08:00 PDT", "end_text": "no end set",
+        "reservation_id": None, "status": "active", "job_id": None,
+    }]
     return rtnval
 
 
@@ -884,6 +942,15 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     # reservation form's times are typed in ("" = fresh form, UTC).
     "resources/reservations/": {
         "viewer_timezone": _by_mode("America/Los_Angeles", ""),
+        # Reservation list status filter and the availability week (RES-43).
+        "status_filters": _const([{"key": "open", "label": "Pending and active"}, {"key": "all", "label": "All"}]),
+        "selected_reservation_status": _by_mode("all", "open"),
+        "window": _availability_window,
+        "rows": _availability_rows,
+        "bookings": _availability_bookings,
+        "zone_name": _by_mode("America/Los_Angeles", "UTC"),
+        "zone_chosen": _by_mode(True, False),
+        "this_week": _const("2026-09-28"),
     },
     # Machine identity: API tokens and service accounts
     # (webinterface/blueprints/config/routes_tokens.py).

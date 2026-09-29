@@ -1461,7 +1461,8 @@ class AllocationManager:
         end_before: Optional[datetime] = None,
         status: Optional[str] = None,
         offset: int = 0,
-        limit: int = 50
+        limit: int = 50,
+        statuses: Optional[List[str]] = None
     ) -> ReservationListResponse:
         """
         List reservations with filtering.
@@ -1471,6 +1472,8 @@ class AllocationManager:
         :param start_after: Optional filter for reservations starting after this time
         :param end_before: Optional filter for reservations ending before this time
         :param status: Optional status to filter by
+        :param statuses: Optional list of statuses, any of which matches (for
+            "pending and active" without listing the finished ones)
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
         :returns: ReservationListResponse with paginated reservation list
@@ -1495,9 +1498,13 @@ class AllocationManager:
         
         if status is not None:
             query = query.filter(Reservation.status == status)
+
+        if statuses is not None:
+            query = query.filter(Reservation.status.in_(list(statuses)))
         
-        # Order by start time ascending (earliest first)
-        query = query.order_by(Reservation.start_time.asc())
+        # Order by start time ascending (earliest first), then by id so
+        # reservations that start together keep one order between pages
+        query = query.order_by(Reservation.start_time.asc(), Reservation.id.asc())
         
         # Get total count before pagination
         total = query.count()
@@ -1512,6 +1519,61 @@ class AllocationManager:
             limit=limit
         )
     
+    def list_reservations_overlapping(
+        self,
+        resource_ids: List[int],
+        window_start: datetime,
+        window_end: datetime,
+        statuses: Optional[List[str]] = None
+    ) -> List[ReservationResponse]:
+        """
+        The reservations of the given resources that overlap a window of
+        time, in one query (an availability view reads a whole week of
+        them). A reservation overlaps when it starts before the window
+        ends and ends after the window starts.
+
+        :param resource_ids: The resources to look at
+        :param window_start: Start of the window
+        :param window_end: End of the window
+        :param statuses: Statuses to include (default: pending and active,
+            the ones that hold the resource)
+        :returns: The reservations, earliest start first
+        """
+        from ccai.pychestrate.core.orm import Reservation, Resource, User
+
+        if len(resource_ids) == 0:
+            return []
+        wanted = ["pending", "active"] if statuses is None else list(statuses)
+        rows = (
+            self._db_session.query(Reservation, Resource.name, User.login)
+            .join(Resource, Resource.id == Reservation.resource_id)
+            .outerjoin(User, User.id == Reservation.user_id)
+            .filter(
+                Reservation.resource_id.in_(list(resource_ids)),
+                Reservation.status.in_(wanted),
+                Reservation.start_time < window_end,
+                Reservation.end_time > window_start
+            )
+            .order_by(Reservation.start_time.asc(), Reservation.id.asc())
+            .all()
+        )
+        rtnval = []
+        for reservation, resource_name, login in rows:
+            rtnval.append(ReservationResponse(
+                id=reservation.id,
+                resource_id=reservation.resource_id,
+                resource_name=resource_name,
+                user_id=str(reservation.user_id),
+                username=login,
+                job_id=reservation.job_id,
+                start_time=reservation.start_time,
+                end_time=reservation.end_time,
+                mode=reservation.mode,
+                status=reservation.status,
+                created_at=reservation.created_at
+            ))
+        return rtnval
+
     def _reservations_in_the_way(
         self,
         resource_id: int,

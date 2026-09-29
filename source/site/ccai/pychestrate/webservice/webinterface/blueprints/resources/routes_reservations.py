@@ -45,8 +45,9 @@ __version__ = "1.0.0"
 import logging
 import re
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 from ccai.webworks.routing.request import Request
@@ -72,6 +73,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _render,
     _resolve_authenticated_request,
 )
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import (
+    availability_view,
+)
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
@@ -92,6 +96,14 @@ _LOGGER = logging.getLogger("pychestrate.ui.resources.reservations")
 # resource stays reachable.
 _RESOURCE_SELECTOR_LIMIT = 1000
 
+# Resources drawn on the availability view at most; a pool or a smaller
+# set is chosen beyond this.
+_AVAILABILITY_ROW_LIMIT = 40
+
+# The cookie the availability page's script keeps the browser's zone in, so
+# a week is laid out in the viewer's own zone.
+ZONE_COOKIE_NAME = "pyc_tz"
+
 
 # The zone a reservation form is read in when the page's script did
 # not report the browser's zone.
@@ -104,6 +116,20 @@ _ZONE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,3}$")
 _MAX_ZONE_NAME_LENGTH = 64
 
 
+# The status filter of the reservation list: (query value, label, the
+# statuses it matches; None matches every status). The default hides the
+# finished ones, so cancelled reservations do not linger in the list.
+RESERVATION_STATUS_FILTERS = (
+    ("open", "Pending and active", ("pending", "active")),
+    ("pending", "Pending", ("pending",)),
+    ("active", "Active", ("active",)),
+    ("completed", "Completed", ("completed",)),
+    ("cancelled", "Cancelled", ("cancelled",)),
+    ("all", "All", None),
+)
+DEFAULT_RESERVATION_STATUS_FILTER = "open"
+
+
 _ROUTE_TABLE = (
     ("resources.reservation_list", "/reservations", ("GET",)),
     (
@@ -111,6 +137,8 @@ _ROUTE_TABLE = (
         "/reservations/create",
         ("GET", "POST"),
     ),
+    # Before the ``{reservation_id}`` route, so "calendar" is not read as an id.
+    ("resources.availability_calendar", "/reservations/calendar", ("GET",)),
     (
         "resources.reservation_detail",
         "/reservations/{reservation_id}",
@@ -372,19 +400,36 @@ def handle_reservation_list(request: Request) -> Response:
         end_before_str = (
             request.query_params.get("end_before", "") or ""
         )
+        # The times are typed in the viewer's zone (the page's script
+        # reports it in ``tz``, as the reservation forms do); without it
+        # they are UTC.
+        zone_name = _viewer_zone_name(
+            zone_name=request.query_params.get("tz", "")
+        )
+        zone = _resolve_viewer_zone(zone_name=zone_name)
+        start_after = _parse_form_datetime(raw=start_after_str, zone=zone)
+        end_before = _parse_form_datetime(raw=end_before_str, zone=zone)
 
-        start_after = _parse_iso_datetime_or_none(raw=start_after_str)
-        end_before = _parse_iso_datetime_or_none(raw=end_before_str)
+        status_filter = str(
+            request.query_params.get("status", "") or ""
+        ).strip().lower()
+        statuses_by_filter = {
+            key: statuses for key, _label, statuses in RESERVATION_STATUS_FILTERS
+        }
+        if status_filter not in statuses_by_filter:
+            status_filter = DEFAULT_RESERVATION_STATUS_FILTER
 
         allocation_manager = _build_allocation_manager(
             db_session=db_session
         )
         resource_manager = _build_resource_manager(db_session=db_session)
 
+        statuses = statuses_by_filter[status_filter]
         reservations_response = allocation_manager.list_reservations(
             resource_id=resource_id,
             start_after=start_after,
             end_before=end_before,
+            statuses=list(statuses) if statuses is not None else None,
             offset=offset,
             limit=params["per_page"],
         )
@@ -405,6 +450,7 @@ def handle_reservation_list(request: Request) -> Response:
             resource_id is not None
             or start_after is not None
             or end_before is not None
+            or status_filter != DEFAULT_RESERVATION_STATUS_FILTER
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -426,6 +472,14 @@ def handle_reservation_list(request: Request) -> Response:
         context["selected_resource_id"] = resource_id
         context["start_after"] = start_after_str
         context["end_before"] = end_before_str
+        context["status_filters"] = [
+            {"key": key, "label": label}
+            for key, label, _statuses in RESERVATION_STATUS_FILTERS
+        ]
+        context["selected_reservation_status"] = status_filter
+        context["viewer_timezone"] = (
+            zone_name if request.query_params.get("tz", "") else ""
+        )
 
         response = _render(
             template_name="resources/reservations/list.html",
@@ -1133,6 +1187,161 @@ def handle_reservation_cancel(request: Request) -> Response:
             pass
 
 
+def _availability_zone(*, request: Request) -> Any:
+    """
+        The zone the availability week is laid out in: the ``tz`` in the
+        address when it names a zone, else the zone the page's script
+        kept in a cookie, else UTC.
+
+        :param request: The request.
+
+        :returns: ``(zone name, tzinfo, whether the address chose it)``.
+    """
+    chosen = str(request.query_params.get("tz", "") or "").strip()
+    if len(chosen) > 0:
+        zone = _resolve_viewer_zone(zone_name=chosen)
+        if zone is not None:
+            return (chosen, zone, True)
+    cookies = getattr(request, "cookies", None) or {}
+    # A browser or proxy may have percent-encoded the "/" of the name.
+    remembered = unquote(str(cookies.get(ZONE_COOKIE_NAME, "") or "")).strip()
+    if len(remembered) > 0:
+        zone = _resolve_viewer_zone(zone_name=remembered)
+        if zone is not None:
+            return (remembered, zone, False)
+    return (_DEFAULT_ZONE_NAME, timezone.utc, False)
+
+
+def _format_in_zone(*, instant: Optional[datetime], zone: Any, unset: str = "no end set") -> str:
+    """``2026-09-29 09:00 PDT`` for an instant in ``zone``; ``unset`` for None."""
+    if instant is None:
+        return unset
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return instant.astimezone(zone).strftime("%Y-%m-%d %H:%M %Z")
+
+
+def _availability_tooltip(*, block: Any, zone: Any) -> str:
+    """The sentence a booking's block shows when hovered, times in ``zone``."""
+    label = availability_view.KIND_LABELS.get(block.kind, block.kind)
+    who = " by {}".format(block.who) if block.who else ""
+    start_text = _format_in_zone(instant=block.start, zone=zone)
+    if block.end is None:
+        return "{}{}: since {}, no end set".format(label, who, start_text)
+    rtnval = "{}{}: {} to {}".format(
+        label, who, start_text, _format_in_zone(instant=block.end, zone=zone)
+    )
+    return rtnval
+
+
+def _availability_bookings(*, rows: List[Any], zone: Any) -> List[Dict[str, Any]]:
+    """
+        The week's bookings as a plain list (the accessible equivalent of
+        the drawing), earliest first.
+
+        :param rows: The rows from :func:`availability_view.build_rows`.
+        :param zone: The zone the times are written in.
+    """
+    entries: List[Any] = []
+    for row in rows:
+        for block in row.blocks:
+            entries.append((block.start, row.name, {
+                "resource_id": row.resource_id,
+                "resource_name": row.name,
+                "who": block.who,
+                "kind": availability_view.KIND_LABELS.get(block.kind, block.kind),
+                "kind_key": block.kind,
+                "start_text": _format_in_zone(instant=block.start, zone=zone),
+                "end_text": _format_in_zone(instant=block.end, zone=zone),
+                "reservation_id": block.reservation_id,
+                "status": block.status,
+                "job_id": block.job_id,
+            }))
+    entries.sort(key=lambda entry: (entry[0], entry[1]))
+    rtnval = [entry[2] for entry in entries]
+    return rtnval
+
+
+def handle_availability_calendar(request: Request) -> Response:
+    """
+        ``GET /resources/reservations/calendar`` -- a week of free and
+        busy time for a pool's resources (or the first ones of all),
+        with the reservations and the check-outs that fall in it.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        zone_name, zone, zone_chosen = _availability_zone(request=request)
+        now = datetime.now(timezone.utc)
+        anchor = now.astimezone(zone).date()
+        raw_week = str(request.query_params.get("week", "") or "").strip()
+        if len(raw_week) > 0:
+            try:
+                anchor = date.fromisoformat(raw_week)
+            except ValueError:
+                anchor = now.astimezone(zone).date()
+        window = availability_view.week_window(
+            anchor=anchor, zone=zone, zone_name=zone_name, now=now
+        )
+        pool_id = _coerce_int(raw=request.query_params.get("pool_id", None))
+
+        resource_manager = _build_resource_manager(db_session=db_session)
+        allocation_manager = _build_allocation_manager(db_session=db_session)
+        listed = resource_manager.list_resources(
+            pool_id=pool_id, limit=_AVAILABILITY_ROW_LIMIT, order_by="name"
+        )
+        resource_ids = [resource.id for resource in listed.resources]
+        reservations = allocation_manager.list_reservations_overlapping(
+            resource_ids, window.start_utc, window.end_utc
+        )
+        holders = resource_manager.get_current_holders(resource_ids)
+        rows = availability_view.build_rows(
+            resources=listed.resources, reservations=reservations,
+            holders=holders, window=window,
+        )
+        for row in rows:
+            for block in row.blocks:
+                block.tooltip = _availability_tooltip(block=block, zone=zone)
+        pools = resource_manager.list_pools(auth.user_id).pools
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="resources.availability_calendar",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context.update(_resources_permission_flags(auth=auth))
+        context["window"] = window
+        context["rows"] = rows
+        context["bookings"] = _availability_bookings(rows=rows, zone=zone)
+        context["pools"] = pools
+        context["selected_pool_id"] = pool_id
+        context["zone_name"] = zone_name
+        context["zone_chosen"] = zone_chosen
+        context["resource_total"] = listed.total
+        context["this_week"] = availability_view.monday_of(
+            now.astimezone(zone).date()
+        ).isoformat()
+
+        response = _render(
+            template_name="resources/reservations/calendar.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -1141,6 +1350,7 @@ def handle_reservation_cancel(request: Request) -> Response:
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "resources.reservation_list": handle_reservation_list,
     "resources.reservation_create": handle_reservation_create,
+    "resources.availability_calendar": handle_availability_calendar,
     "resources.reservation_detail": handle_reservation_detail,
     "resources.reservation_edit": handle_reservation_edit,
     "resources.reservation_cancel": handle_reservation_cancel,
@@ -1167,6 +1377,7 @@ __all__ = [
     "register_reservations_routes",
     "handle_reservation_list",
     "handle_reservation_create",
+    "handle_availability_calendar",
     "handle_reservation_detail",
     "handle_reservation_edit",
     "handle_reservation_cancel",

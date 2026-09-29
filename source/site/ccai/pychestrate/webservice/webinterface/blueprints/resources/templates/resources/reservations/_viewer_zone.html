@@ -14,7 +14,7 @@
 -#}
 <input type="hidden" name="tz" value="{{ viewer_timezone }}" data-pyc-viewer-zone>
 <p class="form-text" id="reservation-zone-note">
-    Times are in <strong data-pyc-zone-label>{{ viewer_timezone or 'UTC' }}</strong><span data-pyc-zone-hint>{% if viewer_timezone and viewer_timezone != 'UTC' %}, your browser's time zone; reservation pages list times in UTC{% endif %}</span>.
+    Times are in <strong data-pyc-zone-label>{{ viewer_timezone or 'UTC' }}</strong><span data-pyc-zone-hint>{% if viewer_timezone and viewer_timezone != 'UTC' %}, your browser's time zone{% endif %}</span>.
 </p>
 <script nonce="{{ csp_nonce() }}">
 (function () {
@@ -59,7 +59,7 @@
     }
     var hint = form.querySelector("[data-pyc-zone-hint]");
     if (hint !== null) {
-        hint.textContent = ", your browser's time zone; reservation pages list times in UTC";
+        hint.textContent = ", your browser's time zone";
     }
 })();
 </script>

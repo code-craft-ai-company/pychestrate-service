@@ -32,11 +32,11 @@
                 </tr>
                 <tr>
                     <th scope="row">Start Time</th>
-                    <td>{{ reservation.start_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ reservation.start_time | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">End Time</th>
-                    <td>{{ reservation.end_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ reservation.end_time | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Mode</th>
@@ -67,7 +67,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Created</th>
-                    <td>{{ reservation.created_at | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ reservation.created_at | local_datetime(true, '-') }}</td>
                 </tr>
             </table></div>
         </div>
@@ -111,4 +111,5 @@
         </div>
     </div>
 </div>
+{% include "resources/reservations/_local_times.html" %}
 {% endblock %}

@@ -155,6 +155,7 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     install_csp_nonce_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
     environment.filters["input_datetime"] = input_datetime_filter
+    environment.filters["local_datetime"] = local_datetime_filter
     environment.filters["humanize_count"] = humanize_count_filter
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
@@ -263,6 +264,38 @@ def format_datetime_filter(
             jinja2.escape(zone_label),
         )
     ) if hasattr(jinja2, "Markup") else _markup_time(iso_value, display_value, zone_label)
+    return rtnval
+
+
+def local_datetime_filter(
+        value: Any,
+        with_seconds: bool = False,
+        placeholder: str = DISPLAY_PLACEHOLDER
+    ) -> Any:
+    """
+        Render a datetime as a ``<time>`` element the page's script
+        rewrites into the viewer's own time zone (``data-pyc-local``).
+        The server text is UTC and says so, which is what a person sees
+        without script, and the ISO value carries an explicit offset so
+        the script cannot read it as local time. See
+        ``_local_times.html``.
+
+        :param value: The datetime to render; a naive value is UTC.
+        :param with_seconds: Show seconds as well as minutes.
+        :param placeholder: What ``None`` renders as.
+
+        :returns: The ``<time>`` element, or ``placeholder`` when there is
+                  no datetime.
+    """
+    if isinstance(value, datetime) and (value.tzinfo is None or value.utcoffset() is None):
+        value = value.replace(tzinfo=timezone.utc)
+    fmt = "%Y-%m-%d %H:%M:%S" if with_seconds is True else "%Y-%m-%d %H:%M"
+    rendered = format_datetime_filter(value, fmt, placeholder)
+    if not hasattr(rendered, "__html__"):
+        return rendered
+    marks = "data-pyc-local data-pyc-seconds " if with_seconds is True else "data-pyc-local "
+    from markupsafe import Markup  # noqa: E402
+    rtnval = Markup(str(rendered).replace("<time ", "<time " + marks, 1))
     return rtnval
 
 
