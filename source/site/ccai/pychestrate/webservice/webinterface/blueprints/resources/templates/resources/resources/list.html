@@ -66,6 +66,9 @@
 
     {% if can_manage %}
     <div class="push-end">
+        <a href="{{ url_for('resources.resource_import') }}" class="btn btn-secondary" data-role="import-resources">
+            {{ ui.icon("add_circle") }} Import
+        </a>
         <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
             {{ ui.icon("add") }} Create Resource
         </a>

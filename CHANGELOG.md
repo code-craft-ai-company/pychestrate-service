@@ -456,6 +456,19 @@ preview tag.
   answer carries a `section` on admin entries only; other menus are
   unchanged.
 
+- **Import devices from a spreadsheet.** Registering two dozen devices
+  took about a hundred and seventy form interactions. Resources, Import
+  takes pasted CSV (or cells pasted from a spreadsheet) with a header row
+  naming the columns: `name` (required), `type`, `pool`, `capacity`,
+  `description`, `tags`, `metadata` (JSON) and `meta.<key>` for one
+  metadata key without JSON. Preview reads every row, checks it against the
+  lab (the pool must exist, and its resources must not already have that
+  name) and shows what would be made and what is wrong, creating nothing.
+  Import then makes every device, or none when any row has a problem. A
+  column the page does not know refuses the whole file, so a typo in a
+  header cannot silently drop data. Up to 500 devices, 256 KB, needs the
+  resource-management permission.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

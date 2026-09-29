@@ -347,6 +347,29 @@ def _token_rows_fixture(mode: str) -> Any:
     return rtnval
 
 
+def _import_preview(mode: str) -> Any:
+    """A spreadsheet preview: with problems (a bad row and a file problem) when populated, all ready when sparse."""
+    from ccai.pychestrate.webservice.webinterface.blueprints.resources import resource_import  # noqa: E402
+
+    preview = resource_import.parse_import(text=resource_import.EXAMPLE_TEXT)
+    if mode == MODE_POPULATED:
+        preview.rows[1].problems["name"] = "The pool \"android-phones\" already has a resource called \"phone-02\"."
+        preview.file_problems.append("These column names are not known: \"colour\".")
+    return preview
+
+
+def _import_example(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.resources import resource_import  # noqa: E402
+
+    return resource_import.EXAMPLE_TEXT
+
+
+def _import_columns(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.resources import resource_import  # noqa: E402
+
+    return resource_import.DOCUMENTED_COLUMNS
+
+
 def _my_allocation(mode: str) -> Any:
     """The current person's own active allocation of the resource, or None."""
     if mode == MODE_SPARSE:
@@ -987,6 +1010,12 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "resources/resources/": {
         "my_allocation": _my_allocation,
         "blocking_transition": _blocking_transition,
+        # The spreadsheet import page (RES-22).
+        "import_text": _by_mode("name\nphone-01\n", ""),
+        "import_preview": _import_preview,
+        "documented_columns": _import_columns,
+        "example_text": _import_example,
+        "max_rows": _const(500),
     },
     "resources/reservations/": {
         "viewer_timezone": _by_mode("America/Los_Angeles", ""),

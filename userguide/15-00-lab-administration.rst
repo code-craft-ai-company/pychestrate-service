@@ -45,6 +45,40 @@ fill in:
 A new device starts **Online**. A name that already exists, or metadata that
 is not a JSON object, is refused with the error next to the field.
 
+To register many devices, choose **Import** on the **Resources** list (or the
+link on the create page). Paste CSV, or cells copied from a spreadsheet: the first
+row names the columns and each row after it is a device.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Column
+     - What goes in it
+   * - ``name``
+     - Required. Letters, digits, underscores, hyphens and periods.
+   * - ``type``
+     - Optional. ``device`` (the default), ``ip_address``, ``port``,
+       ``credential`` or ``generic``.
+   * - ``pool``
+     - Optional. The name of an existing pool; blank uses the default pool.
+   * - ``capacity``
+     - Optional. A whole number of at least 1; the default is 1.
+   * - ``description``, ``tags``
+     - Optional. Tags are separated by spaces, commas or semicolons, and new
+       tags are created.
+   * - ``metadata``, ``meta.<key>``
+     - Optional. ``metadata`` is a JSON object; a column such as
+       ``meta.serial`` sets one metadata key without any JSON.
+
+Choose **Preview**. Every row is read and checked against the lab (the pool
+must exist, and the pool must not already hold a resource of that name), and
+the page shows what would be made and what is wrong with each row. Nothing is
+created yet. A column the page does not recognise refuses the whole file, so a
+misspelt header cannot silently drop a column of data. When every row is
+ready, choose **Import**: all of the devices are created, or, if anything has
+changed or is wrong, none. One import takes at most 500 devices.
+
 
 Check out and check in
 ======================

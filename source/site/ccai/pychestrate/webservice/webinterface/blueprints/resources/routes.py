@@ -166,6 +166,8 @@ _ROUTE_TABLE = (
     ("resources.dashboard", "/dashboard", ("GET",)),
     ("resources.resource_list", "/list", ("GET",)),
     ("resources.resource_create", "/create", ("GET", "POST")),
+    # Before the ``{resource_id}`` route, so "import" is not read as an id.
+    ("resources.resource_import", "/import", ("GET", "POST")),
     ("resources.resource_detail", "/{resource_id}", ("GET",)),
     (
         "resources.resource_edit",
@@ -1325,6 +1327,20 @@ def _blocking_transition(*, db_session: Any, resource_id: int, status: str) -> A
     return latest
 
 
+def handle_resource_import(request: Request) -> Response:
+    """
+        ``GET`` / ``POST /resources/import`` -- register many devices from a
+        spreadsheet after a preview. The handler lives in
+        :mod:`routes_import`, which imports this module, so it is loaded
+        when the route is used.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes_import import (  # noqa: E402
+        handle_resource_import as _handle,
+    )
+    rtnval = _handle(request)
+    return rtnval
+
+
 def handle_resource_detail(request: Request) -> Response:
     """
         ``GET /resources/{resource_id}`` -- detail page including
@@ -1821,6 +1837,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "resources.dashboard": handle_dashboard,
     "resources.resource_list": handle_resource_list,
     "resources.resource_create": handle_resource_create,
+    "resources.resource_import": handle_resource_import,
     "resources.resource_detail": handle_resource_detail,
     "resources.resource_edit": handle_resource_edit,
     "resources.resource_delete": handle_resource_delete,
@@ -1907,6 +1924,7 @@ __all__ = [
     "handle_dashboard",
     "handle_resource_list",
     "handle_resource_create",
+    "handle_resource_import",
     "handle_resource_detail",
     "handle_resource_edit",
     "handle_resource_delete",

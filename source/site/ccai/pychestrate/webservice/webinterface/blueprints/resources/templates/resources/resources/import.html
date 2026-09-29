@@ -1,0 +1,110 @@
+{% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Import Resources - Pychestrate Resources{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pyc-resources-fragment .import-text { font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); width: 100%; min-height: 11rem; }
+    .pyc-resources-fragment .import-row-bad td:first-child { border-left: 3px solid var(--pyc-color-on-error-surface); }
+    .pyc-resources-fragment .import-row-ok td:first-child { border-left: 3px solid var(--pyc-color-on-success-surface); }
+    .pyc-resources-fragment .import-problem { color: var(--pyc-color-on-error-surface); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Import Resources</h1>
+    <p>Register many devices at once from a spreadsheet, after a preview</p>
+</div>
+
+<div class="card">
+    <h2 class="card-header">Your devices</h2>
+    <form method="post" data-role="import-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="csv_text">Paste CSV, or cells copied from a spreadsheet</label>
+            <textarea id="csv_text" name="csv_text" class="form-control import-text" rows="10" spellcheck="false" aria-describedby="import-help">{{ import_text }}</textarea>
+            <p class="form-text" id="import-help">The first row names the columns; then one device per row, up to {{ max_rows }}. Nothing is created until you have seen the preview and chosen Import.</p>
+        </div>
+        <button type="submit" name="action" value="preview" class="btn btn-primary">{{ ui.icon("visibility") }} Preview</button>
+        <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+{% if import_preview %}
+<div class="card" data-role="import-preview">
+    <h2 class="card-header">Preview</h2>
+
+    {% if import_preview.file_problems %}
+    <div class="alert alert-error" role="alert" data-role="import-file-problems">
+        <ul class="list-tight">
+            {% for problem in import_preview.file_problems %}<li>{{ problem }}</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if import_preview.rows %}
+    <p data-role="import-summary">
+        {{ import_preview.rows | length }} device{{ '' if import_preview.rows | length == 1 else 's' }} read:
+        <strong>{{ (import_preview.rows | length) - import_preview.problem_rows }}</strong> ready{% if import_preview.problem_rows %},
+        <strong class="import-problem">{{ import_preview.problem_rows }}</strong> with problems{% endif %}.
+        {% if import_preview.problem_rows %}Fix the rows marked below in the box above and preview again. Nothing is imported while any row has a problem.{% endif %}
+    </p>
+
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">Row</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Capacity</th>
+                <th scope="col">Tags</th>
+                <th scope="col">Metadata</th>
+                <th scope="col">Result</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in import_preview.rows %}
+            <tr class="{{ 'import-row-ok' if not row.problems else 'import-row-bad' }}" data-row="{{ row.number }}">
+                <td>{{ row.number }}</td>
+                <td>{{ row.name or '-' }}</td>
+                <td>{{ row.resource_type }}</td>
+                <td>{{ row.pool_name or 'default' }}</td>
+                <td>{{ row.capacity }}</td>
+                <td>{% for tag in row.tags %}<span class="badge badge-info">{{ tag }}</span> {% else %}-{% endfor %}</td>
+                <td>{% for key, value in row.metadata.items() %}<code>{{ key }}={{ value }}</code>{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
+                <td data-role="row-result">{% if row.problems %}{% for message in row.problems.values() %}<div class="import-problem">{{ message }}</div>{% endfor %}{% else %}<span class="badge badge-success">Ready</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% endif %}
+
+    {% if import_preview.importable %}
+    <form method="post" class="mt" data-role="import-confirm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="csv_text" value="{{ import_text }}">
+        <button type="submit" name="action" value="import" class="btn btn-success">
+            {{ ui.icon("assignment_turned_in") }} Import {{ import_preview.rows | length }} device{{ '' if import_preview.rows | length == 1 else 's' }}
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 class="card-header">Columns</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead><tr><th scope="col">Column</th><th scope="col">Needed</th><th scope="col">What goes in it</th></tr></thead>
+        <tbody>
+            {% for column, needed, meaning in documented_columns %}
+            <tr><td><code>{{ column }}</code></td><td>{{ needed }}</td><td>{{ meaning }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    <p class="muted mt-sm">Example (paste it above to try it):</p>
+    <pre class="command-box" data-role="import-example">{{ example_text }}</pre>
+</div>
+{% endblock %}

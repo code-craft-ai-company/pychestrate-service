@@ -466,6 +466,25 @@ class ResourceManager:
         
         return self._resource_to_response(resource)
     
+    def find_existing_names(self, names: List[str]) -> set:
+        """
+        Which of the given names are already taken, and in which pool, in
+        one query (a bulk import checks a whole spreadsheet at once).
+
+        :param names: The resource names to look for
+        :returns: A set of ``(pool id, name)`` for the resources that exist
+            (the pool id is None for a resource with no pool)
+        """
+        from ccai.pychestrate.core.orm import Resource
+
+        if len(names) == 0:
+            return set()
+        rows = self._db_session.query(Resource.pool_id, Resource.name).filter(
+            Resource.name.in_(list(names))
+        ).all()
+        rtnval = {(row[0], row[1]) for row in rows}
+        return rtnval
+
     def get_resource(self, resource_id: int) -> Optional[ResourceResponse]:
         """
         Retrieve a resource by ID.
