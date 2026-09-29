@@ -386,3 +386,36 @@ pyc-alert-rules {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-metrics-fg-muted);
 }
+
+/*
+ * A chart draws up to ten time labels however wide it is, so a chart tile spans
+ * two columns whenever the grid has two or more (two 16rem columns and their
+ * gap: 32.75rem); a narrower grid has one column, which is the full width.
+ */
+.pyc-metrics__tiles {
+    container-type: inline-size;
+}
+
+@container (min-width: 32.75rem) {
+    .pyc-metrics__tile--chart {
+        grid-column: span 2;
+    }
+}
+
+.pyc-metrics__chart-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.pyc-metrics__chart-title {
+    font-size: var(--pyc-font-size-body, 1rem);
+    font-weight: 600;
+}
+
+.pyc-metrics__chart-subtitle {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-metrics-fg-muted);
+}

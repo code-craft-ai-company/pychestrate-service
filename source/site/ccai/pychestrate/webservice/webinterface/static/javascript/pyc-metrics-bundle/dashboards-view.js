@@ -910,6 +910,10 @@ class PycDashboardDetail extends HTMLElement {
   _build_tile(tile) {
     const card = document.createElement("div");
     card.classList.add("pyc-metrics__tile");
+    if (tile.kind !== "metric-single-stat") {
+      // A chart needs the room for its time labels: see the stylesheet.
+      card.classList.add("pyc-metrics__tile--chart");
+    }
     card.setAttribute("data-role", "dashboard-tile");
     card.setAttribute("data-tile-id", tile.tile_id);
     const title = document.createElement("div");

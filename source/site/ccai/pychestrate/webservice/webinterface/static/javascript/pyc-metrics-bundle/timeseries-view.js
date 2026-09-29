@@ -1,5 +1,7 @@
 import { pad_two, parse_timestamp, zone_label } from "../shared/datetime.js";
 const METRICS_API_PATH = "/api/v1/metrics";
+// The space kept between two neighbouring time labels on a chart's axis.
+const AXIS_LABEL_GAP_PX = 10;
 const TIME_RANGE_PRESETS = [
   { id: "1h", label: "Last hour", hours: 1 },
   { id: "24h", label: "Last 24 hours", hours: 24 },
@@ -53,6 +55,16 @@ function metric_display_name(metric) {
 // day, otherwise the date and the time ("09-29 10:00"), in the viewer's zone.
 // The component draws the label text as given, so the raw ISO string
 // ("2026-09-29T10:00:00.000Z") was printed in full and the labels overprinted.
+// "times in PDT": the axis shows the viewer's zone, so the chart says which.
+function chart_zone_text(points) {
+  for (const point of points) {
+    const at = parse_timestamp(point.observed_at);
+    if (at !== null) {
+      return "times in " + zone_label(at);
+    }
+  }
+  return "";
+}
 function axis_label(instant, spans_days) {
   const clock = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
   return spans_days === true ? pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate()) + " " + clock : clock;
@@ -322,11 +334,20 @@ class PycTimeseriesExplorer extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const chart = build_chart_element(points, this._state.metric, {
-      title: metric_display_name(this._state.metric),
-      subtitle: resolve_range_preset(this._state.rangeId).label
-    });
-    region.appendChild(chart);
+    const heading = document.createElement("div");
+    heading.classList.add("pyc-metrics__chart-heading");
+    const title = document.createElement("span");
+    title.classList.add("pyc-metrics__chart-title");
+    title.setAttribute("data-role", "chart-title");
+    title.textContent = metric_display_name(this._state.metric);
+    heading.appendChild(title);
+    const subtitle = document.createElement("span");
+    subtitle.classList.add("pyc-metrics__chart-subtitle");
+    subtitle.setAttribute("data-role", "chart-subtitle");
+    subtitle.textContent = [resolve_range_preset(this._state.rangeId).label, chart_zone_text(points)].filter((part) => part.length > 0).join(" \xB7 ");
+    heading.appendChild(subtitle);
+    region.appendChild(heading);
+    region.appendChild(build_chart_element(points, this._state.metric));
     return;
   }
 }
@@ -336,8 +357,7 @@ class PycTimeseriesExplorer extends HTMLElement {
  * collapsing what used to be the area + line pair into one path.
  * External theming reaches the path via mj-chart::part(area).
  */
-function build_chart_element(points, metric_name, options) {
-  const settings = options !== null && typeof options === "object" ? options : {};
+function build_chart_element(points, metric_name) {
   const chart = document.createElement("mj-chart");
   chart.classList.add("pyc-metrics__chart");
   chart.setAttribute("data-role", "timeseries-chart");
@@ -357,20 +377,10 @@ function build_chart_element(points, metric_name, options) {
   const series_name = metric_name !== null && metric_name.length > 0
     ? metric_display_name(metric_name)
     : "value";
-  const zone = times.find((time) => time !== null);
-  const zone_text = zone !== void 0 ? "times in " + zone_label(zone) : "";
+  const zone_text = chart_zone_text(points);
   // A figure needs a name: the drawing is hidden from assistive technology, the
   // component's own table holds the values.
   chart.setAttribute("aria-label", series_name + (zone_text.length > 0 ? " over time, " + zone_text : " over time"));
-  if (typeof settings.title === "string" && settings.title.length > 0) {
-    const title = document.createElement("mj-chart-title");
-    title.setAttribute("text", settings.title);
-    const subtitle = [typeof settings.subtitle === "string" ? settings.subtitle : "", zone_text].filter((part) => part.length > 0).join(" \xB7 ");
-    if (subtitle.length > 0) {
-      title.setAttribute("subtitle", subtitle);
-    }
-    chart.appendChild(title);
-  }
   chart.data = {
     series: [
       {
@@ -394,7 +404,31 @@ function build_chart_element(points, metric_name, options) {
     }
     return;
   };
+  // The component draws up to ten time labels however narrow the chart is
+  // (its stride depends on the number of points, not the width), so on a
+  // narrow chart they overprint. After each render a label is kept only when it
+  // clears the one before it; the data and the component's own table are
+  // untouched, and a resize renders again and thins again.
+  const thin_axis_labels = () => {
+    const root = chart.shadowRoot;
+    if (root === null) {
+      return;
+    }
+    const labels = Array.from(root.querySelectorAll('svg text[text-anchor="middle"]'));
+    const boxes = labels.map((label) => ({ label, box: label.getBoundingClientRect() }));
+    boxes.sort((left, right) => left.box.left - right.box.left);
+    let previous_right = -Infinity;
+    for (const entry of boxes) {
+      if (entry.box.left < previous_right + AXIS_LABEL_GAP_PX) {
+        entry.label.remove();
+      } else {
+        previous_right = entry.box.right;
+      }
+    }
+    return;
+  };
   chart.addEventListener("mj-chart-render", keep_svg_out_of_tab_order);
+  chart.addEventListener("mj-chart-render", thin_axis_labels);
   return chart;
 }
 function extract_catalog(body) {
@@ -444,6 +478,7 @@ export {
   build_chart_element,
   build_range_url,
   build_timeseries_url,
+  chart_zone_text,
   extract_catalog,
   metric_display_name,
   resolve_range_preset

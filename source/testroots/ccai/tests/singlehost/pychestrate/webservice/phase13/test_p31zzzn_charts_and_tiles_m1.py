@@ -118,27 +118,27 @@ def test_the_chart_has_an_accessible_name_and_the_page_gives_it_a_title(browser:
     """
     **Feature: chart axes (ORC-15)**
     **Property: the chart figure is named "<metric as words> over time, times in
-    <zone>", and the timeseries page shows the metric as words as its title with
-    the range and the zone as its subtitle; the raw ``pychestrate_...`` name is not
-    the title.**
+    <zone>", and the timeseries page shows, above the chart and visibly, the
+    metric as words as its title with the range and the zone as its subtitle.**
     """
     page = _timeseries_page(browser, _points(24, 5))
     try:
         info = page.evaluate(
             """() => {
                 const chart = document.querySelector('mj-chart');
-                const title = chart.querySelector('mj-chart-title');
-                const root = title.shadowRoot;
-                return {label: chart.getAttribute('aria-label'), role: chart.getAttribute('role'),
-                        title: root.querySelector('.title').textContent, subtitle: root.querySelector('.subtitle').textContent};
+                const title = document.querySelector('[data-role="chart-title"]');
+                const subtitle = document.querySelector('[data-role="chart-subtitle"]');
+                const box = (el) => el.getBoundingClientRect();
+                return {label: chart.getAttribute('aria-label'), role: chart.getAttribute('role'), title: title.textContent, subtitle: subtitle.textContent,
+                        title_visible: box(title).width > 0 && box(title).bottom <= box(chart).top + 1};
             }"""
         )
     finally:
         page.context.close()
 
     testbase.assert_equal(
-        (info["role"], re.match(r"^Resource reservation granted total over time, times in .+$", info["label"]) is not None, info["title"], re.match(r"^Last 24 hours · times in .+$", info["subtitle"]) is not None),
-        ("figure", True, "Resource reservation granted total", True),
+        (info["role"], re.match(r"^Resource reservation granted total over time, times in .+$", info["label"]) is not None, info["title"], re.match(r"^Last 24 hours \u00b7 times in .+$", info["subtitle"]) is not None, info["title_visible"]),
+        ("figure", True, "Resource reservation granted total", True, True),
     )
     return
 
@@ -243,4 +243,56 @@ def test_the_editor_shows_a_tile_as_words_and_its_kind_by_name(browser: Browser)
         (titles, hover),
         (["Resource reservation granted total · Line chart", "Stat metric · Single number"], METRIC),
     )
+    return
+
+
+def _dashboard_page(browser: Browser, width: int) -> Any:
+    board = {
+        "dashboard_id": BOARD_ID, "project_id": PROJECT_ID, "name": "Ops", "version": 1,
+        "tiles": [_tile("t1", "metric-single-stat", "pychestrate_stat_metric"), _tile("t2", "metric-line-chart", "pychestrate_chart_metric", 86400)],
+    }
+    page = open_shell_page(
+        browser, path="/dashboards/{}?project_id={}".format(BOARD_ID, PROJECT_ID), bundle_names=["pyc-site-shell", "pyc-metrics-bundle"],
+        api_stubs={
+            "/api/v1/projects/{}/dashboards/{}".format(PROJECT_ID, BOARD_ID): board,
+            "/api/v1/metrics/timeseries": {"points": _points(24, 5), "metric": "pychestrate_chart_metric"},
+        },
+        viewport={"width": width, "height": 900},
+    )
+    page.wait_for_selector('[data-role="dashboard-tile"] mj-chart', timeout=8000)
+    page.wait_for_timeout(1500)
+    return page
+
+
+def test_a_tile_charts_time_labels_do_not_overprint_at_desktop_and_phone_widths(browser: Browser):
+    """
+    **Feature: chart axes (ORC-15)**
+    **Property: a chart draws up to ten time labels however narrow it is, so a chart
+    tile gets the room on a desktop (it spans two columns, about twice the
+    single-number tile's width) and the labels are thinned after each render; at
+    desktop and phone widths at least a few labels remain, no two are closer than
+    a few pixels, and the chart does not run past the page.**
+    """
+    results: Dict[str, Any] = {}
+    for name, width in (("desktop", 1440), ("phone", 400)):
+        page = _dashboard_page(browser, width)
+        try:
+            ticks = _x_ticks(page, r"^\d{2}:\d{2}$")
+            ordered = sorted(ticks, key=lambda tick: tick["left"])
+            widths = page.evaluate(
+                """() => {
+                    const tiles = [...document.querySelectorAll('[data-role="dashboard-tile"]')].map((tile) => tile.getBoundingClientRect());
+                    return {stat: tiles[0].width, chart: tiles[1].width, chart_right: tiles[1].right, page: window.innerWidth};
+                }"""
+            )
+        finally:
+            page.context.close()
+        results[name] = (
+            len(ticks) >= (4 if name == "desktop" else 2),
+            any(ordered[i]["right"] + 6 > ordered[i + 1]["left"] for i in range(len(ordered) - 1)),
+            widths["chart_right"] <= widths["page"],
+            widths["chart"] >= widths["stat"] * 1.8 if name == "desktop" else True,
+        )
+
+    testbase.assert_equal(results, {"desktop": (True, False, True, True), "phone": (True, False, True, True)})
     return

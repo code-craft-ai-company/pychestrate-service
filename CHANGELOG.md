@@ -198,9 +198,13 @@ preview tag.
   (ORC-15). The chart component draws an x value as the text it is given, so the
   raw ISO timestamps ("2026-09-29T10:00:00.000Z") were printed in full and
   overprinted each other. Axis labels are now "HH:MM" (or "MM-DD HH:MM" for a
-  series longer than a day) in the viewer's zone; the chart has an accessible
-  name ("... over time, times in PDT"), and the timeseries page gives it a title
-  (the metric as words) and a subtitle (the range and the zone). On a dashboard a
+  series longer than a day) in the viewer's zone. The component draws up to ten
+  labels however narrow the chart is, so a label that would touch the one before
+  it is dropped after each render (the data and the component's table are
+  untouched), and a chart tile spans two columns whenever the grid has two or
+  more. The chart has an accessible name ("... over time, times in PDT"), and
+  the timeseries page shows a title (the metric as words) and a subtitle (the
+  range and the zone) above it. On a dashboard a
   "single number" tile shows its latest value with when it was read instead of
   drawing a chart, a tile asks for the range it was configured with (a tile with
   none still shows a week), and tile titles, in the viewer and in the editor,

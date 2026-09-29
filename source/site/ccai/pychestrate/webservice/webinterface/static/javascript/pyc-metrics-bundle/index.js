@@ -692,6 +692,7 @@ function format_clock_instant(instant) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/timeseries-view.js
 var METRICS_API_PATH = "/api/v1/metrics";
+var AXIS_LABEL_GAP_PX = 10;
 var TIME_RANGE_PRESETS = [
   { id: "1h", label: "Last hour", hours: 1 },
   { id: "24h", label: "Last 24 hours", hours: 24 },
@@ -737,6 +738,15 @@ function metric_display_name(metric) {
   }
   const words = metric.replace(/^pychestrate_/, "").replace(/_/g, " ").trim();
   return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : metric;
+}
+function chart_zone_text(points) {
+  for (const point of points) {
+    const at = parse_timestamp(point.observed_at);
+    if (at !== null) {
+      return "times in " + zone_label(at);
+    }
+  }
+  return "";
 }
 function axis_label(instant, spans_days) {
   const clock = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
@@ -1007,16 +1017,24 @@ var PycTimeseriesExplorer = class extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const chart = build_chart_element(points, this._state.metric, {
-      title: metric_display_name(this._state.metric),
-      subtitle: resolve_range_preset(this._state.rangeId).label
-    });
-    region.appendChild(chart);
+    const heading = document.createElement("div");
+    heading.classList.add("pyc-metrics__chart-heading");
+    const title = document.createElement("span");
+    title.classList.add("pyc-metrics__chart-title");
+    title.setAttribute("data-role", "chart-title");
+    title.textContent = metric_display_name(this._state.metric);
+    heading.appendChild(title);
+    const subtitle = document.createElement("span");
+    subtitle.classList.add("pyc-metrics__chart-subtitle");
+    subtitle.setAttribute("data-role", "chart-subtitle");
+    subtitle.textContent = [resolve_range_preset(this._state.rangeId).label, chart_zone_text(points)].filter((part) => part.length > 0).join(" \xB7 ");
+    heading.appendChild(subtitle);
+    region.appendChild(heading);
+    region.appendChild(build_chart_element(points, this._state.metric));
     return;
   }
 };
-function build_chart_element(points, metric_name, options) {
-  const settings = options !== null && typeof options === "object" ? options : {};
+function build_chart_element(points, metric_name) {
   const chart = document.createElement("mj-chart");
   chart.classList.add("pyc-metrics__chart");
   chart.setAttribute("data-role", "timeseries-chart");
@@ -1034,18 +1052,8 @@ function build_chart_element(points, metric_name, options) {
     series_points.push({ x: labels[index], y: point.value });
   });
   const series_name = metric_name !== null && metric_name.length > 0 ? metric_display_name(metric_name) : "value";
-  const zone = times.find((time) => time !== null);
-  const zone_text = zone !== void 0 ? "times in " + zone_label(zone) : "";
+  const zone_text = chart_zone_text(points);
   chart.setAttribute("aria-label", series_name + (zone_text.length > 0 ? " over time, " + zone_text : " over time"));
-  if (typeof settings.title === "string" && settings.title.length > 0) {
-    const title = document.createElement("mj-chart-title");
-    title.setAttribute("text", settings.title);
-    const subtitle = [typeof settings.subtitle === "string" ? settings.subtitle : "", zone_text].filter((part) => part.length > 0).join(" \xB7 ");
-    if (subtitle.length > 0) {
-      title.setAttribute("subtitle", subtitle);
-    }
-    chart.appendChild(title);
-  }
   chart.data = {
     series: [
       {
@@ -1064,7 +1072,26 @@ function build_chart_element(points, metric_name, options) {
     }
     return;
   };
+  const thin_axis_labels = () => {
+    const root = chart.shadowRoot;
+    if (root === null) {
+      return;
+    }
+    const labels2 = Array.from(root.querySelectorAll('svg text[text-anchor="middle"]'));
+    const boxes = labels2.map((label) => ({ label, box: label.getBoundingClientRect() }));
+    boxes.sort((left, right) => left.box.left - right.box.left);
+    let previous_right = -Infinity;
+    for (const entry of boxes) {
+      if (entry.box.left < previous_right + AXIS_LABEL_GAP_PX) {
+        entry.label.remove();
+      } else {
+        previous_right = entry.box.right;
+      }
+    }
+    return;
+  };
   chart.addEventListener("mj-chart-render", keep_svg_out_of_tab_order);
+  chart.addEventListener("mj-chart-render", thin_axis_labels);
   return chart;
 }
 function extract_catalog(body) {
@@ -2109,6 +2136,9 @@ var PycDashboardDetail = class extends HTMLElement {
   _build_tile(tile) {
     const card = document.createElement("div");
     card.classList.add("pyc-metrics__tile");
+    if (tile.kind !== "metric-single-stat") {
+      card.classList.add("pyc-metrics__tile--chart");
+    }
     card.setAttribute("data-role", "dashboard-tile");
     card.setAttribute("data-tile-id", tile.tile_id);
     const title = document.createElement("div");
