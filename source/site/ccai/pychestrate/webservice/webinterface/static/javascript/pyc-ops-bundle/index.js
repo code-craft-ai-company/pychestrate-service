@@ -89,6 +89,18 @@ function format_instant(instant) {
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
+var PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
+function extract_project_options(body) {
+  const items = Array.isArray(body) ? body : body !== null && typeof body === "object" && Array.isArray(body.items) ? body.items : [];
+  const rtnval = [];
+  for (const item of items) {
+    if (item !== null && typeof item === "object" && typeof item.project_id === "string" && item.project_id.length > 0) {
+      const name = typeof item.display_name === "string" && item.display_name.length > 0 ? item.display_name : item.project_id;
+      rtnval.push({ project_id: item.project_id, display_name: name });
+    }
+  }
+  return rtnval;
+}
 var WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 var WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 var TEST_EVENT_HISTORY_REFRESH_MS = 1500;
@@ -285,6 +297,8 @@ function parse_topic_filters(raw) {
   return rtnval;
 }
 var PycWebhooks = class extends HTMLElement {
+  _projects;
+  _project_region;
   _projectId;
   _activeTab;
   _integrations;
@@ -310,6 +324,8 @@ var PycWebhooks = class extends HTMLElement {
   _toast_region;
   constructor() {
     super();
+    this._projects = [];
+    this._project_region = null;
     this._projectId = "";
     this._activeTab = "inbound";
     this._integrations = [];
@@ -352,6 +368,7 @@ var PycWebhooks = class extends HTMLElement {
    */
   connectedCallback() {
     this._render_chrome();
+    void this._load_projects();
     return;
   }
   /**
@@ -364,6 +381,82 @@ var PycWebhooks = class extends HTMLElement {
       this._pendingHistoryTimer = 0;
     }
     return;
+  }
+  /*
+   * The project control: a list of the projects the person can see, or -- when
+   * they cannot be listed (no permission, a failure, none) -- the id field it
+   * used to be (ORC-18).
+   */
+  _render_project_control() {
+    if (this._project_region === null) {
+      return;
+    }
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-ops__field");
+    project_label.textContent = "Project";
+    if (this._projects.length > 0) {
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-ops__select");
+      select.setAttribute("data-role", "project-select");
+      for (const project of this._projects) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
+        option.textContent = project.display_name;
+        select.appendChild(option);
+      }
+      if (this._projectId.length > 0) {
+        select.value = this._projectId;
+      }
+      select.addEventListener("change", () => {
+        this._projectId = String(select.value || "").trim();
+        void this._refresh_active_tab();
+      });
+      project_label.appendChild(select);
+    } else {
+      const project_input = document.createElement("mj-text-field");
+      project_input.classList.add("pyc-ops__input");
+      project_input.setAttribute("type", "text");
+      project_input.setAttribute("placeholder", "project id");
+      project_input.setAttribute("label", "Project id");
+      project_input.setAttribute("data-role", "project-input");
+      if (this._projectId.length > 0) {
+        project_input.value = this._projectId;
+      }
+      project_input.addEventListener("change", () => {
+        this._projectId = project_input.value.trim();
+        void this._refresh_active_tab();
+      });
+      project_label.appendChild(project_input);
+    }
+    this._project_region.replaceChildren(project_label);
+    return;
+  }
+  async _load_projects() {
+    try {
+      const response = await fetch(PROJECTS_LIST_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        this._projects = extract_project_options(await response.json());
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.ops.projects_fetch_failed", { reason: String(reason) });
+    }
+    if (this._projects.length === 0 || this.isConnected === false) {
+      return;
+    }
+    const asked = new URLSearchParams(window.location.search).get("project_id");
+    const known = asked !== null && this._projects.some((project) => project.project_id === asked);
+    this._projectId = known ? asked : this._projects[0].project_id;
+    this._render_project_control();
+    await this._refresh_active_tab();
+    return;
+  }
+  /* "Choose a project" when they can be listed, "Enter a project id" when not. */
+  _project_prompt() {
+    return this._projects.length > 0 ? "Choose a project" : "Enter a project id";
   }
   /**
    * Build the persistent chrome -- heading, project input, tab
@@ -384,21 +477,11 @@ var PycWebhooks = class extends HTMLElement {
     root.appendChild(preview);
     const controls = document.createElement("div");
     controls.classList.add("pyc-ops__controls");
-    const project_label = document.createElement("label");
-    project_label.classList.add("pyc-ops__field");
-    project_label.textContent = "Project";
-    const project_input = document.createElement("mj-text-field");
-    project_input.classList.add("pyc-ops__input");
-    project_input.setAttribute("type", "text");
-    project_input.setAttribute("placeholder", "project id");
-    project_input.setAttribute("label", "Project id");
-    project_input.setAttribute("data-role", "project-input");
-    project_input.addEventListener("change", () => {
-      this._projectId = project_input.value.trim();
-      void this._refresh_active_tab();
-    });
-    project_label.appendChild(project_input);
-    controls.appendChild(project_label);
+    const project_region = document.createElement("div");
+    project_region.setAttribute("data-role", "project-region");
+    controls.appendChild(project_region);
+    this._project_region = project_region;
+    this._render_project_control();
     root.appendChild(controls);
     const tabs = document.createElement("div");
     tabs.classList.add("pyc-ops__tabs");
@@ -737,7 +820,7 @@ var PycWebhooks = class extends HTMLElement {
     const el = region;
     if (this._projectId.length === 0) {
       el.replaceChildren(
-        this._notice("Enter a project id to view integrations.")
+        this._notice(this._project_prompt() + " to view integrations.")
       );
       return;
     }
@@ -1089,7 +1172,7 @@ var PycWebhooks = class extends HTMLElement {
       const rtnval2 = {
         ok: false,
         status: 0,
-        message: "Enter a project id before creating an integration."
+        message: this._project_prompt() + " before creating an integration."
       };
       return rtnval2;
     }
@@ -1269,7 +1352,7 @@ var PycWebhooks = class extends HTMLElement {
     const el = region;
     if (this._projectId.length === 0) {
       el.replaceChildren(
-        this._notice("Enter a project id to view subscriptions.")
+        this._notice(this._project_prompt() + " to view subscriptions.")
       );
       return;
     }
@@ -1821,7 +1904,7 @@ var PycWebhooks = class extends HTMLElement {
         ok: false,
         status: 0,
         signingSecret: "",
-        message: "Enter a project id before creating a subscription."
+        message: this._project_prompt() + " before creating a subscription."
       };
       return rtnval2;
     }

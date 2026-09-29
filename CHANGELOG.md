@@ -285,6 +285,14 @@ preview tag.
   Test metrics for a project with no runs says there is nothing to measure and
   links to the Test catalog, instead of showing "Pass rate 0%".
 
+- The Webhooks page picks a project by name (ORC-18). It asked for a raw
+  project UUID before it would show anything; it now lists the projects the
+  person can see (as the other bundle pages do), selects the one named in the
+  address (`/webhooks?project_id=`) or else the first, and loads that project's
+  integrations at once. When the projects cannot be listed it falls back to the
+  id field, and only then says "Enter a project id". The environment id on the
+  Blast-radius guards page and the ids shown as names elsewhere are not done.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

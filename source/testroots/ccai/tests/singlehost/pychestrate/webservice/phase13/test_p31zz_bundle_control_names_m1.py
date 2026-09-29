@@ -63,7 +63,7 @@ API_STUBS: Dict[str, Any] = {
 PAGES: List[Tuple[str, str, List[str]]] = [
     ("/pipelines", "pyc-pipelines-bundle", ["Pipeline document (YAML / JSON)", "Matrix spec (JSON)"]),
     ("/resource-pools", "pyc-resources-bundle", ["Name", "Description", "Capability tags"]),
-    ("/webhooks", "pyc-ops-bundle", ["Project id"]),
+    ("/webhooks", "pyc-ops-bundle", ["Project"]),
 ]
 
 
