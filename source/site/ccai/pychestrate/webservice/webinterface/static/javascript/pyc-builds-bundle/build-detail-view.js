@@ -1,5 +1,6 @@
 import { set_entity_title } from "../shared/page-title.js";
 import { project_of_run } from "../shared/run-project.js";
+import { fetch_project_names, name_or_short } from "../shared/entity-names.js";
 import { format_bytes, opens_in_browser, run_artifact_url, served_artifact_path, tail_lines } from "../shared/run-artifacts.js";
 import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
 import {
@@ -94,6 +95,7 @@ class PycBuildDetail extends HTMLElement {
   _project_id;
   _build;
   _artifacts;
+  _project_names;
   _loading;
   _errored;
   _error_kind;
@@ -109,6 +111,7 @@ class PycBuildDetail extends HTMLElement {
     this._project_id = "";
     this._build = null;
     this._artifacts = [];
+    this._project_names = {};
     this._loading = false;
     this._errored = false;
     this._error_kind = "";
@@ -226,6 +229,7 @@ class PycBuildDetail extends HTMLElement {
     this._errored = false;
     this._terminal = is_terminal_build_state(build.state);
     this._render_body();
+    void this._load_project_names();
     await this._load_artifacts();
     if (this._terminal === false) {
       this._start_poll();
@@ -277,6 +281,17 @@ class PycBuildDetail extends HTMLElement {
    * the artifacts list empty -- the section renders an empty
    * state rather than an error.
    */
+  /**
+   * Fetch the project names once and show the project by name; a failed
+   * fetch leaves the short id in place.
+   */
+  async _load_project_names() {
+    this._project_names = await fetch_project_names();
+    if (this._build !== null) {
+      this._render_body();
+    }
+    return;
+  }
   async _load_artifacts() {
     if (this._project_id.length === 0) {
       return;
@@ -509,7 +524,10 @@ class PycBuildDetail extends HTMLElement {
     section.appendChild(id_row);
     const grid = document.createElement("dl");
     grid.classList.add("pyc-build-detail__grid");
-    this._append_field(grid, "Project", build.project_id);
+    this._append_field(grid, "Project", name_or_short(this._project_names, build.project_id), {
+      href: "/projects/" + encodeURIComponent(build.project_id),
+      value_title: build.project_id
+    });
     this._append_field(grid, "Runner kind", build.runner_kind);
     this._append_field(grid, "Inputs digest", build.repro_digest_sha256, {
       title: "SHA-256 of the build's input files, toolchain and environment. Two builds with the same digest were made from the same inputs."
@@ -545,9 +563,15 @@ class PycBuildDetail extends HTMLElement {
       const link = document.createElement("a");
       link.href = options.href;
       link.textContent = value;
+      if (typeof options.value_title === "string") {
+        link.title = options.value_title;
+      }
       def.appendChild(link);
     } else {
       def.textContent = value;
+      if (options !== void 0 && typeof options.value_title === "string") {
+        def.title = options.value_title;
+      }
     }
     if (options !== void 0 && typeof options.title === "string") {
       term.title = options.title;

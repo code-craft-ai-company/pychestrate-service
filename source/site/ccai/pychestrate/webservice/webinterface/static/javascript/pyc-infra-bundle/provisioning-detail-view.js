@@ -1,5 +1,6 @@
 import { set_entity_title } from "../shared/page-title.js";
 import { project_of_run } from "../shared/run-project.js";
+import { fetch_environment_names, fetch_project_names, name_or_short } from "../shared/entity-names.js";
 import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
 import {
   is_terminal_provisioning_state,
@@ -61,6 +62,8 @@ class PycProvisioningDetail extends HTMLElement {
   _run_id;
   _project_id;
   _run;
+  _project_names;
+  _environment_names;
   _loading;
   _errored;
   _terminal;
@@ -72,6 +75,8 @@ class PycProvisioningDetail extends HTMLElement {
     this._run_id = "";
     this._project_id = "";
     this._run = null;
+    this._project_names = {};
+    this._environment_names = {};
     this._loading = false;
     this._errored = false;
     this._terminal = false;
@@ -141,6 +146,22 @@ class PycProvisioningDetail extends HTMLElement {
     await this._load();
     return;
   }
+  /**
+   * Fetch the project's and environment's names once and show them in place of
+   * their ids; a failed fetch leaves the short ids.
+   */
+  async _load_names(project_id) {
+    const [projects, environments] = await Promise.all([
+      fetch_project_names(),
+      fetch_environment_names(project_id)
+    ]);
+    this._project_names = projects;
+    this._environment_names = environments;
+    if (this._run !== null) {
+      this._render_body();
+    }
+    return;
+  }
   async _load() {
     if (is_valid_run_id(this._run_id) === true && this._project_id.length === 0) {
       // A link copied from anywhere but the list has no project in it: the
@@ -171,6 +192,7 @@ class PycProvisioningDetail extends HTMLElement {
     this._errored = false;
     this._terminal = is_terminal_provisioning_state(run.state);
     this._render_body();
+    void this._load_names(run.project_id);
     if (this._terminal === false) {
       this._start_poll();
     } else {
@@ -380,8 +402,13 @@ class PycProvisioningDetail extends HTMLElement {
     section.appendChild(id_row);
     const grid = document.createElement("dl");
     grid.classList.add("pyc-provisioning-detail__grid");
-    this._append_field(grid, "Project", run.project_id);
-    this._append_field(grid, "Environment", run.environment_id);
+    this._append_field(grid, "Project", name_or_short(this._project_names, run.project_id), {
+      href: "/projects/" + encodeURIComponent(run.project_id),
+      value_title: run.project_id
+    });
+    this._append_field(grid, "Environment", name_or_short(this._environment_names, run.environment_id), {
+      value_title: run.environment_id
+    });
     this._append_field(grid, "Action", run.action);
     this._append_field(grid, "Driver", run.driver_name);
     this._append_field(grid, "Started", format_timestamp(run.started_at));
@@ -420,9 +447,15 @@ class PycProvisioningDetail extends HTMLElement {
       const link = document.createElement("a");
       link.href = options.href;
       link.textContent = value;
+      if (typeof options.value_title === "string") {
+        link.title = options.value_title;
+      }
       def.appendChild(link);
     } else {
       def.textContent = value;
+      if (options !== void 0 && typeof options.value_title === "string") {
+        def.title = options.value_title;
+      }
     }
     if (options !== void 0 && typeof options.title === "string") {
       term.title = options.title;

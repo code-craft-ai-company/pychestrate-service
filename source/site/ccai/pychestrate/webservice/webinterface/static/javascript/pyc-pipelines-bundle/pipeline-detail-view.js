@@ -1,4 +1,5 @@
 import { hide_unless_may } from "../shared/permissions.js";
+import { fetch_project_names, name_or_short } from "../shared/entity-names.js";
 import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
@@ -266,6 +267,7 @@ class PycPipelineDetail extends HTMLElement {
   _pipeline_id;
   _project_id;
   _pipeline;
+  _project_names;
   _loading;
   _errored;
   _error_kind;
@@ -281,6 +283,7 @@ class PycPipelineDetail extends HTMLElement {
     this._pipeline_id = "";
     this._project_id = "";
     this._pipeline = null;
+    this._project_names = {};
     this._loading = false;
     this._errored = false;
     this._error_kind = "";
@@ -381,7 +384,16 @@ class PycPipelineDetail extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._render_body();
+    void this._load_project_names();
     void this._load_runs();
+    return;
+  }
+  // Show the project by name; a failed fetch leaves the short id.
+  async _load_project_names() {
+    this._project_names = await fetch_project_names();
+    if (this._pipeline !== null) {
+      this._render_body();
+    }
     return;
   }
   // The project's pipeline runs, kept to this pipeline's. A person without
@@ -607,7 +619,10 @@ class PycPipelineDetail extends HTMLElement {
     }
     const grid = document.createElement("dl");
     grid.classList.add("pyc-pipeline-detail__grid");
-    this._append_field(grid, "Project", pipeline.project_id);
+    this._append_field(grid, "Project", name_or_short(this._project_names, pipeline.project_id), {
+      href: "/projects/" + encodeURIComponent(pipeline.project_id),
+      value_title: pipeline.project_id
+    });
     this._append_field(grid, "Schema version", String(pipeline.schema_version));
     const stage_count = Array.isArray(pipeline.stages) ? pipeline.stages.length : 0;
     this._append_field(grid, "Stages", String(stage_count));
@@ -687,13 +702,24 @@ class PycPipelineDetail extends HTMLElement {
    * @param label The field's display label.
    * @param value The field's display value.
    */
-  _append_field(grid, label, value) {
+  _append_field(grid, label, value, options) {
     const field = document.createElement("div");
     field.classList.add("pyc-pipeline-detail__field");
     const term = document.createElement("dt");
     term.textContent = label;
     const def = document.createElement("dd");
-    def.textContent = value;
+    if (options !== void 0 && typeof options.href === "string") {
+      // A reference to another page is a link, not a bare id.
+      const link = document.createElement("a");
+      link.href = options.href;
+      link.textContent = value;
+      if (typeof options.value_title === "string") {
+        link.title = options.value_title;
+      }
+      def.appendChild(link);
+    } else {
+      def.textContent = value;
+    }
     field.appendChild(term);
     field.appendChild(def);
     grid.appendChild(field);

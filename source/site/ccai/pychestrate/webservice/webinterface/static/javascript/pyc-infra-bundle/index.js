@@ -3144,6 +3144,66 @@ async function project_of_run(run_id) {
   }
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/entity-names.js
+var PROJECTS_URL = "/api/v1/projects?per_page=500";
+async function fetch_items(url) {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === false) {
+      return [];
+    }
+    const body = await response.json();
+    if (Array.isArray(body) === true) {
+      return body;
+    }
+    return body !== null && typeof body === "object" && Array.isArray(body.items) === true ? body.items : [];
+  } catch (reason) {
+    return [];
+  }
+}
+async function fetch_project_names() {
+  const names = {};
+  for (const item of await fetch_items(PROJECTS_URL)) {
+    if (item !== null && typeof item === "object" && typeof item.project_id === "string") {
+      const name = typeof item.display_name === "string" && item.display_name.length > 0 ? item.display_name : "";
+      if (name.length > 0) {
+        names[item.project_id] = name;
+      }
+    }
+  }
+  return names;
+}
+async function fetch_environment_names(project_id) {
+  const names = {};
+  if (typeof project_id !== "string" || project_id.length === 0) {
+    return names;
+  }
+  for (const item of await fetch_items("/api/v1/projects/" + encodeURIComponent(project_id) + "/environments")) {
+    if (item !== null && typeof item === "object" && typeof item.environment_id === "string") {
+      const name = typeof item.name === "string" && item.name.length > 0 ? item.name : "";
+      if (name.length > 0) {
+        names[item.environment_id] = name;
+      }
+    }
+  }
+  return names;
+}
+function name_or_short(names, id) {
+  if (typeof id !== "string" || id.length === 0) {
+    return "\u2014";
+  }
+  const known = names[id];
+  if (typeof known === "string" && known.length > 0) {
+    return known;
+  }
+  const dash = id.indexOf("-");
+  return dash > 0 ? id.slice(0, dash) : id.slice(0, 8);
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
 var PROJECTS_API_PATH4 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
@@ -3200,6 +3260,8 @@ var PycProvisioningDetail = class extends HTMLElement {
   _run_id;
   _project_id;
   _run;
+  _project_names;
+  _environment_names;
   _loading;
   _errored;
   _terminal;
@@ -3211,6 +3273,8 @@ var PycProvisioningDetail = class extends HTMLElement {
     this._run_id = "";
     this._project_id = "";
     this._run = null;
+    this._project_names = {};
+    this._environment_names = {};
     this._loading = false;
     this._errored = false;
     this._terminal = false;
@@ -3280,6 +3344,22 @@ var PycProvisioningDetail = class extends HTMLElement {
     await this._load();
     return;
   }
+  /**
+   * Fetch the project's and environment's names once and show them in place of
+   * their ids; a failed fetch leaves the short ids.
+   */
+  async _load_names(project_id) {
+    const [projects, environments] = await Promise.all([
+      fetch_project_names(),
+      fetch_environment_names(project_id)
+    ]);
+    this._project_names = projects;
+    this._environment_names = environments;
+    if (this._run !== null) {
+      this._render_body();
+    }
+    return;
+  }
   async _load() {
     if (is_valid_run_id(this._run_id) === true && this._project_id.length === 0) {
       this._project_id = await project_of_run(this._run_id);
@@ -3308,6 +3388,7 @@ var PycProvisioningDetail = class extends HTMLElement {
     this._errored = false;
     this._terminal = is_terminal_provisioning_state(run.state);
     this._render_body();
+    void this._load_names(run.project_id);
     if (this._terminal === false) {
       this._start_poll();
     } else {
@@ -3517,8 +3598,13 @@ var PycProvisioningDetail = class extends HTMLElement {
     section.appendChild(id_row);
     const grid = document.createElement("dl");
     grid.classList.add("pyc-provisioning-detail__grid");
-    this._append_field(grid, "Project", run.project_id);
-    this._append_field(grid, "Environment", run.environment_id);
+    this._append_field(grid, "Project", name_or_short(this._project_names, run.project_id), {
+      href: "/projects/" + encodeURIComponent(run.project_id),
+      value_title: run.project_id
+    });
+    this._append_field(grid, "Environment", name_or_short(this._environment_names, run.environment_id), {
+      value_title: run.environment_id
+    });
     this._append_field(grid, "Action", run.action);
     this._append_field(grid, "Driver", run.driver_name);
     this._append_field(grid, "Started", format_timestamp(run.started_at));
@@ -3556,9 +3642,15 @@ var PycProvisioningDetail = class extends HTMLElement {
       const link = document.createElement("a");
       link.href = options.href;
       link.textContent = value;
+      if (typeof options.value_title === "string") {
+        link.title = options.value_title;
+      }
       def.appendChild(link);
     } else {
       def.textContent = value;
+      if (options !== void 0 && typeof options.value_title === "string") {
+        def.title = options.value_title;
+      }
     }
     if (options !== void 0 && typeof options.title === "string") {
       term.title = options.title;

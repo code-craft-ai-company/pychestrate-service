@@ -38,6 +38,13 @@ preview tag.
 
 ### Added
 
+- The build, provisioning-run and pipeline pages name their project and environment (ORC-18).
+  They showed "Project  0f6c2c1e-..." (and the provisioning page an environment id) as a field's
+  value. The Project field now reads the project's name and links to its page, the Environment
+  field reads the environment's name, and the id stays in the hover text; when a name cannot be
+  read a short id is shown, so a page never waits on its labels. One shared module
+  (`shared/entity-names.js`) fetches the names.
+
 - Deleting a project says what goes with it, in numbers, and asks for its name (XC-15). The
   warning named kinds of thing ("members, repositories, build, test and infrastructure history
   ...") and one click confirmed it. The project page now counts what it knows (its repositories,

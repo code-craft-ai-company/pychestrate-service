@@ -1456,6 +1456,51 @@ async function project_of_run(run_id) {
   }
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/entity-names.js
+var PROJECTS_URL = "/api/v1/projects?per_page=500";
+async function fetch_items(url) {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === false) {
+      return [];
+    }
+    const body = await response.json();
+    if (Array.isArray(body) === true) {
+      return body;
+    }
+    return body !== null && typeof body === "object" && Array.isArray(body.items) === true ? body.items : [];
+  } catch (reason) {
+    return [];
+  }
+}
+async function fetch_project_names() {
+  const names = {};
+  for (const item of await fetch_items(PROJECTS_URL)) {
+    if (item !== null && typeof item === "object" && typeof item.project_id === "string") {
+      const name = typeof item.display_name === "string" && item.display_name.length > 0 ? item.display_name : "";
+      if (name.length > 0) {
+        names[item.project_id] = name;
+      }
+    }
+  }
+  return names;
+}
+function name_or_short(names, id) {
+  if (typeof id !== "string" || id.length === 0) {
+    return "\u2014";
+  }
+  const known = names[id];
+  if (typeof known === "string" && known.length > 0) {
+    return known;
+  }
+  const dash = id.indexOf("-");
+  return dash > 0 ? id.slice(0, dash) : id.slice(0, 8);
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-artifacts.js
 var SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 var INLINE_EXTENSIONS = [".txt", ".log", ".jsos", ".json", ".yaml", ".yml", ".csv", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"];
@@ -1590,6 +1635,7 @@ var PycBuildDetail = class extends HTMLElement {
   _project_id;
   _build;
   _artifacts;
+  _project_names;
   _loading;
   _errored;
   _error_kind;
@@ -1605,6 +1651,7 @@ var PycBuildDetail = class extends HTMLElement {
     this._project_id = "";
     this._build = null;
     this._artifacts = [];
+    this._project_names = {};
     this._loading = false;
     this._errored = false;
     this._error_kind = "";
@@ -1720,6 +1767,7 @@ var PycBuildDetail = class extends HTMLElement {
     this._errored = false;
     this._terminal = is_terminal_build_state(build.state);
     this._render_body();
+    void this._load_project_names();
     await this._load_artifacts();
     if (this._terminal === false) {
       this._start_poll();
@@ -1771,6 +1819,17 @@ var PycBuildDetail = class extends HTMLElement {
    * the artifacts list empty -- the section renders an empty
    * state rather than an error.
    */
+  /**
+   * Fetch the project names once and show the project by name; a failed
+   * fetch leaves the short id in place.
+   */
+  async _load_project_names() {
+    this._project_names = await fetch_project_names();
+    if (this._build !== null) {
+      this._render_body();
+    }
+    return;
+  }
   async _load_artifacts() {
     if (this._project_id.length === 0) {
       return;
@@ -2003,7 +2062,10 @@ var PycBuildDetail = class extends HTMLElement {
     section.appendChild(id_row);
     const grid = document.createElement("dl");
     grid.classList.add("pyc-build-detail__grid");
-    this._append_field(grid, "Project", build.project_id);
+    this._append_field(grid, "Project", name_or_short(this._project_names, build.project_id), {
+      href: "/projects/" + encodeURIComponent(build.project_id),
+      value_title: build.project_id
+    });
     this._append_field(grid, "Runner kind", build.runner_kind);
     this._append_field(grid, "Inputs digest", build.repro_digest_sha256, {
       title: "SHA-256 of the build's input files, toolchain and environment. Two builds with the same digest were made from the same inputs."
@@ -2038,9 +2100,15 @@ var PycBuildDetail = class extends HTMLElement {
       const link = document.createElement("a");
       link.href = options.href;
       link.textContent = value;
+      if (typeof options.value_title === "string") {
+        link.title = options.value_title;
+      }
       def.appendChild(link);
     } else {
       def.textContent = value;
+      if (options !== void 0 && typeof options.value_title === "string") {
+        def.title = options.value_title;
+      }
     }
     if (options !== void 0 && typeof options.title === "string") {
       term.title = options.title;
