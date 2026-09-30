@@ -137,32 +137,27 @@ def test_a_form_with_nothing_to_keep_is_not_stored():
 def test_the_redirect_address_carries_the_draft_and_a_sign_in_address_carries_it_in_next():
     """
     **Feature: form drafts (XC-11)**
-    **Property: with a form captured, an ordinary redirect address gains ``draft=<token>``
-    (an existing query is kept); a sign-in address gains it inside its ``next`` so it is
-    still there after signing in; with nothing captured the address is returned as it was.**
+    **Property: an ordinary redirect address gains ``draft=<token>`` (an existing query is
+    kept); a sign-in address gains it inside its ``next`` so it is still there after
+    signing in (and an off-site ``next`` is left alone); asking for a draft with no form
+    captured changes nothing.**
     """
-    factory = _factory()
-    plain = form_drafts.attach_draft("/projects/create", session_factory=factory)
-
-    form_drafts.begin_capture(path="/projects/7/edit", pairs=[("name", "Alpha")])
-    try:
-        ordinary = form_drafts.attach_draft("/projects/7/edit?tab=main", session_factory=factory)
-        sign_in = form_drafts.attach_draft("/login?next=/projects/7/edit%3Ftab%3Dmain", session_factory=factory)
-        off_site = form_drafts.attach_draft("/login?next=//evil.example/x", session_factory=factory)
-    finally:
-        form_drafts.end_capture()
+    token = "tok-" + "x" * 30
+    ordinary = form_drafts.with_draft_token("/projects/7/edit?tab=main", token)
+    sign_in = form_drafts.with_draft_token("/login?next=/projects/7/edit%3Ftab%3Dmain", token)
+    off_site = form_drafts.with_draft_token("/login?next=//evil.example/x", token)
 
     ordinary_query = urllib.parse.parse_qs(urllib.parse.urlsplit(ordinary).query)
     sign_in_next = urllib.parse.parse_qs(urllib.parse.urlsplit(sign_in).query)["next"][0]
     next_parts = urllib.parse.urlsplit(sign_in_next)
     next_query = urllib.parse.parse_qs(next_parts.query)
-    session = factory()
-    stored = session.query(UiFormDraft).count()
-    session.close()
 
     testbase.assert_equal(
-        (plain, ordinary.startswith("/projects/7/edit?"), sorted(ordinary_query), next_parts.path, sorted(next_query), sorted(urllib.parse.parse_qs(urllib.parse.urlsplit(off_site).query)), stored),
-        ("/projects/create", True, ["draft", "tab"], "/projects/7/edit", ["draft", "tab"], ["draft", "next"], 3),
+        (
+            ordinary.startswith("/projects/7/edit?"), sorted(ordinary_query), ordinary_query["draft"], next_parts.path, sorted(next_query),
+            sorted(urllib.parse.parse_qs(urllib.parse.urlsplit(off_site).query)), form_drafts.want_draft("/projects/create"),
+        ),
+        (True, ["draft", "tab"], [token], "/projects/7/edit", ["draft", "tab"], ["draft", "next"], "/projects/create"),
     )
     return
 
@@ -171,9 +166,9 @@ def test_the_wsgi_wrapper_notes_a_kept_form_hands_the_body_on_and_forgets_it():
     """
     **Feature: form drafts (XC-11)**
     **Property: for a urlencoded POST to a kept path the wrapped application still reads
-    the whole body and sees the form noted while it runs; it is forgotten once the
-    response is closed and when the application raises; another method, another path, a
-    multipart body or an oversized one is passed through without being noted.**
+    the whole body and sees the form noted while it runs; the form is forgotten as soon
+    as the response is ready and when the application raises; another method, another
+    path, a multipart body or an oversized one is passed through without being noted.**
     """
     seen: List[Any] = []
 
@@ -189,20 +184,16 @@ def test_the_wsgi_wrapper_notes_a_kept_form_hands_the_body_on_and_forgets_it():
 
     wrapped = form_drafts.wrap_wsgi_app_with_form_capture(wsgi_app=_app)
 
-    def _call(app: Any, *, method: str = "POST", path: str = "/projects/create", content_type: str = "application/x-www-form-urlencoded", body: bytes = b"name=Alpha&x=1", length: Any = None) -> Any:
+    def _call(app: Any, *, method: str = "POST", path: str = "/projects/create", content_type: str = "application/x-www-form-urlencoded", body: bytes = b"name=Alpha&x=1") -> Any:
         environ = {
             "REQUEST_METHOD": method, "PATH_INFO": path, "CONTENT_TYPE": content_type,
-            "CONTENT_LENGTH": str(len(body) if length is None else length), "wsgi.input": io.BytesIO(body),
+            "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body),
         }
-        result = app(environ, lambda status, headers, exc_info=None: None)
-        return result
+        return app(environ, lambda status, headers, exc_info=None: None)
 
     result = _call(wrapped)
     during = seen[-1]
-    still_noted = getattr(form_drafts._CURRENT, "value", None) is not None
-    list(result)
-    result.close()
-    after_close = getattr(form_drafts._CURRENT, "value", None)
+    after = getattr(form_drafts._CURRENT, "value", None)
 
     passed_through = []
     for kwargs in (
@@ -220,8 +211,54 @@ def test_the_wsgi_wrapper_notes_a_kept_form_hands_the_body_on_and_forgets_it():
     after_error = getattr(form_drafts._CURRENT, "value", None)
 
     testbase.assert_equal(
-        (during, still_noted, after_close, passed_through, raised, after_error),
-        ((b"name=Alpha&x=1", ("/projects/create", [("name", "Alpha"), ("x", "1")])), True, None, [None, None, None, None], True, None),
+        (during, result, after, passed_through, raised, after_error),
+        ((b"name=Alpha&x=1", ("/projects/create", [("name", "Alpha"), ("x", "1")])), [b"ok"], None, [None, None, None, None], True, None),
+    )
+    return
+
+
+def test_the_wrapper_saves_the_draft_after_the_handler_and_puts_the_token_in_the_redirect():
+    """
+    **Feature: form drafts (XC-11)**
+    **Property: when the application asks for a draft and answers with a redirect, the
+    wrapper saves the form and the ``Location`` it sends carries the token (inside ``next``
+    for a sign-in address); a redirect nobody asked a draft for, an answer that is not a
+    redirect and a form with nothing worth keeping are passed on unchanged and store
+    nothing.**
+    """
+    factory = _factory()
+
+    def _redirecting(location: str, ask: bool, status: str = "302 Found") -> Any:
+        def _app(environ: Dict[str, Any], start_response: Any) -> List[bytes]:
+            environ["wsgi.input"].read()
+            if ask:
+                form_drafts.want_draft(location)
+            start_response(status, [("Location", location), ("Set-Cookie", "a=b")])
+            return [b""]
+        return form_drafts.wrap_wsgi_app_with_form_capture(wsgi_app=_app, session_factory=factory)
+
+    def _run(app: Any, body: bytes) -> Tuple[str, Dict[str, str]]:
+        sent: Dict[str, Any] = {}
+        environ = {"REQUEST_METHOD": "POST", "PATH_INFO": "/projects/create", "CONTENT_TYPE": "application/x-www-form-urlencoded", "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body)}
+        app(environ, lambda status, headers, exc_info=None: sent.update(status=status, headers=dict(headers)))
+        return sent["status"], sent["headers"]
+
+    asked = _run(_redirecting("/projects/create", True), b"name=Alpha")
+    sign_in = _run(_redirecting("/login?next=/projects/create", True), b"name=Beta")
+    not_asked = _run(_redirecting("/projects/create", False), b"name=Gamma")
+    not_a_redirect = _run(_redirecting("/projects/create", True, status="200 OK"), b"name=Delta")
+    nothing_to_keep = _run(_redirecting("/projects/create", True), b"password=x")
+    session = factory()
+    stored = sorted(fields[0][1] for (fields,) in session.query(UiFormDraft.fields).all())
+    session.close()
+
+    testbase.assert_equal(
+        (
+            asked[0], asked[1]["Location"].startswith("/projects/create?draft="), asked[1]["Set-Cookie"],
+            urllib.parse.unquote(sign_in[1]["Location"]).startswith("/login?next=/projects/create?draft="),
+            not_asked[1]["Location"], not_a_redirect[1]["Location"], nothing_to_keep[1]["Location"], stored,
+        ),
+        ("302 Found", True, "a=b", True, "/projects/create", "/projects/create", "/projects/create", ["Alpha", "Beta"]),
     )
     return
 

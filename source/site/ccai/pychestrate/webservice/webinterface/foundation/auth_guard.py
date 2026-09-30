@@ -106,7 +106,7 @@ def require_login_or_redirect(
         )
 
     # What the person had typed is kept and carried through the sign-in (XC-11).
-    rtnval = RedirectResponse(url=_form_drafts.attach_draft(login_url), status_code=302)
+    rtnval = RedirectResponse(url=_form_drafts.want_draft(login_url), status_code=302)
     return rtnval
 
 
@@ -157,7 +157,7 @@ def enforce_csrf_or_redirect(
         )
 
     # ... and here, so the form comes back filled in (XC-11).
-    rtnval = RedirectResponse(url=_form_drafts.attach_draft(fallback_url), status_code=302)
+    rtnval = RedirectResponse(url=_form_drafts.want_draft(fallback_url), status_code=302)
     return rtnval
 
 

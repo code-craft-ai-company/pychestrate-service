@@ -16,9 +16,12 @@ This module keeps it, server-side and briefly:
   ordinary form ``POST`` to one of the paths in :data:`DRAFT_PATH_PREFIXES` for the
   duration of the request, and hands the body on unchanged.
 * When the request ends in one of the two refusals (:func:`~auth_guard.require_login_or_redirect`
-  or :func:`~auth_guard.enforce_csrf_or_redirect`), the guard calls :func:`attach_draft`,
-  which saves the fields as a draft and adds ``?draft=<token>`` to the redirect (to the
-  ``next`` address of a sign-in redirect, so the token survives the sign-in).
+  or :func:`~auth_guard.enforce_csrf_or_redirect`), the guard calls :func:`want_draft`.
+  Once the handler has finished and its database session is closed (a second connection
+  cannot write while the request's own transaction holds the SQLite lock, so the draft is
+  not saved from inside the guard), the wrapper saves the fields as a draft and adds
+  ``?draft=<token>`` to the redirect's ``Location`` (to the ``next`` address of a sign-in
+  redirect, so the token survives the sign-in).
 * The page the person lands on asks :func:`take_draft` for the draft (the shell document
   does, for every page); a draft is returned once, only to the path it was saved for, and
   is deleted as it is read. The shell puts the values back into the form and says so.
@@ -202,28 +205,11 @@ def take_draft(*, token: str, path: str, session_factory: Any = None) -> Optiona
         session.close()
 
 
-class _Finishing:
-    """The response body, which forgets the captured form when the server is done with it."""
-
-    def __init__(self, result: Any) -> None:
-        self._result = result
-
-    def __iter__(self) -> Any:
-        return iter(self._result)
-
-    def close(self) -> None:
-        try:
-            close = getattr(self._result, "close", None)
-            if close is not None:
-                close()
-        finally:
-            end_capture()
-
-
 class _Captured:
     def __init__(self, path: str, pairs: List[Field]) -> None:
         self.path = path
         self.pairs = pairs
+        self.wanted = False
 
 
 def begin_capture(*, path: str, pairs: List[Field]) -> None:
@@ -236,26 +222,35 @@ def end_capture() -> None:
     _CURRENT.value = None
 
 
-def attach_draft(url: str, *, session_factory: Any = None) -> str:
+def want_draft(url: str) -> str:
     """
-        Add the current request's form, saved as a draft, to a redirect address. A no-op
-        (the address comes back unchanged) when the request is not a kept form.
+        Called by a guard that is about to refuse the current request with a redirect: ask for the
+        request's form to be kept and its token added to the redirect (the wrapper does it when the
+        handler is done). A no-op when the request is not a kept form.
+
+        :param url: The address the guard redirects to (returned unchanged).
+
+        :returns: ``url``.
+    """
+    captured = getattr(_CURRENT, "value", None)
+    if captured is not None and len(captured.pairs) > 0:
+        captured.wanted = True
+    return url
+
+
+def with_draft_token(url: str, token: str) -> str:
+    """
+        The address with a draft's token in it.
 
         For a sign-in address the token goes into its ``next`` parameter, so it is still there
         when the person is sent on after signing in; for any other address it becomes a
         ``draft`` parameter of the address itself.
 
-        :param url: The address the guard is about to redirect to.
-        :param session_factory: Returns a new session; the service's own when ``None``.
+        :param url: A redirect address.
+        :param token: The draft's token.
 
-        :returns: The address, with the draft's token in it when one was saved.
+        :returns: The address carrying the token.
     """
-    captured = getattr(_CURRENT, "value", None)
-    if captured is None or len(captured.pairs) == 0:
-        return url
-    token = save_draft(path=captured.path, pairs=captured.pairs, session_factory=session_factory)
-    if token is None:
-        return url
     parts = urlsplit(url)
     query = parse_qsl(parts.query, keep_blank_values=True)
     for index, (name, value) in enumerate(query):
@@ -270,43 +265,63 @@ def attach_draft(url: str, *, session_factory: Any = None) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
-def wrap_wsgi_app_with_form_capture(*, wsgi_app: Any) -> Any:
+def wrap_wsgi_app_with_form_capture(*, wsgi_app: Any, session_factory: Any = None) -> Any:
     """
         Wrap a WSGI application so an ordinary form ``POST`` to a kept path is noted for the
-        length of the request (see the module note). The body is read and handed on
-        unchanged; anything else (another method, a multipart upload, a large body, another
-        path) passes straight through.
+        length of the request, and, when a guard asked for it (:func:`want_draft`) and the
+        response is a redirect, saved as a draft with its token added to the ``Location``. The
+        body is read and handed on unchanged; anything else (another method, a multipart
+        upload, a large body, another path) passes straight through.
 
         :param wsgi_app: The application to wrap.
+        :param session_factory: Returns a new session for the draft; the service's own when ``None``.
 
         :returns: The wrapping application.
     """
 
     def _application(environ: Dict[str, Any], start_response: Any) -> Any:
-        noted = False
+        method = str(environ.get("REQUEST_METHOD", "")).upper()
+        if (
+            method != "POST"
+            or str(environ.get("CONTENT_TYPE", "")).split(";")[0].strip().lower() != "application/x-www-form-urlencoded"
+            or keeps_forms_at(str(environ.get("PATH_INFO", ""))) is False
+        ):
+            return wsgi_app(environ, start_response)
         try:
-            if (
-                str(environ.get("REQUEST_METHOD", "")).upper() == "POST"
-                and str(environ.get("CONTENT_TYPE", "")).split(";")[0].strip().lower() == "application/x-www-form-urlencoded"
-                and keeps_forms_at(str(environ.get("PATH_INFO", "")))
-            ):
-                try:
-                    length = int(environ.get("CONTENT_LENGTH") or 0)
-                except ValueError:
-                    length = 0
-                if 0 < length <= MAX_BODY_BYTES:
-                    body = environ["wsgi.input"].read(length)
-                    environ["wsgi.input"] = io.BytesIO(body)
-                    begin_capture(path=str(environ["PATH_INFO"]), pairs=parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True))
-                    noted = True
-            result = wsgi_app(environ, start_response)
-        except BaseException:
-            if noted:
-                end_capture()
-            raise
-        if noted is False:
-            return result
-        return _Finishing(result)
+            length = int(environ.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_BODY_BYTES:
+            return wsgi_app(environ, start_response)
+
+        body = environ["wsgi.input"].read(length)
+        environ["wsgi.input"] = io.BytesIO(body)
+        captured = _Captured(str(environ["PATH_INFO"]), parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True))
+        _CURRENT.value = captured
+        held: Dict[str, Any] = {}
+
+        def _hold(status: str, headers: List[Tuple[str, str]], exc_info: Any = None) -> Any:
+            held["status"], held["headers"] = status, list(headers)
+            return lambda data: None
+
+        try:
+            result = wsgi_app(environ, _hold)
+            chunks = list(result)
+            close = getattr(result, "close", None)
+            if close is not None:
+                close()
+        finally:
+            _CURRENT.value = None
+        status, headers = held["status"], held["headers"]
+        if captured.wanted is True and status[:3] in ("301", "302", "303", "307", "308"):
+            for index, (name, value) in enumerate(headers):
+                if name.lower() == "location":
+                    token = save_draft(path=captured.path, pairs=captured.pairs, session_factory=session_factory)
+                    if token is not None:
+                        headers[index] = (name, with_draft_token(value, token))
+                    break
+        start_response(status, headers)
+        return chunks
 
     return _application
 
@@ -316,12 +331,13 @@ __all__ = [
     "DRAFT_PATH_PREFIXES",
     "DRAFT_QUERY_PARAM",
     "SECRET_FIELD_NAME",
-    "attach_draft",
     "begin_capture",
     "end_capture",
     "keepable_fields",
     "keeps_forms_at",
     "save_draft",
     "take_draft",
+    "want_draft",
+    "with_draft_token",
     "wrap_wsgi_app_with_form_capture",
 ]
