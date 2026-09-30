@@ -194,6 +194,22 @@ preview tag.
 
 ### Changed
 
+- The projects dashboard leads with what needs attention (PRJ-21). Its largest
+  element was a count ("3"); it listed builds and tests from tables nothing
+  fills, named projects "Project #1", and said nothing about what was broken.
+  It now opens with "Needs attention": the runs that failed, were lost or need
+  investigation in the last seven days (at most five, newest first, each linking
+  to the run and naming its project), or "Nothing needs attention" / "No runs
+  yet" with a link to the Test catalog. Each listed project shows its last run
+  (state and time, linking to the run), a "Recent runs" list replaces the always
+  empty "Recent Tests" card, the count is in the projects table's heading, and
+  the older "Recent Builds" and "Recent Tests" cards appear only when they hold
+  something, naming the project instead of "Project #N". The runs are read
+  through the registry project each web-UI project is bridged to, for every
+  project the viewer can reach (an administrator, who can reach all of them, is
+  scoped with a subquery). Not done: a health dot or sparkline per project,
+  per-project build numbers, and tabs in place of the third navigation column.
+
 - Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15). Sixteen places called `window.confirm`: cancel a run, revoke a client
   (list and detail), drain or deregister a pod, delete a pool, remove a pool
   member, release a reservation, retire, quarantine or move a resource, disable a

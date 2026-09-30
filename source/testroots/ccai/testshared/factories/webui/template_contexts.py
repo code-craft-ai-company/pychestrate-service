@@ -170,6 +170,13 @@ def _by_mode(populated: Any, sparse: Any) -> Builder:
     return _build
 
 
+_DASHBOARD_RUN_ROW: Dict[str, Any] = {
+    "run_id": "11111111-2222-4333-8444-555555555555", "project_legacy_id": 1, "project_name": "Alpha",
+    "kind": "Test \u00b7 testbase", "state": "failed", "state_label": "Failed", "tone": "danger",
+    "at": datetime(2026, 9, 29, 10, 0, tzinfo=timezone.utc),
+}
+
+
 class _FixtureFormView(MultiFormView):
     """
         A :class:`MultiFormView` that answers every field name. On a
@@ -669,6 +676,11 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "build": _one(BuildResponse),
     "build_specs": _build_specs,
     "recent_builds": _many(BuildResponse),
+    # The projects dashboard's run activity (plain rows the dashboard module builds).
+    "dashboard_attention_runs": _by_mode([_DASHBOARD_RUN_ROW], []),
+    "dashboard_recent_runs": _by_mode([_DASHBOARD_RUN_ROW], []),
+    "dashboard_last_runs": _by_mode({1: _DASHBOARD_RUN_ROW}, {}),
+    "dashboard_project_names": _by_mode({1: "Alpha"}, {}),
     "recent_tests": _many(TestJobResponse),
     "recent_runs": _many(PipelineRunResponse),
     "artifacts": _many(BuildArtifactResponse),

@@ -6,23 +6,35 @@
 {% block content %}
 <div class="page-header">
     <h1>Projects Dashboard</h1>
-    <p>Overview of your projects and recent activity</p>
+    <p>What needs attention first, then your projects and their latest runs</p>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px; margin-bottom: 30px;">
-    <div class="card">
-        <h2 class="card-header">
-            {{ ui.icon("folder") }}
-            Your Projects
-        </h2>
-        <div style="font-size: 2rem; font-weight: 600; color: var(--pyc-color-on-surface);">{{ project_total }}</div>
-        <p style="color: var(--pyc-color-on-surface-muted); margin: 5px 0 0;">Projects you have access to</p>
-    </div>
+<div class="card" data-role="needs-attention">
+    <h2 class="card-header">Needs attention</h2>
+    {% if dashboard_attention_runs %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead><tr><th scope="col">Run</th><th scope="col">Project</th><th scope="col">State</th><th scope="col">When</th></tr></thead>
+        <tbody>
+            {% for run in dashboard_attention_runs %}
+            <tr data-role="attention-run">
+                <td><a href="/runs/{{ run.run_id }}">{{ run.kind }}</a></td>
+                <td>{% if run.project_legacy_id %}<a href="{{ url_for('projects.project_detail', project_id=run.project_legacy_id) }}">{{ run.project_name }}</a>{% else %}{{ run.project_name }}{% endif %}</td>
+                <td><span class="badge badge-{{ run.tone }}">{{ run.state_label }}</span></td>
+                <td>{{ run.at | format_datetime('%Y-%m-%d %H:%M', '') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% elif dashboard_recent_runs %}
+    <p class="muted" data-role="nothing-needs-attention">Nothing needs attention: no run has failed in the last 7 days.</p>
+    {% else %}
+    <p class="muted" data-role="no-runs-yet">No runs yet. Runs appear here when a test, build or job runs in one of your projects; start from the <a href="/test-catalog">Test catalog</a>.</p>
+    {% endif %}
 </div>
 
 <div class="card">
     <div class="card-header split">
-        <span>Projects</span>
+        <span>Projects ({{ project_total }})</span>
         <a href="{{ url_for('projects.project_create') }}" class="btn btn-primary btn-sm">
             {{ ui.icon("add") }} New Project
         </a>
@@ -36,6 +48,7 @@
                 <th scope="col">Description</th>
                 <th scope="col">Owner</th>
                 <th scope="col">Last Activity</th>
+                <th scope="col">Last run</th>
                 <th scope="col">Actions</th>
             </tr>
         </thead>
@@ -50,6 +63,15 @@
                 <td>{{ project.description[:50] }}{% if project.description|length > 50 %}...{% endif %}</td>
                 <td>{{ project.owner_username }}</td>
                 <td>{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', 'N/A') }}</td>
+                <td>
+                    {% set last = dashboard_last_runs.get(project.id) %}
+                    {% if last %}
+                    <a href="/runs/{{ last.run_id }}" data-role="last-run"><span class="badge badge-{{ last.tone }}">{{ last.state_label }}</span></a>
+                    <span class="muted">{{ last.at | format_datetime('%Y-%m-%d %H:%M', '') }}</span>
+                    {% else %}
+                    <span class="muted" data-role="no-last-run">&mdash;</span>
+                    {% endif %}
+                </td>
                 <td>
                     <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="btn btn-sm btn-secondary">View</a>
                 </td>
@@ -67,10 +89,33 @@
     {% endif %}
 </div>
 
+<div class="card" data-role="recent-runs">
+    <h2 class="card-header">Recent runs</h2>
+    {% if dashboard_recent_runs %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead><tr><th scope="col">Run</th><th scope="col">Project</th><th scope="col">State</th><th scope="col">When</th></tr></thead>
+        <tbody>
+            {% for run in dashboard_recent_runs %}
+            <tr data-role="recent-run">
+                <td><a href="/runs/{{ run.run_id }}">{{ run.kind }}</a></td>
+                <td>{% if run.project_legacy_id %}<a href="{{ url_for('projects.project_detail', project_id=run.project_legacy_id) }}">{{ run.project_name }}</a>{% else %}{{ run.project_name }}{% endif %}</td>
+                <td><span class="badge badge-{{ run.tone }}">{{ run.state_label }}</span></td>
+                <td>{{ run.at | format_datetime('%Y-%m-%d %H:%M', '') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    <p class="muted"><a href="/runs">All runs</a></p>
+    {% else %}
+    {{ ui.empty_state("No runs yet. Runs appear here when a test, build or job runs in one of your projects.") }}
+    {% endif %}
+</div>
+
+{% if recent_builds or recent_tests %}
 <div class="two-col">
+    {% if recent_builds %}
     <div class="card">
         <h2 class="card-header">Recent Builds</h2>
-        {% if recent_builds %}
         <div class="table-scroll" tabindex="0"><table class="data-table">
             <thead><tr><th scope="col">Build</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
             <tbody>
@@ -82,7 +127,7 @@
                         </a>
                     </td>
                     <td>{{ build.spec_name }}</td>
-                    <td><a href="{{ url_for('projects.project_detail', project_id=build.project_id) }}" class="muted">Project #{{ build.project_id }}</a></td>
+                    <td><a href="{{ url_for('projects.project_detail', project_id=build.project_id) }}" class="muted">{{ dashboard_project_names.get(build.project_id) or ('Project ' ~ build.project_id) }}</a></td>
                     <td>
                         {{ ui.status_badge(build.status) }}
                     </td>
@@ -91,14 +136,12 @@
                 {% endfor %}
             </tbody>
         </table></div>
-        {% else %}
-        {{ ui.empty_state("No builds yet. Builds appear here when a build specification runs in one of your projects.") }}
-        {% endif %}
     </div>
+    {% endif %}
 
+    {% if recent_tests %}
     <div class="card">
         <h2 class="card-header">Recent Tests</h2>
-        {% if recent_tests %}
         <div class="table-scroll" tabindex="0"><table class="data-table">
             <thead><tr><th scope="col">Job</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
             <tbody>
@@ -110,7 +153,7 @@
                         </a>
                     </td>
                     <td>{{ test.spec_name }}</td>
-                    <td><a href="{{ url_for('projects.project_detail', project_id=test.project_id) }}" class="muted">Project #{{ test.project_id }}</a></td>
+                    <td><a href="{{ url_for('projects.project_detail', project_id=test.project_id) }}" class="muted">{{ dashboard_project_names.get(test.project_id) or ('Project ' ~ test.project_id) }}</a></td>
                     <td>
                         {{ ui.status_badge(test.status) }}
                     </td>
@@ -119,11 +162,10 @@
                 {% endfor %}
             </tbody>
         </table></div>
-        {% else %}
-        {{ ui.empty_state("No tests yet. Test jobs appear here when a test specification runs in one of your projects.") }}
-        {% endif %}
     </div>
+    {% endif %}
 </div>
+{% endif %}
 
 <a href="{{ url_for('projects.project_list') }}" class="btn btn-secondary">
     {{ ui.icon("list") }} View All Projects

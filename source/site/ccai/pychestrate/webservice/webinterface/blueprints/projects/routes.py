@@ -75,6 +75,10 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     flash,
     url_for as _url_for_module,
 )
+from ccai.pychestrate.webservice.webinterface.blueprints.projects.dashboard_activity import (
+    collect_run_activity,
+)
+from ccai.pychestrate.webservice.projects.bridge import bridge_tables_present
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     MultiFormView,
     _AuthResolution,
@@ -701,10 +705,21 @@ def handle_dashboard(request: Request) -> Response:
         if project_total is None:
             project_total = len(projects)
 
+        accessible_ids = project_manager.accessible_project_ids(auth.user_id)
         recent_activity = _collect_recent_activity(
             db_session=db_session,
-            project_ids=project_manager.accessible_project_ids(auth.user_id),
+            project_ids=accessible_ids,
         )
+        # What is broken first (PRJ-21): the runs that failed this week, the
+        # latest runs and each listed project's last run, read from the runs the
+        # service holds through the registry projects the web UI's are bridged to.
+        run_activity = {"attention": [], "recent": [], "last_by_project": {}}
+        if bridge_tables_present(db_session=db_session) is True:
+            run_activity = collect_run_activity(
+                db_session=db_session,
+                accessible_legacy_ids=accessible_ids,
+                listed_legacy_ids=[project.id for project in projects],
+            )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -717,6 +732,10 @@ def handle_dashboard(request: Request) -> Response:
         context["project_total"] = project_total
         context["recent_builds"] = recent_activity["builds"]
         context["recent_tests"] = recent_activity["tests"]
+        context["dashboard_attention_runs"] = run_activity["attention"]
+        context["dashboard_recent_runs"] = run_activity["recent"]
+        context["dashboard_last_runs"] = run_activity["last_by_project"]
+        context["dashboard_project_names"] = {project.id: project.name for project in projects}
         response = _render(
             template_name="projects/dashboard.html",
             context=context,
