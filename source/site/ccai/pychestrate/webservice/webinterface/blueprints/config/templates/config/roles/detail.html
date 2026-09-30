@@ -40,25 +40,6 @@
     </table>
 </div>
 
-<div class="card mt">
-    <h2 class="card-header">Permissions ({{ role.permissions | length }})</h2>
-    {% if role.permissions %}
-    {% for group in role.permissions | permission_groups %}
-    <h3 class="pyc-permissions__area">{{ group.label }}</h3>
-    <ul class="list-tight">
-        {% for item in group["items"] %}
-        <li class="py-sm" title="{{ item.permission.name }}">
-            {{ item.label }}
-            {% if item.description %}<span class="muted"> - {{ item.description }}</span>{% endif %}
-        </li>
-        {% endfor %}
-    </ul>
-    {% endfor %}
-    {% else %}
-    <p class="muted">No permissions assigned</p>
-    {% endif %}
-</div>
-
 <div class="card mt" data-role="role-holders">
     <h2 class="card-header">Who has this role ({{ role.binding_count }})</h2>
     {% if not may_see_holders %}
@@ -94,6 +75,25 @@
     {% endif %}
     {% else %}
     <p class="muted">Nobody has this role yet. Give it to a person from their user page.</p>
+    {% endif %}
+</div>
+
+<div class="card mt">
+    <h2 class="card-header">Permissions ({{ role.permissions | length }})</h2>
+    {% if role.permissions %}
+    {% for group in role.permissions | permission_groups %}
+    <h3 class="pyc-permissions__area">{{ group.label }}</h3>
+    <ul class="list-tight">
+        {% for item in group["items"] %}
+        <li class="py-sm" title="{{ item.permission.name }}">
+            {{ item.label }}
+            {% if item.description %}<span class="muted"> - {{ item.description }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endfor %}
+    {% else %}
+    <p class="muted">No permissions assigned</p>
     {% endif %}
 </div>
 
