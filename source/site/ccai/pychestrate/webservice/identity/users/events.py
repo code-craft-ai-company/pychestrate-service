@@ -21,6 +21,7 @@ class UserEventTopics:
     USER_UPDATED: str = "entity.user.updated"
     USER_DEACTIVATED: str = "entity.user.deactivated"
     USER_REACTIVATED: str = "entity.user.reactivated"
+    USER_ANONYMISED: str = "entity.user.anonymised"
     GROUP_CREATED: str = "entity.group.created"
     GROUP_DELETED: str = "entity.group.deleted"
     GROUP_MEMBERSHIP_CHANGED: str = "entity.group.membership.changed"

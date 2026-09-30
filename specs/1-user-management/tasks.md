@@ -59,6 +59,18 @@
       controller.
 - [ ] T2.9 — Emit PII-tagged structured log events for every mutation.
 
+- [ ] T2.10 — `anonymise_identity_user` (Requirement 5): the migration adding
+      `identity_users.anonymised_at`, the service function, the admin action
+      (`POST /admin/users/{id}/anonymise`, typed confirmation), the
+      "Anonymised" status in the list, detail and CSV export, and the
+      refusals to reactivate or edit an anonymised user. Tests: every table in
+      the design's table is emptied of the user; every refusal changes nothing.
+- [ ] T2.11 — `POST /api/v1/identity/users/{user_id}/anonymise` (the same service
+      function; 409 with the reason when refused) and its OpenAPI entry.
+- [ ] T2.12 — Scrub the anonymised user's login name and email from earlier
+      audit-log payloads and outbox rows by `user_id` (with
+      `2-retention-policies`), and from notification routing-rule recipients.
+
 ### M3 — Hardening
 
 - [ ] T3.1 — Add Prometheus metrics listed in requirements.md NFR-3

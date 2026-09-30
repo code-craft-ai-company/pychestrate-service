@@ -110,6 +110,7 @@ _ROUTE_TABLE = (
     ("config.user_detail", "/users/{user_id}", ("GET",)),
     ("config.user_edit", "/users/{user_id}/edit", ("GET", "POST")),
     ("config.user_deactivate", "/users/{user_id}/deactivate", ("POST",)),
+    ("config.user_anonymise", "/users/{user_id}/anonymise", ("POST",)),
     ("config.user_reactivate", "/users/{user_id}/reactivate", ("POST",)),
     ("config.user_password", "/users/{user_id}/password", ("GET", "POST")),
     ("config.user_password_link", "/users/{user_id}/password-link", ("POST",)),
@@ -171,6 +172,7 @@ _ROUTE_PERMISSIONS = {
     "config.user_detail": USERS_READ_PERMISSION,
     "config.user_edit": USERS_WRITE_PERMISSION,
     "config.user_deactivate": USERS_WRITE_PERMISSION,
+    "config.user_anonymise": USERS_WRITE_PERMISSION,
     "config.user_reactivate": USERS_WRITE_PERMISSION,
     "config.user_password": USERS_WRITE_PERMISSION,
     "config.user_password_link": USERS_WRITE_PERMISSION,
@@ -316,6 +318,26 @@ def _svc_deactivate_user(
         identity_admin,
     )
     identity_admin.deactivate_identity_user(
+        db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
+    )
+    return
+
+
+def _svc_anonymise_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> None:
+    """
+        Erase the deactivated identity user's personal data in place.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    identity_admin.anonymise_identity_user(
         db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
     )
     return
@@ -1154,6 +1176,15 @@ def handle_user_edit(request: Request) -> Response:
             )
             return response
 
+        if getattr(user, "status", "") == "anonymised":
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_detail", user_id=user_id),
+                message="This account was anonymised: its personal data is gone and it cannot be edited.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
         if submitted is not None:
             user = _user_with_submitted_values(user=user, **submitted)
 
@@ -1251,6 +1282,78 @@ def handle_user_deactivate(request: Request) -> Response:
                 session=auth.session,
                 url=return_url,
                 message="Error deactivating user: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_user_anonymise(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/anonymise`` -- erase a deactivated user's personal data
+        in place (ADM-41), then return to the user's page with a flash. Refusals (the account
+        is not deactivated, is the administrator's own, is already anonymised, or owns a
+        project) change nothing and say what to do first.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        user_id = str(request.path_params.get("user_id", ""))
+        single_form = _parse_form_or_empty(request=request)
+        detail_url = _url_for_module.url_for("config.user_detail", user_id=user_id)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=detail_url,
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        exc_classes = _admin_exception_classes()
+        try:
+            _svc_anonymise_user(
+                db_session=db_session,
+                user_id=user_id,
+                actor_user_id=auth.user_id,
+            )
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=detail_url,
+                message="User anonymised. Their personal data has been erased; the account's id stays in the audit log.",
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except exc_classes["AdminNotFoundError"]:
+            response = _not_found_redirect(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message="User not found.",
+            )
+            return response
+        except (exc_classes["SelfLockoutError"], exc_classes["AdminValidationError"]) as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=detail_url,
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=detail_url,
+                message="Error anonymising user: {}".format(str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1501,6 +1604,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.user_detail": handle_user_detail,
     "config.user_edit": handle_user_edit,
     "config.user_deactivate": handle_user_deactivate,
+    "config.user_anonymise": handle_user_anonymise,
     "config.user_reactivate": handle_user_reactivate,
     "config.user_password": handle_user_password,
     "config.user_password_link": handle_user_password_link,
@@ -1537,6 +1641,7 @@ __all__ = [
     "handle_user_detail",
     "handle_user_edit",
     "handle_user_deactivate",
+    "handle_user_anonymise",
     "handle_user_reactivate",
     "handle_user_password",
     "handle_user_password_link",

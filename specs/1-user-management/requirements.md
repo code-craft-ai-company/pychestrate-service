@@ -97,6 +97,35 @@ routes notifications to the right channels.
    audit trail view to render timestamps in the new timezone on subsequent
    requests.
 
+### Requirement 5: Erasure by Anonymisation (data-protection requests)
+
+**User Story:** As a platform administrator handling a data-protection request,
+I want to remove a person's personal data from Pychestrate without breaking the
+audit trail, so that the request can be met and history stays attributable.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN an administrator anonymises a `DEACTIVATED` user THEN the system SHALL,
+   in one transaction, replace the user's `login_name`, `primary_email` and
+   `display_name` with values derived from the `user_id` only, clear
+   `external_id`, stamp `anonymised_at`, and publish `entity.user.anonymised`
+   carrying only `{user_id, actor_user_id, anonymised_at}`.
+2. WHEN a user is anonymised THEN the system SHALL delete the user's local
+   credentials, password and email-verification tokens, MFA enrolments,
+   sign-in sessions, API tokens, group memberships, direct role bindings and
+   project memberships, and SHALL scrub the same personal fields from the
+   legacy `user` mirror row.
+3. IF the user is not `DEACTIVATED`, is the acting administrator, is already
+   anonymised, or owns a project THEN the system SHALL refuse with a message
+   that says what to do first (deactivate; ask another administrator;
+   nothing to do; transfer or delete the project), and SHALL change nothing.
+4. WHEN a user has been anonymised THEN the system SHALL keep the row and its
+   `user_id` (audit records reference it), SHALL refuse to reactivate, edit or
+   invite it, and SHALL show it as "Anonymised" wherever a user is listed or
+   exported.
+5. The administrator interface SHALL require the user's login name to be typed
+   before it performs the action, and SHALL say that it cannot be undone.
+
 ## Property-Based Test Requirements
 
 ### Property 1: Create-Then-Read Round Trip

@@ -38,6 +38,20 @@ preview tag.
 
 ### Added
 
+- A deactivated user can be anonymised for a data-protection request (ADM-41; decisions recorded in
+  `specs/1-user-management`, Requirement 5). The user's page has an **Anonymise** button for a deactivated
+  account (`POST /admin/users/{id}/anonymise`, `system:users.write`); it asks for the login name to be typed
+  and cannot be undone. In one transaction the account's login name, email and display name are replaced by
+  values derived from its id, its external id is cleared, and its local credentials, password links,
+  email verifications, MFA enrolments, sign-in sessions, API tokens, group memberships, direct role bindings
+  and project memberships are deleted, with the legacy user record scrubbed the same way. The identity row and
+  its id stay (audit records reference it) and show as "Anonymised" in the users list, on the user's page and in
+  the CSV export; an anonymised account cannot be edited or reactivated. It is refused, changing nothing, for
+  an account that is not deactivated, is the administrator's own, is already anonymised, or owns a project.
+  `entity.user.anonymised` is audited with only ids. New column `identity_users.anonymised_at` (Alembic
+  revision `e3b9c6d1f472`). Not covered yet: earlier audit and outbox payloads that contain the person's login
+  name, and notification-rule recipient addresses (tasks T2.11 and T2.12 in the spec).
+
 - The Users page downloads as a spreadsheet for an access review (ORG-F22). `GET /admin/users?format=csv`
   (a **Download CSV** button on the page, carrying its current search) returns every matching user, not one
   page, as a CSV attachment: username, email, display name, status (active, invited, inactive), the roles held

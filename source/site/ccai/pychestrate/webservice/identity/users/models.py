@@ -68,6 +68,9 @@ class IdentityUser(PychestratePhase1Base, SerializableModel):
     timezone = Column(String(64), nullable=False, default="UTC")
     created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    # Set when the user was anonymised (a data-protection request); the row stays so audit
+    # records that reference the user_id keep resolving.
+    anonymised_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

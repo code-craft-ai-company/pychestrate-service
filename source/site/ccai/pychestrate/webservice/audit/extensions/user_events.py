@@ -87,6 +87,30 @@ class UserReactivatedAuditEvents(AuditEventTypeExtension):
     description: str = "A deactivated user was reactivated."
 
 
+_USER_ANONYMISED_SCHEMA = {
+    "type": "object",
+    "required": ["user_id"],
+    "properties": {
+        "user_id": {"type": "string"},
+        "actor_user_id": {"type": ["string", "null"]},
+        "anonymised_at": {"type": "string"},
+    },
+}
+
+
+class UserAnonymisedAuditEvents(AuditEventTypeExtension):
+    """
+        Audit kind for ``entity.user.anonymised``. Its payload names no person: the
+        point of the event is that the record of it must not carry what was erased.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.user.anonymised"
+    source_topic: str = "entity.user.anonymised"
+    payload_schema: dict = _USER_ANONYMISED_SCHEMA
+    description: str = "A user's personal data was erased (the account was anonymised)."
+
+
 _PASSWORD_EVENT_SCHEMA = {
     "type": "object",
     "required": ["user_id", "login_name"],
@@ -159,6 +183,7 @@ USER_AUDIT_EVENT_TYPES = (
     UserLifecycleAuditEvents,
     UserUpdatedAuditEvents,
     UserDeactivatedAuditEvents,
+    UserAnonymisedAuditEvents,
     UserReactivatedAuditEvents,
     UserPasswordChangedAuditEvents,
     UserPasswordResetAuditEvents,

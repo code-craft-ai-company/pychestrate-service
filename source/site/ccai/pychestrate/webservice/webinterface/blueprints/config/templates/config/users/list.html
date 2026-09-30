@@ -46,7 +46,9 @@
             <td>{{ user.email }}</td>
             <td>{{ user.display_name }}</td>
             <td>
-                {% if user.status == 'invited' %}
+                {% if user.status == 'anonymised' %}
+                <span class="badge badge-secondary">Anonymised</span>
+                {% elif user.status == 'invited' %}
                 <span class="badge badge-secondary">Invited</span>
                 {% elif user.is_active %}
                 <span class="badge badge-success">Active</span>
@@ -57,8 +59,12 @@
             <td>{{ user.roles | join(', ') }}</td>
             <td>
                 <div class="row-actions">
+                    {% if user.status != 'anonymised' %}
                     <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                    {% if user.id == current_user_id %}
+                    {% endif %}
+                    {% if user.status == 'anonymised' %}
+                    <span class="muted">Erased</span>
+                    {% elif user.id == current_user_id %}
                     <span class="muted">(you)</span>
                     {% elif user.is_active %}
                     <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate {{ user.username }}? They are signed out everywhere and cannot sign in until reactivated.">

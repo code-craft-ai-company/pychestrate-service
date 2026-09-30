@@ -73,6 +73,7 @@ SYSTEM_ADMIN_ROLE_NAME: str = "system-admin"
 USER_STATUS_ACTIVE: str = "active"
 USER_STATUS_INACTIVE: str = "inactive"
 USER_STATUS_INVITED: str = "invited"
+USER_STATUS_ANONYMISED: str = "anonymised"
 
 _LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -833,6 +834,7 @@ _TOPIC_USER_CREATED: str = "entity.user.created"
 _TOPIC_USER_UPDATED: str = "entity.user.updated"
 _TOPIC_USER_DEACTIVATED: str = "entity.user.deactivated"
 _TOPIC_USER_REACTIVATED: str = "entity.user.reactivated"
+_TOPIC_USER_ANONYMISED: str = "entity.user.anonymised"
 _TOPIC_ROLE_ASSIGNED: str = "entity.role.assigned"
 _TOPIC_ROLE_REVOKED: str = "entity.role.revoked"
 _TOPIC_ROLE_CREATED: str = "entity.role.created"
@@ -861,7 +863,9 @@ def _user_to_view(
     from ccai.pychestrate.webservice.identity.users.models import UserStatus
 
     is_active = user.status == UserStatus.ACTIVE
-    if user.status == UserStatus.PENDING:
+    if getattr(user, "anonymised_at", None) is not None:
+        status_text = USER_STATUS_ANONYMISED
+    elif user.status == UserStatus.PENDING:
         status_text = USER_STATUS_INVITED
     elif is_active is True:
         status_text = USER_STATUS_ACTIVE
@@ -1317,6 +1321,11 @@ def update_identity_user(
             'User "{}" not found.'.format(user_id)
         )
 
+    if getattr(row, "anonymised_at", None) is not None:
+        raise AdminValidationError(
+            "This account was anonymised: its personal data is gone and it cannot be edited."
+        )
+
     if role_names is None:
         role_names = []
 
@@ -1632,6 +1641,180 @@ def deactivate_identity_user(
     return
 
 
+#: What an anonymised user's display name reads.
+ANONYMISED_DISPLAY_NAME: str = "Anonymised user"
+
+
+def anonymise_identity_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> None:
+    """
+        Erase a deactivated user's personal data in place (ADM-41; ``specs/1-user-management``
+        Requirement 5). The identity row and its id stay, so audit records that reference the
+        user keep resolving; everything that names or authenticates the person goes, in one
+        transaction: the login name, email and display name (replaced by values derived from
+        the id), the external id, the local credentials, password and email-verification
+        tokens, MFA enrolments, sign-in sessions and API tokens, group memberships, direct role
+        bindings and project memberships, and the same fields of the legacy ``user`` mirror.
+
+        Nothing changes when it refuses.
+
+        :param db_session: The active SQLAlchemy session.
+        :param user_id: Target user UUID string.
+        :param actor_user_id: Acting admin UUID.
+
+        :returns: None.
+        :raises: AdminNotFoundError; SelfLockoutError (the acting administrator's own account);
+                 AdminValidationError (not deactivated, already anonymised, owns a project).
+    """
+    from ccai.pychestrate.core.orm import Project as LegacyProject
+    from ccai.pychestrate.core.orm import ProjectMember as LegacyProjectMember
+    from ccai.pychestrate.webservice.identity.users.models import (
+        IdentityEmailVerification,
+        IdentityGroupMembership,
+        IdentityUser,
+        UserStatus,
+    )
+    from ccai.pychestrate.webservice.security.auth.api_tokens.models import AuthApiToken
+    from ccai.pychestrate.webservice.security.auth.models import (
+        AuthLocalCredentials,
+        AuthMfaEnrollment,
+        AuthPasswordToken,
+        AuthSession,
+    )
+    from ccai.pychestrate.webservice.security.rbac.models import PrincipalKind, RbacRoleBinding
+
+    user_uuid = _parse_user_uuid(user_id=user_id)
+    if user_uuid is None:
+        raise AdminNotFoundError('User "{}" not found.'.format(user_id))
+
+    row = db_session.query(IdentityUser).filter(IdentityUser.user_id == user_uuid).first()
+    if row is None:
+        raise AdminNotFoundError('User "{}" not found.'.format(user_id))
+
+    if actor_user_id is not None and str(actor_user_id) == str(user_uuid):
+        raise SelfLockoutError(
+            "You cannot anonymise your own account. Ask another administrator to do it."
+        )
+    if getattr(row, "anonymised_at", None) is not None:
+        raise AdminValidationError("This account is already anonymised; there is nothing left to erase.")
+    if row.status != UserStatus.DEACTIVATED:
+        raise AdminValidationError(
+            'User "{}" is not deactivated. Deactivate the account first: that ends its access and '
+            "can be undone; anonymising cannot.".format(row.login_name)
+        )
+
+    owned = _owned_project_names(db_session=db_session, user_uuid=user_uuid, project_model=LegacyProject)
+    if len(owned) > 0:
+        shown = ", ".join('"{}"'.format(name) for name in owned[:3]) + (" and others" if len(owned) > 3 else "")
+        raise AdminValidationError(
+            'User "{}" owns {} {}. Transfer or delete {} first.'.format(
+                row.login_name, "the project" if len(owned) == 1 else "the projects", shown, "it" if len(owned) == 1 else "them",
+            )
+        )
+
+    hex_id = user_uuid.hex
+    anonymised_login = "anonymised-{}".format(hex_id)
+    anonymised_email = "{}@anonymised.invalid".format(user_uuid)
+    anonymised_at = _utc_now()
+
+    try:
+        row.login_name = anonymised_login
+        row.primary_email = anonymised_email
+        row.display_name = ANONYMISED_DISPLAY_NAME
+        row.external_id = None
+        row.anonymised_at = anonymised_at
+        row.updated_at = anonymised_at
+        db_session.flush()
+
+        _upsert_legacy_mirror(
+            db_session=db_session,
+            user_id=user_uuid,
+            login=anonymised_login,
+            email=anonymised_email,
+            display_name=ANONYMISED_DISPLAY_NAME,
+            firstname="",
+            lastname="",
+            status=_LEGACY_STATUS_INACTIVE,
+            role_names=[],
+        )
+
+        # Sessions first, through the ORM, so each session's client-address row goes with it.
+        for session_row in db_session.query(AuthSession).filter(AuthSession.user_id == user_uuid).all():
+            db_session.delete(session_row)
+        for model, column in (
+            (AuthLocalCredentials, AuthLocalCredentials.user_id),
+            (AuthPasswordToken, AuthPasswordToken.user_id),
+            (AuthMfaEnrollment, AuthMfaEnrollment.user_id),
+            (IdentityEmailVerification, IdentityEmailVerification.user_id),
+            (AuthApiToken, AuthApiToken.user_id),
+            (IdentityGroupMembership, IdentityGroupMembership.user_id),
+        ):
+            db_session.query(model).filter(column == user_uuid).delete(synchronize_session=False)
+        db_session.query(RbacRoleBinding).filter(
+            RbacRoleBinding.principal_kind == PrincipalKind.USER,
+            RbacRoleBinding.principal_id == user_uuid,
+        ).delete(synchronize_session=False)
+        _delete_legacy_memberships(db_session=db_session, user_uuid=user_uuid, member_model=LegacyProjectMember)
+        db_session.flush()
+
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_USER_ANONYMISED,
+            payload={
+                "user_id": str(user_uuid),
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+                "anonymised_at": anonymised_at.isoformat(),
+            },
+        )
+        db_session.commit()
+    except Exception as commit_exc:
+        db_session.rollback()
+        err_msg_lines = ["Failed to anonymise the user."]
+        err_msg_lines.append("USER_ID: {}".format(user_id))
+        err_msg_lines.append("CAUSE: {}".format(str(commit_exc)))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise RuntimeError(err_msg) from commit_exc
+
+    _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
+    return
+
+
+def _owned_project_names(*, db_session: Any, user_uuid: Any, project_model: Any) -> List[str]:
+    """
+        Names of the (web-UI) projects the user owns. An absent legacy table (the development
+        auto-create case) means none.
+    """
+    from sqlalchemy.exc import OperationalError as _OpError
+
+    savepoint = db_session.begin_nested()
+    try:
+        rows = db_session.query(project_model.name).filter(project_model.owner_id == user_uuid).all()
+        savepoint.commit()
+    except _OpError:
+        savepoint.rollback()
+        return []
+    return sorted(str(name) for (name,) in rows)
+
+
+def _delete_legacy_memberships(*, db_session: Any, user_uuid: Any, member_model: Any) -> None:
+    """
+        Remove the user's rows in the legacy project-members table; an absent table is not an error.
+    """
+    from sqlalchemy.exc import OperationalError as _OpError
+
+    savepoint = db_session.begin_nested()
+    try:
+        db_session.query(member_model).filter(member_model.user_id == user_uuid).delete(synchronize_session=False)
+        savepoint.commit()
+    except _OpError:
+        savepoint.rollback()
+    return
+
+
 def _has_local_password(*, db_session: Any, user_uuid: Any) -> bool:
     """
         Whether the user has a local password (an invited user who
@@ -1690,6 +1873,10 @@ def reactivate_identity_user(
     if row is None:
         raise AdminNotFoundError(
             'User "{}" not found.'.format(user_id)
+        )
+    if getattr(row, "anonymised_at", None) is not None:
+        raise AdminValidationError(
+            "This account was anonymised: its personal data is gone and it cannot be reactivated."
         )
     if row.status != UserStatus.DEACTIVATED:
         raise AdminValidationError(
@@ -2522,7 +2709,10 @@ __all__ = [
     "ROLE_HOLDERS_LIMIT",
     "InvitedUser",
     "USER_STATUS_ACTIVE",
+    "USER_STATUS_ANONYMISED",
     "USER_STATUS_INACTIVE",
+    "ANONYMISED_DISPLAY_NAME",
+    "anonymise_identity_user",
     "USER_STATUS_INVITED",
     "reactivate_identity_user",
     "create_identity_user",

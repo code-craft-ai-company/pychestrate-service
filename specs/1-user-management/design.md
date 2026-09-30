@@ -28,6 +28,8 @@ external directory renames never break foreign keys:
 - `provisioning_source: str` — name of the owning
   `user_directory_source` or `"local"`.
 - `external_id: Optional[str]` — stable id provided by the external source.
+- `anonymised_at: Optional[datetime]` — set when the user was anonymised
+  (see *Erasure by anonymisation*); `NULL` for every other user.
 - `timezone: str` — IANA timezone name.
 - `created_at: datetime` / `updated_at: datetime`.
 
@@ -353,12 +355,55 @@ Log events: `user.created`, `user.updated`, `user.deactivated`,
 Trace spans: `user_service.create_user`, `user_service.deactivate_user`,
 `directory_sync.run_directory_sync`.
 
+## Erasure by Anonymisation
+
+Decision (ADM-41): a data-protection request is met by **anonymising the identity
+in place, never by deleting its row.** Audit records, project ownership history and
+role-binding events reference a user by `user_id`; deleting the row would orphan
+every one of them (or, with `ON DELETE SET NULL`, silently rewrite history). The
+row stays, with nothing in it that names a person.
+
+Two steps on purpose. *Deactivate* ends access at once and can be undone;
+*anonymise* is the deliberate, irreversible second act, so it is only offered for a
+deactivated account and the interface asks for the login name to be typed
+(`data-confirm-type`, the same mechanism as deleting a project).
+
+`anonymise_identity_user` runs in one transaction:
+
+| Where | What happens |
+| --- | --- |
+| `identity_users` | `login_name` -> `anonymised-<user_id hex>`, `primary_email` -> `<user_id>@anonymised.invalid`, `display_name` -> "Anonymised user", `external_id` -> `NULL`, `anonymised_at` set; `status` stays `DEACTIVATED` |
+| legacy `user` mirror | login, email, display name, first and last name scrubbed the same way |
+| `auth_local_credentials`, `auth_password_tokens`, `auth_mfa_enrollments`, `identity_email_verifications` | rows deleted |
+| `auth_sessions` (and their clients) | rows deleted (they hold addresses and user agents) |
+| `auth_api_tokens` owned by the user | rows deleted |
+| `identity_group_memberships` | the user's rows deleted (rows where the user only *added* someone keep the id) |
+| `rbac_role_bindings` with the user as a direct principal | rows deleted |
+| project memberships | rows deleted; **refused while the user owns a project** |
+
+Refused, changing nothing: not `DEACTIVATED`; the acting administrator's own
+account; already anonymised; owns a project. The last-administrator rule needs no
+special case: a deactivated account holds no live access, and deactivating the last
+administrator is already refused.
+
+Permission: `system:users.write`, as deactivation. (A separate, rarer permission
+is a follow-up if an installation wants to keep anonymisation to fewer people.)
+
+Known residue, stated so nobody assumes more than is done: audit-log payloads and
+event outbox rows written *before* anonymisation may contain the login name or
+email of the person (for example `entity.user.deactivated` carries `login_name`);
+they are not rewritten. Notification routing rules hold recipient addresses as
+text and are not searched. Both need the retention work in `2-retention-policies`
+(scrubbing by `user_id`), and are listed in tasks.md.
+
 ## Open Questions
 
 - Should `display_name` collisions be allowed? Current design: yes (only
   `login_name` / `primary_email` are unique). Close before Phase 1 cutover.
-- Do we need soft-delete distinct from `DEACTIVATED` for GDPR erasure?
-  Deferred to `2-retention-policies` in Phase 10.
+- ~~Do we need soft-delete distinct from `DEACTIVATED` for GDPR erasure?~~
+  Decided: anonymise in place (see *Erasure by Anonymisation*); scrubbing
+  historical audit and outbox payloads by `user_id` is left to
+  `2-retention-policies`.
 - Group hierarchy: the current model is flat. If Phase 1 ships a demand
   for nested groups, add a self-referential `parent_group_id` column and
   ensure `1-rbac` resolves it before project scoping.

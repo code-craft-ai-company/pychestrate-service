@@ -142,6 +142,14 @@ Users, roles, and permissions
     whether the account is active, invited or inactive, the roles held everywhere, and
     when it was created (at most 5,000 users; a longer list is cut and the download says
     so in its ``X-Export-Truncated`` header).
+    To answer a data-protection request, first **Deactivate** the account (that ends its
+    access and can be undone), then choose **Anonymise** on the user's page. It asks for the
+    login name to be typed and cannot be undone: the name, email address, password, MFA
+    enrolment, sign-in sessions, API tokens, group and project memberships and roles are erased,
+    and the account stays in the list as *Anonymised* so the audit log keeps resolving its id
+    (it no longer names the person). An account that owns a project cannot be anonymised until the
+    project is transferred or deleted; your own account cannot be anonymised. Entries written to
+    the audit log *before* the account was anonymised may still contain the person's login name.
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.

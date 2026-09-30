@@ -34,7 +34,10 @@
         <tr>
             <th scope="row">Status</th>
             <td>
-                {% if user.status == 'invited' %}
+                {% if user.status == 'anonymised' %}
+                <span class="badge badge-secondary">Anonymised</span>
+                <span class="muted small">Personal data erased. It cannot be edited or reactivated; the account's id stays in the audit log.</span>
+                {% elif user.status == 'invited' %}
                 <span class="badge badge-secondary">Invited</span>
                 <span class="muted small">No password yet &mdash; waiting for the user to open their invite link.</span>
                 {% elif user.is_active %}
@@ -61,10 +64,13 @@
 </div>
 
 <div class="actions-row mt">
+    {% if user.status != 'anonymised' %}
     <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-primary">
         {{ ui.icon("edit") }} Edit User
     </a>
-    {% if user.id != current_user_id %}
+    {% endif %}
+    {% if user.status == 'anonymised' %}
+    {% elif user.id != current_user_id %}
     <a href="{{ url_for('config.user_password', user_id=user.id) }}" class="btn btn-secondary">
         {% if user.status == 'invited' %}New invite link{% else %}Reset password{% endif %}
     </a>
@@ -85,6 +91,12 @@
         <input type="hidden" name="return_to" value="detail">
         <button type="submit" class="btn btn-secondary">
             {{ ui.icon("check_circle") }} Reactivate
+        </button>
+    </form>
+    <form action="{{ url_for('config.user_anonymise', user_id=user.id) }}" method="post" data-role="anonymise-form" data-confirm="Anonymise {{ user.username }}? Their name, email address, password, sign-in history, API tokens and memberships are erased permanently. The audit log keeps the account's id but no longer names the person. This cannot be undone." data-confirm-type="{{ user.username }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">
+            {{ ui.icon("delete") }} Anonymise
         </button>
     </form>
     {% endif %}
