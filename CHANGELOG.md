@@ -27,6 +27,15 @@ kept for reference and listed in date order.
 Changes on `main` since `v0.0.7-preview`. They ship with the next
 preview tag.
 
+### Fixed
+
+- A test run is listed under its test's name, not a UUID (ORC-11). The dispatch envelope named a
+  test run after its catalog entry's id (the orchestrator read the display name from the entry's
+  `raw_metadata`, where it is not stored), so every test run in the Runs list, the run page and the
+  CSV export led with a UUID. New runs are dispatched under the entry's display name (an entry with
+  none is still named by its id), and `GET /api/v1/runs` and `/runs/{id}` name an older run, whose
+  envelope holds the id, from the catalog when the entry still exists.
+
 ### Added
 
 - Deleting a project says what goes with it, in numbers, and asks for its name (XC-15). The

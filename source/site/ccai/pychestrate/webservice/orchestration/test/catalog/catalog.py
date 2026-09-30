@@ -172,6 +172,7 @@ def snapshot_for_dispatch(
         param_schema=dict(row.param_schema or {}),
         runner_kind=runner_kind,
         raw_metadata=raw_metadata,
+        display_name=str(row.display_name or ""),
     )
     return rtnval
 

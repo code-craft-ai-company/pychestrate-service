@@ -648,6 +648,39 @@ def test_handle_read_run_returns_404_on_unknown_run():
 # ---------------------------------------------------------------------------
 
 
+def test_run_dict_names_a_test_run_by_its_catalog_entry_when_the_envelope_holds_the_id():
+    """
+    **Feature: run-detail data path (ORC-11)**
+    **Property: a run whose archived envelope names it by the catalog entry's id (how test runs
+    were dispatched before the envelope carried the entry's name) is serialized under the entry's
+    display name; the id is still the ``job_id``.**
+    """
+    from ccai.pychestrate.webservice.orchestration.test.catalog import catalog as test_catalog
+    from ccai.pychestrate.webservice.orchestration.test.catalog.payloads import ImporterEntryPayload
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import build_in_memory_session
+
+    _engine, session = build_in_memory_session()
+    entry = test_catalog.upsert_entry(
+        db_session=session, project_id="00000000-0000-4000-8000-0000000000c2", importer_tag="testbase-project",
+        payload=ImporterEntryPayload(
+            entry_key="k", display_name="Nightly regression", description="", required_capability_tags=(),
+            param_schema={}, raw_metadata={"runner_kind": "testbase"},
+        ),
+    )
+    entry_id = str(entry.entry_id)
+    enrichment = _patch_enrichment(
+        attempts=[_FakeAttempt()],
+        envelope=_FakeEnvelopeRecord(job_id=entry_id, job_name=entry_id),
+    )
+    try:
+        body = runs_routes._run_to_dict(row=_FakeRun(run_id="run-1", state=RunState.COMPLETED), db_session=session)
+    finally:
+        _deactivate_all(enrichment)
+
+    testbase.assert_equal((body["job_name"], body["job_id"]), ("Nightly regression", entry_id))
+    return
+
+
 def test_run_dict_populates_dispatch_progress_and_timing_fields():
     """
     **Feature: run-detail data path**

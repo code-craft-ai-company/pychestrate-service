@@ -91,6 +91,8 @@ class TestCatalogEntrySnapshot:
         :param runner_kind: Resolved runner-kind string copied
                             from ``raw_metadata.runner_kind``.
         :param raw_metadata: Importer passthrough.
+        :param display_name: The entry's display name ("" when it has none); the name
+                             the run is dispatched and listed under.
     """
     entry_id: str
     canonical_digest: str
@@ -98,6 +100,7 @@ class TestCatalogEntrySnapshot:
     param_schema: Mapping[str, Any]
     runner_kind: str
     raw_metadata: Mapping[str, Any]
+    display_name: str = ""
 
 
 @dataclass(frozen=True)

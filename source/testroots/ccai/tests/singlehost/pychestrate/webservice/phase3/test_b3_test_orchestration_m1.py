@@ -370,6 +370,48 @@ def test_orchestrator_signs_the_configured_public_endpoint_into_the_envelope():
     return
 
 
+def test_the_dispatched_job_is_named_by_the_catalog_entry_not_its_id():
+    """
+    **Feature: 6-test-orchestration (M1), ORC-11**
+    **Property: the signed envelope's ``job_name`` is the catalog entry's display name (it was
+    the entry's id, so every test run was listed under a UUID); an entry with no display name is
+    still named by its id.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    names = []
+    for key, display in (("named-entry", "Smoke named-entry"), ("nameless-entry", "")):
+        transport = InMemoryTransport()
+        orchestrator = TestOrchestrator(
+            dispatcher=JobDispatcher(transport=transport),
+            results_backend=SharedResultsBackend(backend_driver="local-test"),
+        )
+        payload = _testbase_payload(key=key)
+        entry = upsert_entry(
+            db_session=session,
+            project_id=PROJECT_UUID,
+            importer_tag="testbase-project",
+            payload=ImporterEntryPayload(
+                entry_key=key, display_name=display, description=payload.description,
+                required_capability_tags=payload.required_capability_tags, param_schema=payload.param_schema, raw_metadata=payload.raw_metadata,
+            ),
+        )
+        orchestrator.trigger_run(
+            db_session=session,
+            request=TriggerRunRequest(
+                project_id=PROJECT_UUID, project_slug=PROJECT_SLUG, catalog_entry_id=entry.entry_id, triggered_by=None,
+                inputs={"includes": ["ccai.tests.singlehost"]}, candidates=_two_eligible_candidates(),
+            ),
+        )
+        names.append((transport.calls()[0].signed.envelope.job_name, entry.entry_id))
+
+    testbase.assert_equal(
+        (names[0][0], names[1][0] == names[1][1]),
+        ("Smoke named-entry", True),
+    )
+    return
+
+
 def test_orchestrator_capability_mismatch_rejects_before_dispatch():
     """
     **Feature: 6-test-orchestration (M1)**

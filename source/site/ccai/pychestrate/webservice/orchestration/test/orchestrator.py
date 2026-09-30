@@ -352,7 +352,9 @@ class TestOrchestrator:
             run_id=run_id,
             project_id=request.project_id,
             job_id=snapshot.entry_id,
-            job_name=snapshot.raw_metadata.get("display_name", snapshot.entry_id) or snapshot.entry_id,
+            # The entry's own display name (a column, not part of raw_metadata): a run named
+            # by its catalog id showed a UUID in every list.
+            job_name=snapshot.display_name or snapshot.raw_metadata.get("display_name", "") or snapshot.entry_id,
             job_type=snapshot.runner_kind,
             issuer=request.issuer or service_issuer(),
             refs=JobRefs(

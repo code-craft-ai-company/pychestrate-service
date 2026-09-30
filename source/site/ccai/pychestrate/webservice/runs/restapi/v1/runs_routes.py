@@ -46,6 +46,7 @@ __version__ = "1.0.0"
 import json
 import logging
 import os
+import uuid
 
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -101,6 +102,7 @@ from ccai.pychestrate.webservice.jobs.cancel.heartbeattransport import (
     acknowledge_client_cancellation,
 )
 from ccai.pychestrate.webservice.jobs.dispatch import repository as dispatch_repo
+from ccai.pychestrate.webservice.orchestration.test.catalog import repository as catalog_repository
 from ccai.pychestrate.webservice.jobs.dispatch.receipt import (
     service as receipt_service,
 )
@@ -538,6 +540,36 @@ def _load_envelope_job_fields(
     return rtnval
 
 
+def _readable_job_name(
+        *,
+        db_session: Any,
+        job_id: Optional[str],
+        job_name: Optional[str]
+    ) -> Optional[str]:
+    """
+        A test run dispatched before the envelope carried the catalog entry's display
+        name has the entry's *id* where its name should be (the list showed a UUID for
+        every test run). When the name is missing or is just the job id, and the job id
+        is a catalog entry, name it from the catalog.
+
+        :param db_session: Active SQLAlchemy session.
+        :param job_id: The envelope's job id.
+        :param job_name: The envelope's job name.
+
+        :returns: The name to show: the envelope's own name unless it was the id.
+    """
+    if job_id is None or (job_name is not None and job_name != job_id):
+        return job_name
+    try:
+        entry_uuid = str(uuid.UUID(str(job_id)))
+    except ValueError:
+        return job_name
+    entry = catalog_repository.find_by_id(db_session=db_session, entry_id=entry_uuid)
+    if entry is not None and len(str(entry.display_name or "")) > 0:
+        return str(entry.display_name)
+    return job_name
+
+
 def _progress_summary_block(
         *,
         db_session: Any,
@@ -853,6 +885,7 @@ def _run_to_dict(
             db_session=db_session,
             envelope_id=str(attempt.envelope_id),
         )
+        job_name = _readable_job_name(db_session=db_session, job_id=job_id, job_name=job_name)
 
     progress_summary = _progress_summary_block(
         db_session=db_session, run_id=run_id,
