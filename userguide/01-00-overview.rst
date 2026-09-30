@@ -49,7 +49,7 @@ How the pieces fit
   which pod runs a job. It stores its state in SQLite (development) or
   Postgres, managed through alembic migrations.
 * **Pods** are machines that run jobs. Each runs the
-  ``pychestrate-client`` agent (a separate repository), which enrolls
+  pod client (``pychestrate-client``, a separate repository), which enrolls
   once and then *pulls* work: it long-polls the service for jobs,
   sends heartbeats, streams progress, and uploads results. The service
   never connects to a pod, so pods can sit behind a firewall.
@@ -97,7 +97,7 @@ Release, release channel, release schedule
 
 Pod and client
     A pod is a machine registered to run jobs; the client is the
-    ``pychestrate-client`` agent running on it. The orchestrator picks
+    ``pychestrate-client`` program running on it. The orchestrator picks
     an eligible pod for each job, and RPA job types can require pods
     with particular capabilities.
 

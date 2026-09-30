@@ -665,8 +665,8 @@ Known limitations
 =================
 
 * **Single host.** The message bus is in-process, so the service runs
-  as one gunicorn process tree on one host; several hosts need the
-  Phase-2 bus.
+  as one gunicorn process tree on one host; several hosts would need a
+  message bus that spans them, which does not exist yet.
 * **No high availability.** Restarting the service drops in-flight
   requests; signed-in sessions survive because they are stored in the
   database.

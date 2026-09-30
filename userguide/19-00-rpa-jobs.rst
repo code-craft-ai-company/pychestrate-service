@@ -85,7 +85,7 @@ The client renders ``workflow.rendered.yaml`` with the work packet as
 the workflow's ``parameters`` (packet keys win over the file's own)
 and the version's environment as its ``environment``, then runs
 ``taskplus workflow run`` as a subprocess. The engine is never imported
-into the client, so a misbehaving workflow cannot take the agent down.
+into the client, so a misbehaving workflow cannot take the client down.
 The pod needs the ``taskplus`` console script on ``PATH``.
 
 Sources

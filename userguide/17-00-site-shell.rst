@@ -1,7 +1,7 @@
 .. _17-00-site-shell:
 
 ***********************************************
-Site Shell -- Unified UI Chrome (Phase 10)
+Site Shell -- Unified UI Chrome
 ***********************************************
 
 Pychestrate's Jenkins-style site shell wraps every authenticated
@@ -18,7 +18,7 @@ breakdown.
 Overview
 ========
 
-The shell sits at the top of Layer 9. It consumes
+The shell is the front of the interface. It consumes
 ``1-authentication`` (session cookie + ``/login`` redirect
 contract), ``1-rbac`` (``GET /api/v1/me/permissions`` and the
 ``system:ui.admin.view`` permission), the navigation manifest
@@ -171,7 +171,7 @@ Window-level events:
 - ``pyc-permissions-fetch-failed`` -- emitted when the
   permission fetch falls through to the degraded banner.
 
-Client metrics beaconed to ``POST /api/v1/_metrics/ui`` (PR p17g):
+Client metrics beaconed to ``POST /api/v1/_metrics/ui``:
 
 - ``pychestrate_ui_shell_tti_seconds`` (histogram) -- emitted once
   on ``pyc-site-shell-ready``.

@@ -216,6 +216,21 @@ preview tag.
 
 ### Changed
 
+- The user guide's operator and user chapters lose project-history jargon (DOC-21).
+  The site shell chapter was titled "(Phase 10)", said the shell "sits at the top of
+  Layer 9" and cited a pull request; the deployment chapter said several hosts need
+  "the Phase-2 bus"; three sentences called the pod client an "agent", which the
+  client's own README says it never is. They now say what they mean.
+  `phase10/test_p32d_user_guide_jargon_m1.py` reads every chapter except the
+  contributor ones (09 to 12: code organisation, coding standards, extensions and
+  the authentication stack, which cite pull requests and phases on purpose) and
+  fails on a pull-request number, a phase or layer number, a milestone code, or
+  "agent". Not done: moving the contributor chapters out of the user manual (the
+  finding on the guide's audience), the module paths in the extension chapters, a
+  user-facing glossary apart from the UI copy style guide, and images or diagrams
+  (there are none). The guide had already lost its spec ids, brand drift and
+  template boilerplate.
+
 - The deployment guide (`deployment/README.md`) is written for any host, not the
   maintainer's (DOC-12). It named the maintainer's machine and account 48 times; it
   now uses `HOST`, `USER` and `PUBLIC_HOSTNAME` placeholders, explained once at

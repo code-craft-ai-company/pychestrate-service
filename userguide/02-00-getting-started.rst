@@ -240,8 +240,8 @@ Next steps
   team on Postgres, behind TLS.
 * `RPA Jobs <19-00-rpa-jobs.rst>`_ -- register an automation and run it
   from a project.
-* Pods run jobs through the ``pychestrate-client`` agent, which lives
-  in its own repository; an administrator creates its one-time
+* Pods run jobs through the pod client (``pychestrate-client``), which
+  lives in its own repository; an administrator creates its one-time
   enrollment token under **Admin**, **Enrollment Tokens**.
 * `CONTRIBUTING.md <../CONTRIBUTING.md>`_ -- run the tests and change
   Pychestrate.
