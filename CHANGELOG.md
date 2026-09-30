@@ -38,6 +38,13 @@ preview tag.
 
 ### Added
 
+- The Users page downloads as a spreadsheet for an access review (ORG-F22). `GET /admin/users?format=csv`
+  (a **Download CSV** button on the page, carrying its current search) returns every matching user, not one
+  page, as a CSV attachment: username, email, display name, status (active, invited, inactive), the roles held
+  everywhere and when the account was created. At most 5,000 users (a longer list is cut and says so in
+  `X-Export-Truncated`); cells a spreadsheet could read as a formula are written as text; it needs the same
+  permission as the page.
+
 - The tab a page is on is in its address (ORC-27). Webhooks (Inbound / Outbound) and Secrets (Org /
   Project / User) always opened on their first tab, so a link to the outbound subscriptions, or a reload
   after choosing them, went back to Inbound. The tab is now read from the address when the page opens

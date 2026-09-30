@@ -60,6 +60,7 @@ __version__ = "1.0.0"
 
 
 from types import SimpleNamespace
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
@@ -666,6 +667,57 @@ def _render_password_page(
 # ---------------------------------------------------------------------------
 
 
+#: The most users one export holds; the file says when it was cut.
+USERS_EXPORT_MAX_ROWS: int = 5000
+
+#: Columns of the users export (``system_roles`` are the roles held everywhere; a role held
+#: only inside a project is on that project's members page).
+USERS_EXPORT_COLUMNS = ("username", "email", "display_name", "status", "system_roles", "created_at")
+
+
+def _users_csv_response(*, db_session: Any, search: Optional[str]) -> Response:
+    """
+        The matching users as a CSV attachment for an access review (ORG-F22): who
+        exists, whether they can sign in, and which roles they hold everywhere. Every
+        user the search matches (not one page), at most :data:`USERS_EXPORT_MAX_ROWS`.
+
+        :param db_session: Open SQLAlchemy session.
+        :param search: The page's ``?search=`` filter, or ``None``.
+
+        :returns: A CSV download.
+    """
+    from ccai.pychestrate.webservice.csv_export import csv_response, render_csv  # noqa: E402
+
+    users: List[Any] = []
+    total = 0
+    while len(users) <= USERS_EXPORT_MAX_ROWS:
+        page = _svc_list_users(
+            db_session=db_session, offset=len(users),
+            limit=min(500, USERS_EXPORT_MAX_ROWS + 1 - len(users)), search=search,
+        )
+        total = page.total
+        if len(page.users) == 0:
+            break
+        users.extend(page.users)
+        if len(users) >= total:
+            break
+    truncated = len(users) > USERS_EXPORT_MAX_ROWS
+    records = [
+        {
+            "username": user.username, "email": user.email, "display_name": user.display_name,
+            "status": user.status, "system_roles": "; ".join(user.roles),
+            "created_at": user.created_at.isoformat() if user.created_at is not None else "",
+        }
+        for user in users[:USERS_EXPORT_MAX_ROWS]
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return csv_response(
+        filename="pychestrate-users-{}.csv".format(stamp),
+        body=render_csv(columns=USERS_EXPORT_COLUMNS, rows=records),
+        truncated=truncated,
+    )
+
+
 def handle_user_list(request: Request) -> Response:
     """
         ``GET /admin/users`` -- paginated list of identity users with
@@ -691,6 +743,9 @@ def handle_user_list(request: Request) -> Response:
             search_arg: Optional[str] = None
         else:
             search_arg = search
+
+        if str(request.query_params.get("format", "") or "").strip().lower() == "csv":
+            return _users_csv_response(db_session=db_session, search=search_arg)
 
         result = _svc_list_users(
             db_session=db_session,

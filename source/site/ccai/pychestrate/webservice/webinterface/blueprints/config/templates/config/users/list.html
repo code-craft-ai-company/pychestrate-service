@@ -18,6 +18,10 @@
         </button>
         <a href="{{ url_for(request_endpoint) }}" class="btn btn-secondary">Clear</a>
     </form>
+
+    <a href="{{ url_for(request_endpoint) }}?format=csv{% if search %}&amp;search={{ search | urlencode }}{% endif %}" class="btn btn-secondary" data-role="download-csv" title="Every {{ 'matching ' if search else '' }}user with the roles they hold everywhere, as a spreadsheet">
+        {{ ui.icon("download") }} Download CSV
+    </a>
     
     <a href="{{ url_for('config.user_create') }}" class="btn btn-primary">
         {{ ui.icon("add") }} Create User

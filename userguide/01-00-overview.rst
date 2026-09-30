@@ -137,6 +137,11 @@ Users, roles, and permissions
     be edited, so copying it is how to get a version you can change. A role's
     page lists who has it (name, username, and whether it applies everywhere or in
     one project) for anyone who may view users; others see only the count.
+    For an access review, **Download CSV** on the **Users** page saves every user the
+    search matches (not one page) as a spreadsheet: username, email, display name,
+    whether the account is active, invited or inactive, the roles held everywhere, and
+    when it was created (at most 5,000 users; a longer list is cut and the download says
+    so in its ``X-Export-Truncated`` header).
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.
