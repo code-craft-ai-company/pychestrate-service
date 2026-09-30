@@ -302,6 +302,12 @@ def _build_consumer_ui_test_app() -> Any:
     rtnval = create_wsgi_application(
         config={"handler": build_wsgi_compat_dispatch(app=app)}
     )
+    # As in the production builders: a form posted after the sign-in or its token
+    # expired comes back filled in (XC-11).
+    from ccai.pychestrate.webservice.webinterface.foundation.form_drafts import (  # noqa: E402
+        wrap_wsgi_app_with_form_capture,
+    )
+    rtnval = wrap_wsgi_app_with_form_capture(wsgi_app=rtnval)
     return rtnval
 
 

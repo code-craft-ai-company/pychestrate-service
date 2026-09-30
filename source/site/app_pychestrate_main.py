@@ -273,6 +273,9 @@ from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
 from ccai.pychestrate.webservice.clients.mtls_identity import (
     install_client_certificate_identity,
 )
+from ccai.pychestrate.webservice.webinterface.foundation.form_drafts import (
+    wrap_wsgi_app_with_form_capture,
+)
 from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
 from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
@@ -670,6 +673,8 @@ def pychestrate_website_main():
     # Cookies carry ``Secure`` for HTTPS requests (direct or through a
     # trusted proxy) and always in production; see cookie_session.
     wsgi_app = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=wsgi_app)
+    # A form posted after the sign-in or its token expired comes back filled in (XC-11).
+    wsgi_app = wrap_wsgi_app_with_form_capture(wsgi_app=wsgi_app)
     # Platform layers (security headers + CSP nonce, request metrics)
     # see every response.
     wsgi_app = wrap_platform_wsgi_application(
@@ -753,6 +758,8 @@ def build_wsgi_application_for_production():
     # Cookies carry ``Secure`` for HTTPS requests (direct or through a
     # trusted proxy) and always in production; see cookie_session.
     rtnval = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=rtnval)
+    # A form posted after the sign-in or its token expired comes back filled in (XC-11).
+    rtnval = wrap_wsgi_app_with_form_capture(wsgi_app=rtnval)
     # Platform layers (security headers + CSP nonce, request metrics)
     # see every response.
     rtnval = wrap_platform_wsgi_application(

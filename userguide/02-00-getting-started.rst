@@ -218,6 +218,25 @@ What the UI Shows <20-00-ui-profiles.rst>`_ explains the deployment-wide
 setting an administrator controls.
 
 
+If a form expires while you fill it in
+======================================
+
+A session ends after a period without activity, and a form's anti-forgery token
+can go stale if the page stays open a long time. If you submit a form then, the
+service does not throw away what you typed. It keeps the text fields for ten
+minutes and, once you are signed in again, opens the same form with them put back
+and a notice saying so; check them and submit again. This covers the project,
+resource, user and role forms and the RPA job type form.
+
+Some things are deliberately not kept: anything in a field whose name suggests a
+secret (a password, a token, a key), forms that hold secrets (Secrets, Variables,
+API tokens, enrollment tokens and the sign-in pages), and, when the form is put
+back, tick boxes, passwords and lists that take several choices, which you choose
+again. The text is stored on the service, not in your browser, and is deleted as
+soon as the form has been filled in again or after ten minutes, whichever comes
+first.
+
+
 Stop or start over
 ==================
 

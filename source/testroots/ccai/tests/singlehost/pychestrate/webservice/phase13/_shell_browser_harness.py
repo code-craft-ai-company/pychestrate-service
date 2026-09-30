@@ -132,7 +132,7 @@ def bundle_stylesheets_for(bundle_names: List[str]) -> List[str]:
     return rtnval
 
 
-def render_shell_html(*, path: str, bundle_names: List[str], admin_contact: str = "") -> str:
+def render_shell_html(*, path: str, bundle_names: List[str], admin_contact: str = "", content_html: str = "", form_draft: Optional[List[List[str]]] = None) -> str:
     """
         Render the site-shell document the way
         ``render_shell_document`` does for ``path``.
@@ -142,6 +142,9 @@ def render_shell_html(*, path: str, bundle_names: List[str], admin_contact: str 
                              first).
         :param admin_contact: The access contact the document carries
                               (``PYCHESTRATE_ADMIN_CONTACT``); empty for none.
+        :param content_html: A server-rendered page fragment for the main slot.
+        :param form_draft: ``[[name, value], ...]`` the server would hand back
+                           after an expired form (XC-11), or ``None``.
 
         :returns: HTML text.
     """
@@ -152,7 +155,8 @@ def render_shell_html(*, path: str, bundle_names: List[str], admin_contact: str 
         "initial_route": path,
         "bundle_names": list(bundle_names),
         "bundle_stylesheets": bundle_stylesheets_for(bundle_names),
-        "content_html": "",
+        "content_html": content_html,
+        "form_draft": form_draft,
         "csrf_token": "test-csrf-token",
         "user_display_name": SHELL_USER_DISPLAY_NAME,
         "user_login_name": SHELL_USER_LOGIN_NAME,
@@ -203,7 +207,9 @@ def install_site_routes(
         bundle_names: List[str],
         api_stubs: Optional[ApiStubs] = None,
         blocked_paths: Optional[List[str]] = None,
-        admin_contact: str = ""
+        admin_contact: str = "",
+        content_html: str = "",
+        form_draft: Optional[List[List[str]]] = None
     ) -> None:
     """
         Route every request to :data:`FAKE_ORIGIN` for a browser
@@ -219,6 +225,8 @@ def install_site_routes(
         :param blocked_paths: Paths whose requests are aborted (to
                               observe the page before a script runs).
         :param admin_contact: The access contact the shell document carries.
+        :param content_html: A server-rendered page fragment for the main slot.
+        :param form_draft: The draft the server would hand back (XC-11), or ``None``.
 
         :returns: None.
     """
@@ -265,7 +273,7 @@ def install_site_routes(
                 "body": b"<!DOCTYPE html><title>fixture</title>",
             }
         else:
-            html = render_shell_html(path=path, bundle_names=bundle_names, admin_contact=admin_contact)
+            html = render_shell_html(path=path, bundle_names=bundle_names, admin_contact=admin_contact, content_html=content_html, form_draft=form_draft)
             response = {
                 "status": 200,
                 "headers": {"Content-Type": "text/html; charset=utf-8"},
@@ -289,6 +297,8 @@ def open_shell_page(
         api_stubs: Optional[ApiStubs] = None,
         blocked_paths: Optional[List[str]] = None,
         wait_for_ready: bool = True,
+        content_html: str = "",
+        form_draft: Optional[List[List[str]]] = None,
         **context_options: Any
     ) -> Any:
     """
@@ -303,6 +313,8 @@ def open_shell_page(
                           :func:`install_site_routes`).
         :param blocked_paths: Paths whose requests are aborted.
         :param wait_for_ready: Wait for the shell ready flag.
+        :param content_html: A server-rendered page fragment for the main slot.
+        :param form_draft: The draft the server would hand back (XC-11), or ``None``.
         :param context_options: ``browser.new_context`` options
                                 (``viewport``, ``color_scheme``,
                                 ``has_touch`` ...).
@@ -317,6 +329,8 @@ def open_shell_page(
         bundle_names=names,
         api_stubs=api_stubs,
         blocked_paths=blocked_paths,
+        content_html=content_html,
+        form_draft=form_draft,
     )
     page = context.new_page()
     page.set_default_timeout(READY_TIMEOUT_MS)

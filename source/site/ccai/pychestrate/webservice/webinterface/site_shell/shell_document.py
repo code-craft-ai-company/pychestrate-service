@@ -38,6 +38,7 @@ from ccai.pychestrate.webservice.webinterface.foundation.templating import (
     render_template_response,
 )
 
+from ccai.pychestrate.webservice.webinterface.foundation import form_drafts
 from ccai.pychestrate.webservice.webinterface.site_shell.admin_contact import admin_contact
 from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import (
     bundles_for,
@@ -191,6 +192,8 @@ def render_shell_document(
 
     session_view = _read_shell_session(request=request)
     context: Dict[str, Any] = {
+        # What the person had typed when their sign-in or form token expired, to put back (XC-11).
+        "form_draft": _form_draft_for(request=request, path=path, signed_in=len(str(session_view.get("username", ""))) > 0),
         "page_title": page_title,
         "initial_route": path if len(path) > 0 else "/",
         "bundle_names": bundle_names,
@@ -208,6 +211,31 @@ def render_shell_document(
         context=context,
     )
     return rtnval
+
+
+def _form_draft_for(*, request: Any, path: str, signed_in: bool) -> Optional[List[List[str]]]:
+    """
+        The draft the address names, taken (read once and deleted) for a signed-in person on the
+        path it was saved for; ``None`` when there is none. See :mod:`foundation.form_drafts`.
+
+        :param request: Incoming webworks request.
+        :param path: The request path.
+        :param signed_in: Whether the request carries a signed-in session.
+
+        :returns: ``[[name, value], ...]`` or ``None``.
+    """
+    if signed_in is False or request is None:
+        return None
+    try:
+        token = request.query_params.get(form_drafts.DRAFT_QUERY_PARAM, None)
+    except Exception:  # noqa: BLE001 -- a request without query parameters
+        return None
+    if not isinstance(token, str) or len(token) == 0:
+        return None
+    pairs = form_drafts.take_draft(token=token, path=path)
+    if pairs is None or len(pairs) == 0:
+        return None
+    return [[name, value] for name, value in pairs]
 
 
 def _user_guide_url_for_shell() -> str:

@@ -68,5 +68,9 @@
         {{ content_html|safe }}
         {%- endif %}
     </pyc-site-shell>
+    {%- if form_draft is defined and form_draft %}
+    {#- What was typed before the sign-in or form token expired: data, never run; the shell puts it back (XC-11). #}
+    <script type="application/json" id="pyc-form-draft">{{ form_draft|tojson }}</script>
+    {%- endif %}
 </body>
 </html>

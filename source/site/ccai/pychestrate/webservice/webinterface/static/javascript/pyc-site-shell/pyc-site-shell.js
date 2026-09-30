@@ -1,4 +1,5 @@
 import { build_empty_state } from "./chrome/empty-state.js";
+import { draft_notice_message, restore_form_draft } from "./chrome/form-draft.js";
 import {
   build_flash_notice,
   extract_flash_messages
@@ -349,6 +350,13 @@ class PycSiteShell extends HTMLElement {
     layout.appendChild(main);
     this._main_region = main;
     this.appendChild(layout);
+    // What the person had typed before their sign-in or the form's token expired (XC-11).
+    const restored_draft = restore_form_draft(document);
+    if (restored_draft !== null) {
+      const draft_notice = build_flash_notice({ severity: "info", message: draft_notice_message(restored_draft) });
+      draft_notice.setAttribute("data-role", "draft-restored");
+      notices.appendChild(draft_notice);
+    }
     this._degraded_banner = new DegradedBanner(main);
     this._nav_degraded_banner = new DegradedBanner(
       main,

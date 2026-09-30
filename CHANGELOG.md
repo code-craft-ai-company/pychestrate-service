@@ -29,6 +29,32 @@ preview tag.
 
 ### Added
 
+- A form that expires no longer throws away what was typed (XC-11). A form submitted
+  after the sign-in cookie expired, or with a stale anti-forgery token, answered with
+  a redirect to the sign-in page (a `GET`, so the text was gone) or to an empty form
+  with "Invalid request. Please try again."; a long build specification or release
+  template was lost. The service now keeps the fields for ten minutes in a new
+  `ui_form_drafts` table (Alembic revision `d8e1f4a7b203`; only a SHA-256 digest of
+  the draft's token is stored, an expired row is removed whenever another draft is
+  saved, and a draft is read once and deleted) and carries the token through the
+  redirect (for a sign-in, inside its `next`, so it survives signing in). When the
+  page is rendered for the signed-in person it hands the draft over as data, and the
+  shell fills the form and says so. Kept: text-like fields, text areas and
+  single-choice lists of the project, resource, user, role and RPA job type forms.
+  Never kept: a field whose name says password, secret, token, credential, csrf,
+  pepper, otp, mfa or private; anything on the Secrets, Variables, API token,
+  enrollment token, sign-in or password pages (only the form paths on an allow-list
+  are captured at all); tick boxes, passwords and multi-choice lists are not
+  restored, and the notice says to choose them again. This is a server-side draft,
+  so the "only two `localStorage` keys" rule of the site shell is unchanged. Tests:
+  `phase10/test_p32k_form_drafts_m1.py` (the store, the filters, the redirect
+  addresses, the WSGI capture, a stale token and an expired sign-in through the
+  application) and `phase13/test_p32l_form_draft_restore_m1.py` (the restore in a
+  browser). Not done: forms posted as `multipart/form-data`, the bundle views' own
+  forms (they call the REST API and already report a 401 as "session expired"
+  without clearing their fields), restoring tick boxes and multi-choice lists, and
+  a "discard" control on the notice (reloading without `?draft=` is the way out).
+
 - Run failures and completions can now be sent as notifications (ORG-F08). Nothing
   was ever sent: `dispatch_envelope` had no caller, routing rules could be stored
   but not created through the API, and the Webhooks, Alert Rules and Notifications

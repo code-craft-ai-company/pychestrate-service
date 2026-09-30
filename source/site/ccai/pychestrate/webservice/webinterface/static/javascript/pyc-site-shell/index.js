@@ -43,6 +43,101 @@ function build_empty_state(options) {
   return panel;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/form-draft.js
+var DRAFT_ISLAND_ID = "pyc-form-draft";
+var TEXT_INPUT_TYPES = ["", "text", "search", "url", "tel", "email", "number", "date", "datetime-local", "time", "month", "week"];
+var NOT_RESTORED_TYPES = ["checkbox", "radio", "password", "file"];
+function read_draft_pairs(doc) {
+  const island = doc.getElementById(DRAFT_ISLAND_ID);
+  if (island === null) {
+    return [];
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(island.textContent);
+  } catch (reason) {
+    return [];
+  }
+  if (Array.isArray(parsed) === false) {
+    return [];
+  }
+  return parsed.filter((pair) => Array.isArray(pair) === true && pair.length === 2 && typeof pair[0] === "string" && typeof pair[1] === "string");
+}
+function restorable(control) {
+  const tag = control.tagName.toLowerCase();
+  if (tag === "textarea") {
+    return true;
+  }
+  if (tag === "select") {
+    return control.multiple === false;
+  }
+  if (tag === "input") {
+    return TEXT_INPUT_TYPES.indexOf((control.getAttribute("type") || "").toLowerCase()) >= 0;
+  }
+  return false;
+}
+function set_value(control, value) {
+  if (control.tagName.toLowerCase() === "select") {
+    const has_option = Array.from(control.options).some((option) => option.value === value);
+    if (has_option === false) {
+      return false;
+    }
+  }
+  control.value = value;
+  control.dispatchEvent(new Event("input", { bubbles: true }));
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+function restore_form_draft(doc) {
+  const pairs = read_draft_pairs(doc);
+  if (pairs.length === 0) {
+    return null;
+  }
+  const names = new Set(pairs.map((pair) => pair[0]));
+  let target = null;
+  for (const form of Array.from(doc.querySelectorAll("form"))) {
+    if (Array.from(form.elements).some((control) => names.has(control.name) && restorable(control))) {
+      target = form;
+      break;
+    }
+  }
+  if (target === null) {
+    return null;
+  }
+  let restored = 0;
+  const seen = /* @__PURE__ */ new Set();
+  for (const [name, value] of pairs) {
+    if (seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    const controls = Array.from(target.elements).filter((control) => control.name === name && restorable(control));
+    if (controls.length === 1 && set_value(controls[0], value) === true) {
+      restored += 1;
+    }
+  }
+  const needs_choosing = Array.from(target.elements).some((control) => {
+    const type = (control.getAttribute("type") || "").toLowerCase();
+    return NOT_RESTORED_TYPES.indexOf(type) >= 0 || control.tagName.toLowerCase() === "select" && control.multiple === true;
+  });
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("draft") === true) {
+      url.searchParams.delete("draft");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+  } catch (reason) {
+  }
+  return { form: target, restored, needs_choosing };
+}
+function draft_notice_message(outcome) {
+  let text = "Your session or the form had expired. What you had typed has been put back. Check it, then submit again.";
+  if (outcome.needs_choosing === true) {
+    text += " Tick boxes, passwords and lists that take several choices are not restored: choose them again.";
+  }
+  return text;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/flash-notices.js
 var FLASH_SELECTOR = "div.alert.alert-success, div.alert.alert-error, div.alert.alert-danger, div.alert.alert-warning, div.alert.alert-info";
 var CATEGORY_TO_SEVERITY = {
@@ -4023,6 +4118,12 @@ var PycSiteShell = class extends HTMLElement {
     layout.appendChild(main);
     this._main_region = main;
     this.appendChild(layout);
+    const restored_draft = restore_form_draft(document);
+    if (restored_draft !== null) {
+      const draft_notice = build_flash_notice({ severity: "info", message: draft_notice_message(restored_draft) });
+      draft_notice.setAttribute("data-role", "draft-restored");
+      notices.appendChild(draft_notice);
+    }
     this._degraded_banner = new DegradedBanner(main);
     this._nav_degraded_banner = new DegradedBanner(
       main,

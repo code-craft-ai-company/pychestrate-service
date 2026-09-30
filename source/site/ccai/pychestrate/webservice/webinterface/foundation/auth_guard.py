@@ -44,6 +44,7 @@ from ccai.webworks.routing.response import RedirectResponse, Response
 from ccai.pychestrate.webservice.webinterface.foundation import (
     csrf as _csrf_helpers,
     flash as _flash_helpers,
+    form_drafts as _form_drafts,
 )
 
 
@@ -104,7 +105,8 @@ def require_login_or_redirect(
             category=flash_category,
         )
 
-    rtnval = RedirectResponse(url=login_url, status_code=302)
+    # What the person had typed is kept and carried through the sign-in (XC-11).
+    rtnval = RedirectResponse(url=_form_drafts.attach_draft(login_url), status_code=302)
     return rtnval
 
 
@@ -154,7 +156,8 @@ def enforce_csrf_or_redirect(
             category=flash_category,
         )
 
-    rtnval = RedirectResponse(url=fallback_url, status_code=302)
+    # ... and here, so the form comes back filled in (XC-11).
+    rtnval = RedirectResponse(url=_form_drafts.attach_draft(fallback_url), status_code=302)
     return rtnval
 
 

@@ -500,6 +500,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "back_link": _by_mode(("Back to Users", "/admin/users"), None),
     "user_guide_url": _by_mode("/docs/", ""),
     "admin_contact": _by_mode("ops@lab.example", ""),
+    "form_draft": _by_mode([["name", "Sample"], ["description", "Typed before the form expired"]], None),
     "initial_route": _const("/"),
     "next_target": _const("/"),
 

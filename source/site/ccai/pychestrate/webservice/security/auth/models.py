@@ -169,6 +169,31 @@ class AuthPasswordToken(PychestratePhase1Base, SerializableModel):
     )
 
 
+class UiFormDraft(PychestratePhase1Base, SerializableModel):
+    """
+        What a person had typed into a form when their sign-in or its anti-forgery
+        token expired, kept for a few minutes so the form can be filled in again
+        after they sign back in (XC-11). Only the SHA-256 digest of the draft's
+        token is stored; the token travels in the address of the page the person
+        is sent back to. A draft is read once and deleted, and a stale one is
+        removed whenever another is saved. Field names that could hold a secret
+        are never stored.
+    """
+
+    __tablename__ = "ui_form_drafts"
+
+    draft_id = Column(UUIDType(binary=False), primary_key=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    path = Column(String(512), nullable=False)
+    fields = Column(JSON, nullable=False, default=list)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_ui_form_drafts_expires", "expires_at"),
+    )
+
+
 class AuthSamlReplayCache(PychestratePhase1Base, SerializableModel):
     """
         Replay cache keyed on ``Response/@ID`` to block SAML replay.
