@@ -1238,7 +1238,7 @@ def test_updates_page_is_titled_pychestrate_updates(bundle_browser: ThreadedBrow
 
     heading, intro = bundle_browser.run(_scenario)
     testbase.assert_equal(
-        (heading, intro.startswith("Releases of the Pychestrate service and agent")),
+        (heading, intro.startswith("Releases of the Pychestrate service and its pod client")),
         ("Pychestrate Updates", True),
     )
     return

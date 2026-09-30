@@ -3,7 +3,7 @@ import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 const UPDATES_HEADING = "Pychestrate Updates";
-const UPDATES_INTRO = "Releases of the Pychestrate service and agent, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
+const UPDATES_INTRO = "Releases of the Pychestrate service and its pod client, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
 const RELEASE_CHANNEL_VALUES = [
   "canary",
   "beta",

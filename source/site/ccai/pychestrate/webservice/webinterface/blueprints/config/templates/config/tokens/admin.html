@@ -104,7 +104,7 @@
             </td>
         </tr>
         {% else %}
-        {{ ui.empty_state("No service accounts yet", hint="Create one for each CI system or agent that calls the API.", colspan=6) }}
+        {{ ui.empty_state("No service accounts yet", hint="Create one for each CI system or script that calls the API.", colspan=6) }}
         {% endfor %}
     </tbody>
 </table></div>

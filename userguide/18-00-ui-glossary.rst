@@ -52,6 +52,29 @@ Nouns
     The organising unit for repositories, specifications, jobs,
     releases, and members.
 
+``Pod`` / ``Client``
+    A pod is a machine registered to run jobs. The client is the
+    ``pychestrate-client`` program running on it: it enrolls once, then
+    pulls work, sends heartbeats and progress, and uploads results. Copy
+    says *client* or *pod client*, never *agent*. The word survives only in
+    the name ``agent rollout``, an API resource for updating clients, which
+    is not usable yet.
+
+``Pychestrate updates``
+    Releases of the Pychestrate service and its pod client, published to
+    the canary, beta and stable channels that installations follow (Admin,
+    **Pychestrate Updates**). A project's own releases and channels are a
+    different thing: see ``Release`` / ``Release channel`` below, which
+    live under the project.
+
+``Environment``
+    A target that builds and provisioning runs act on, registered under
+    Orchestration, **Environments** (for example a Kubernetes cluster).
+    Not the *environment variables* a build or job runs with (key and value
+    settings on its specification), and not the service's *runtime
+    environment*, the ``PYCHESTRATE_RUNTIME_ENVIRONMENT`` setting
+    (``production``, ``staging``, ``testing`` or ``development``).
+
 ``Build specification`` / ``Infrastructure specification`` / ``Test specification``
     The saved definition a job runs from. Abbreviate to ``spec`` only
     inside a table column header where space is short, never in a
@@ -92,7 +115,9 @@ Nouns
     and a CIDR range whose addresses are checked out individually.
 
 ``Allocation`` / ``Reservation``
-    A current check-out and a future one.
+    An allocation is a current check-out. A reservation is a future-dated
+    claim on a resource; it becomes an allocation when it is checked out,
+    and is never itself the check-out.
 
 ``Member``
     A user with a role on a project (``owner``, ``admin``,

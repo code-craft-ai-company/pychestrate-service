@@ -2137,7 +2137,7 @@ var PycWebhooks = class extends HTMLElement {
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/release-channels-view.js
 var RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 var UPDATES_HEADING = "Pychestrate Updates";
-var UPDATES_INTRO = "Releases of the Pychestrate service and agent, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
+var UPDATES_INTRO = "Releases of the Pychestrate service and its pod client, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
 var RELEASE_CHANNEL_VALUES = [
   "canary",
   "beta",

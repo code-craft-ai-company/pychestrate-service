@@ -34,11 +34,15 @@ from ccai import testbase
 #: Chapters for people who change the service; the lint does not read them.
 CONTRIBUTOR_CHAPTER = re.compile(r"^(09|10|11|12)-")
 
+#: The glossary states the rule against "agent", so it has to say the word.
+AGENT_RULE = "\"agent\" for the pod client"
+AGENT_RULE_EXEMPT = ("18-00-ui-glossary.rst",)
+
 RULES = {
     "a pull request number": re.compile(r"\bPR ?#?\d+|\bPR p\d+[a-z]*"),
     "an implementation phase or layer": re.compile(r"\b(?:Phase|Layer)[ -]?\d+"),
     "a milestone code": re.compile(r"\bM\d\b"),
-    "\"agent\" for the pod client": re.compile(r"\bagent\b(?! rollout)", re.I),
+    AGENT_RULE: re.compile(r"\bagent\b(?! rollout)", re.I),
 }
 
 
@@ -60,6 +64,8 @@ def _findings(chapters: Dict[str, str]) -> Dict[str, List[str]]:
     for name, text in chapters.items():
         prose = re.sub(r"::\n(?:(?:[ \t]+.*)?\n)+", "\n", text)
         for rule, pattern in RULES.items():
+            if rule == AGENT_RULE and name in AGENT_RULE_EXEMPT:
+                continue
             if pattern.search(prose) is not None:
                 found.setdefault(rule, []).append(name)
     return found

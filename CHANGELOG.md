@@ -216,6 +216,25 @@ preview tag.
 
 ### Changed
 
+- The words that meant several things are defined, and the interface uses one for
+  each (ORG-F21). The UI glossary now defines *Pod* and *Client* (the client is the
+  `pychestrate-client` program on a pod, and copy never calls it an "agent"; the word
+  survives only in `agent rollout`, an API resource that is not usable yet),
+  *Pychestrate updates* (releases of the service and its pod client, published to the
+  canary, beta and stable channels, apart from a project's own releases and channels),
+  *Environment* (a deployment target, apart from environment variables and the
+  service's runtime environment), and says a *reservation* is a future-dated claim and
+  never the check-out itself. The Pychestrate Updates page, the API tokens pages and
+  the service accounts hint said "agent"; they say "pod client" or "script". The
+  sidebar entry that used to read "Release Channels" for Pychestrate's own updates was
+  already renamed "Pychestrate Updates" (ORC-31).
+  `phase10/test_p32e_core_terms_m1.py` checks the glossary keeps the definitions and
+  that no bundle view or server-rendered template says "agent" (identifiers such as
+  `agent-rollouts` and `agent-runtime` are not matched). Not done: the publish form's
+  component example is still `agent-runtime` (a component identifier the API accepts),
+  the `agent-rollouts` API path and permission names, and a check that the words are
+  used the same way in the REST API's descriptions.
+
 - The user guide's operator and user chapters lose project-history jargon (DOC-21).
   The site shell chapter was titled "(Phase 10)", said the shell "sits at the top of
   Layer 9" and cited a pull request; the deployment chapter said several hosts need
