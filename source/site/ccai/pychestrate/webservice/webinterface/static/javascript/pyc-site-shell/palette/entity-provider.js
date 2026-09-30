@@ -1,6 +1,7 @@
 /*
- * Palette providers beyond navigation (XC-17): projects by name, a run or
- * build by its id, and actions.
+ * Palette providers beyond navigation (XC-17): projects by name, users by login
+ * or display name (for those who may list users), a run or build by its id, and
+ * actions.
  *
  * The palette found only navigation entries, so "checkout", a project's name,
  * "create", "sign out" and "theme" all answered "No results". These providers
@@ -15,11 +16,15 @@
  */
 
 const PROJECTS_PROVIDER_ID = "shell.projects";
+const USERS_PROVIDER_ID = "shell.users";
 const RECORDS_PROVIDER_ID = "shell.records";
 const ACTIONS_PROVIDER_ID = "shell.actions";
 const PROJECTS_URL = "/api/v1/projects?per_page=500";
 const PROJECTS_CACHE_MS = 60 * 1000;
 const PROJECT_RESULT_LIMIT = 6;
+const USERS_URL = "/api/v1/identity/users";
+const USERS_PERMISSION = "system:users.read";
+const USER_RESULT_LIMIT = 6;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /*
@@ -45,7 +50,7 @@ function normalise(text) {
   return typeof text === "string" ? text.trim().toLowerCase() : "";
 }
 
-/* Register the projects, records and actions providers on ``palette``. */
+/* Register the projects, users, records and actions providers on ``palette``. */
 export function register_entity_palette_providers(palette, options) {
   let cached = null;
   let cached_at = 0;
@@ -104,6 +109,43 @@ export function register_entity_palette_providers(palette, options) {
         const slug = typeof project.slug === "string" && project.slug.length > 0 ? project.slug : project.project_id;
         return { id: "project:" + project.project_id, label: shown, description: "Project · " + slug, route: "/projects/" + encodeURIComponent(slug) };
       });
+    },
+  });
+
+  // Users: asked of the server (a substring of the login or display name), and only
+  // offered to someone who may list users, so a person is never shown a source
+  // they could not open (the palette drops a provider whose permission is missing).
+  palette.registerProvider({
+    providerId: USERS_PROVIDER_ID,
+    label: "Users",
+    requiredPermissions: [USERS_PERMISSION],
+    query: async (query) => {
+      const wanted = typeof query === "string" ? query.trim() : "";
+      if (wanted.length < 2) {
+        return [];
+      }
+      let items = [];
+      try {
+        const response = await fetch(USERS_URL + "?per_page=" + String(USER_RESULT_LIMIT) + "&q=" + encodeURIComponent(wanted), {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        if (response.ok === true) {
+          const body = await response.json();
+          items = body !== null && Array.isArray(body.items) ? body.items : [];
+        }
+      } catch (reason) {
+        items = [];
+      }
+      return items
+        .filter((item) => item !== null && typeof item === "object" && typeof item.user_id === "string" && typeof item.login_name === "string")
+        .slice(0, USER_RESULT_LIMIT)
+        .map((user) => {
+          const shown = typeof user.display_name === "string" && user.display_name.length > 0 ? user.display_name : user.login_name;
+          const state = typeof user.status === "string" && user.status === "DEACTIVATED" ? " · deactivated" : "";
+          return { id: "user:" + user.user_id, label: shown, description: "User · " + user.login_name + state, route: "/admin/users/" + encodeURIComponent(user.user_id) };
+        });
     },
   });
 

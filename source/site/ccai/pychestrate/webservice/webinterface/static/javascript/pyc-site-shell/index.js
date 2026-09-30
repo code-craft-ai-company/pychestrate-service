@@ -2115,11 +2115,15 @@ function _is_subsequence(needle, haystack) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/palette/entity-provider.js
 var PROJECTS_PROVIDER_ID = "shell.projects";
+var USERS_PROVIDER_ID = "shell.users";
 var RECORDS_PROVIDER_ID = "shell.records";
 var ACTIONS_PROVIDER_ID = "shell.actions";
 var PROJECTS_URL2 = "/api/v1/projects?per_page=500";
 var PROJECTS_CACHE_MS = 60 * 1e3;
 var PROJECT_RESULT_LIMIT = 6;
+var USERS_URL = "/api/v1/identity/users";
+var USERS_PERMISSION = "system:users.read";
+var USER_RESULT_LIMIT = 6;
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var ACTIONS = [
   { label: "Create a project", words: "new add project", route: "/projects/create", needs: "/projects" },
@@ -2190,6 +2194,36 @@ function register_entity_palette_providers(palette, options) {
         const shown = typeof project.display_name === "string" && project.display_name.length > 0 ? project.display_name : project.slug;
         const slug = typeof project.slug === "string" && project.slug.length > 0 ? project.slug : project.project_id;
         return { id: "project:" + project.project_id, label: shown, description: "Project \xB7 " + slug, route: "/projects/" + encodeURIComponent(slug) };
+      });
+    }
+  });
+  palette.registerProvider({
+    providerId: USERS_PROVIDER_ID,
+    label: "Users",
+    requiredPermissions: [USERS_PERMISSION],
+    query: async (query) => {
+      const wanted = typeof query === "string" ? query.trim() : "";
+      if (wanted.length < 2) {
+        return [];
+      }
+      let items = [];
+      try {
+        const response = await fetch(USERS_URL + "?per_page=" + String(USER_RESULT_LIMIT) + "&q=" + encodeURIComponent(wanted), {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        });
+        if (response.ok === true) {
+          const body = await response.json();
+          items = body !== null && Array.isArray(body.items) ? body.items : [];
+        }
+      } catch (reason) {
+        items = [];
+      }
+      return items.filter((item) => item !== null && typeof item === "object" && typeof item.user_id === "string" && typeof item.login_name === "string").slice(0, USER_RESULT_LIMIT).map((user) => {
+        const shown = typeof user.display_name === "string" && user.display_name.length > 0 ? user.display_name : user.login_name;
+        const state = typeof user.status === "string" && user.status === "DEACTIVATED" ? " \xB7 deactivated" : "";
+        return { id: "user:" + user.user_id, label: shown, description: "User \xB7 " + user.login_name + state, route: "/admin/users/" + encodeURIComponent(user.user_id) };
       });
     }
   });

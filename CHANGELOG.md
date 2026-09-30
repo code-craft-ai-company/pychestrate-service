@@ -251,6 +251,18 @@ preview tag.
 
 ### Changed
 
+- The command palette finds users (XC-17). It found pages, projects, a run or build
+  by its full id and a few actions, but not the "username" the finding gives as an
+  example. For someone who holds `system:users.read`, typing at least two characters
+  of a login or display name now lists the matching users under "Users" (up to six,
+  with the login and a "deactivated" mark in the description), and choosing one opens
+  its admin page. The search is the server's (`GET /api/v1/identity/users?q=`, added
+  for the user pickers), so it is a literal substring match and needs no list held in
+  the browser. Someone without the permission gets no Users source and no request is
+  made; a failed request shows no heading and no error. Not done: resources are still
+  not searched (no permission-safe lookup for them), and runs and builds are still
+  found by a full id only.
+
 - One empty state for the bundle lists, and no page that contradicts itself
   (ORC-34). An earlier pass gave the runs, builds, catalog and pipelines lists an
   empty state with a next step; the rest still said what was missing and stopped

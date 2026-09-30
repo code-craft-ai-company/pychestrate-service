@@ -7,8 +7,9 @@
 
 The palette matched only navigation entries: "checkout", a project's name,
 "create", "sign out" and "theme" all answered "No results". It now also finds
-a project by name, opens a run or build from a pasted id, and runs a few
-common actions (create a project, register a device, switch theme, sign out).
+a project by name, a user by login or display name (for someone who may list
+users), opens a run or build from a pasted id, and runs a few common actions
+(create a project, register a device, switch theme, sign out).
 A source that matched nothing shows no heading while another has results, and
 one line ("No results.") when nothing matched anywhere. The shell is opened in
 a browser against stubbed API answers and the palette is used from the
@@ -55,6 +56,19 @@ PROJECTS = {
 }
 
 RUN_ID: str = "aaaaaaaa-1111-4000-8000-000000000001"
+
+USER_ID: str = "bbbbbbbb-2222-4000-8000-000000000001"
+
+
+def _users_answer(query: Dict[str, Any]) -> Dict[str, Any]:
+    """The picker list the server gives: the users whose login or display name contains ``q``."""
+    people = [
+        {"user_id": USER_ID, "login_name": "ada", "display_name": "Ada Lovelace", "status": "ACTIVE"},
+        {"user_id": "bbbbbbbb-2222-4000-8000-000000000002", "login_name": "adam", "display_name": "Adam Old", "status": "DEACTIVATED"},
+    ]
+    wanted = str(query.get("q", [""])[0] if isinstance(query.get("q"), list) else query.get("q", "")).lower()
+    items = [person for person in people if wanted in person["login_name"] or wanted in person["display_name"].lower()]
+    return {"items": items, "meta": {"page": 1, "per_page": 6, "total": len(items)}}
 
 
 def _search(page: Any, text: str) -> Dict[str, Any]:
@@ -166,4 +180,78 @@ def test_a_query_nothing_matches_says_so_once(browser: Browser):
         page.context.close()
 
     testbase.assert_equal((found["all_headings"], "No results." in status), ([], True))
+    return
+
+
+def test_a_user_is_found_by_login_or_name_and_opened(browser: Browser):
+    """
+    **Feature: a palette that finds things (XC-17)**
+    **Property: for someone who may list users, typing part of a login or display
+    name lists the matching users under "Users" (a deactivated one is marked in its
+    description), and Enter opens the user's admin page.**
+    """
+    page = open_shell_page(browser, path="/", api_stubs={"/api/v1/projects": PROJECTS, "/api/v1/identity/users": _users_answer}, **DESKTOP)
+    page.keyboard.press("Control+k")
+    page.wait_for_selector(".pyc-site-shell__palette-input")
+    try:
+        # "adam" is also part of no page name; a deactivated user is marked in the description
+        deactivated = _search(page, "adam")["groups"].get("Users")
+        descriptions = page.evaluate("() => [...document.querySelectorAll('.pyc-site-shell__palette-option-description')].map((o) => o.textContent.trim())")
+        # a display name no page is called: the user is the only match, so Enter opens it
+        found = _search(page, "lovelace")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(600)
+        path = urllib.parse.urlparse(page.url).path
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (deactivated, [text for text in descriptions if text.startswith("User")], found["groups"].get("Users"), path),
+        (["Adam Old"], ["User · adam · deactivated"], ["Ada Lovelace"], "/admin/users/" + USER_ID),
+    )
+    return
+
+
+def test_users_are_not_searched_for_someone_who_may_not_list_them(browser: Browser):
+    """
+    **Feature: a palette that finds things (XC-17)**
+    **Property: when the viewer's permissions do not include system:users.read the
+    palette offers no Users source and never asks the server for users.**
+    """
+    stubs = {
+        "/api/v1/projects": PROJECTS,
+        "/api/v1/identity/users": _users_answer,
+        "/api/v1/me/permissions": {"permissions": ["system:projects.access"]},
+    }
+    page = open_shell_page(browser, path="/", api_stubs=stubs, **DESKTOP)
+    asked: List[str] = []
+    page.on("request", lambda request: asked.append(request.url) if "/api/v1/identity/users" in request.url else None)
+    page.keyboard.press("Control+k")
+    page.wait_for_selector(".pyc-site-shell__palette-input")
+    try:
+        found = _search(page, "ada")
+    finally:
+        page.context.close()
+
+    testbase.assert_equal((found["groups"].get("Users"), asked), (None, []))
+    return
+
+
+def test_a_failing_user_search_shows_no_users_and_no_error(browser: Browser):
+    """
+    **Feature: a palette that finds things (XC-17)**
+    **Property: when the users request fails (here: the server has no such answer),
+    the palette shows no Users heading and no "unavailable" message, and the other
+    sources still answer.**
+    """
+    page = open_shell_page(browser, path="/", api_stubs={"/api/v1/projects": PROJECTS}, **DESKTOP)
+    page.keyboard.press("Control+k")
+    page.wait_for_selector(".pyc-site-shell__palette-input")
+    try:
+        found = _search(page, "demo")
+        text = page.locator(".pyc-site-shell__palette-dialog, [role=dialog]").first.inner_text()
+    finally:
+        page.context.close()
+
+    testbase.assert_equal((found["groups"].get("Projects"), found["groups"].get("Users"), "unavailable" in text.lower()), (["Demo"], None, False))
     return
