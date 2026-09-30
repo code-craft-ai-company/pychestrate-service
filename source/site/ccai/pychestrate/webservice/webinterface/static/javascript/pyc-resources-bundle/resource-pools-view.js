@@ -1,4 +1,5 @@
 import { format_timestamp } from "../shared/datetime.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -828,11 +829,7 @@ class PycResourcePools extends HTMLElement {
       return;
     }
     if (this._pools.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-resources__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.setAttribute("role", "status");
-      empty.textContent = "No resource pools in this project";
+      const empty = build_empty_state({ class_name: "pyc-resources__status", role: "status", message: "No resource pools in this project", next_step: "Use the Create Pool form above to add one." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

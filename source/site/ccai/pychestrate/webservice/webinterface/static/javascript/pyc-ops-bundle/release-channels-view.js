@@ -1,6 +1,7 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 const UPDATES_HEADING = "Pychestrate Updates";
 const UPDATES_INTRO = "Releases of the Pychestrate service and its pod client, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
@@ -333,10 +334,7 @@ class PycReleaseChannels extends HTMLElement {
       return;
     }
     if (this._entries.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-ops__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No Pychestrate updates published to any channel yet";
+      const empty = build_empty_state({ class_name: "pyc-ops__notice", message: "No Pychestrate updates published to any channel yet.", next_step: "Choose Publish Release above to publish one." });
       region.replaceChildren(empty);
       return;
     }

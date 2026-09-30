@@ -8,6 +8,7 @@ import {
   list_load_message_for_status,
   short_id
 } from "./environments-view.js";
+import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -523,7 +524,7 @@ class PycGuards extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-infra__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -792,6 +793,12 @@ class PycGuards extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -843,10 +850,7 @@ class PycGuards extends HTMLElement {
       return;
     }
     if (this._guards.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No blast-radius guards attached yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No blast-radius guards attached yet.", next_step: "Choose Attach Guard above to add one." });
       region.replaceChildren(empty);
       return;
     }

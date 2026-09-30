@@ -3,6 +3,7 @@ import { clear_toasts, show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { build_empty_state } from "../shared/empty-state.js";
 // Every project the person can see (the registry holds every web-UI project too).
 const PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
 /* The projects of a projects-list body as {project_id, display_name}. */
@@ -766,7 +767,7 @@ class PycWebhooks extends HTMLElement {
     }
     if (this._integrations.length === 0) {
       el.replaceChildren(
-        this._notice("No inbound integrations for this project yet")
+        build_empty_state({ class_name: "pyc-ops__notice", message: "No inbound integrations for this project yet.", next_step: "Choose Create Integration above to add one." })
       );
       return;
     }
@@ -1297,7 +1298,7 @@ class PycWebhooks extends HTMLElement {
     }
     if (this._subscriptions.length === 0) {
       el.replaceChildren(
-        this._notice("No outbound subscriptions for this project yet")
+        build_empty_state({ class_name: "pyc-ops__notice", message: "No outbound subscriptions for this project yet.", next_step: "Choose Create Subscription above to add one." })
       );
       return;
     }

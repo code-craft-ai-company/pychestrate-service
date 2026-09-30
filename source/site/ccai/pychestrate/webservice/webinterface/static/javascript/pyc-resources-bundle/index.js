@@ -59,6 +59,35 @@ function format_timestamp(value) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-pools-view.js
 var DEFAULT_PER_PAGE = 50;
 var RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
@@ -885,11 +914,7 @@ var PycResourcePools = class extends HTMLElement {
       return;
     }
     if (this._pools.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-resources__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.setAttribute("role", "status");
-      empty.textContent = "No resource pools in this project";
+      const empty = build_empty_state({ class_name: "pyc-resources__status", role: "status", message: "No resource pools in this project", next_step: "Use the Create Pool form above to add one." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

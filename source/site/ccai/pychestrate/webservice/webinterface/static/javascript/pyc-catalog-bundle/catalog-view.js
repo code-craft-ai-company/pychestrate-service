@@ -2,6 +2,8 @@ import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { show_no_projects } from "../shared/empty-state.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
@@ -495,7 +497,7 @@ class PycTestCatalog extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-catalog__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -671,6 +673,13 @@ class PycTestCatalog extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const prompt = document.createElement("p");
       prompt.classList.add("pyc-catalog__status");
       prompt.setAttribute("data-role", "no-project-state");
@@ -716,10 +725,7 @@ class PycTestCatalog extends HTMLElement {
       return;
     }
     if (this._entries.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-catalog__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No catalog entries yet. Import from testbase to populate.";
+      const empty = build_empty_state({ class_name: "pyc-catalog__status", message: "No catalog entries yet. Import from testbase to populate." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

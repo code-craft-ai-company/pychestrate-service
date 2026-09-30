@@ -2,6 +2,7 @@ import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 const ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -583,7 +584,7 @@ class PycEnvironments extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-infra__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -757,6 +758,13 @@ class PycEnvironments extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -802,10 +810,7 @@ class PycEnvironments extends HTMLElement {
       return;
     }
     if (this._environments.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No environments registered yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No environments registered in this project yet.", next_step: "Choose Register Environment above to add one." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

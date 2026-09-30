@@ -1,6 +1,8 @@
 import { message_with_detail, problem_detail_of_body } from "../shared/problem-detail.js";
 import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { show_no_projects } from "../shared/empty-state.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
@@ -526,7 +528,7 @@ class PycPipelinesList extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-pipelines__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -702,6 +704,13 @@ class PycPipelinesList extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-pipelines__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -741,10 +750,7 @@ class PycPipelinesList extends HTMLElement {
       return;
     }
     if (this._pipelines.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-pipelines__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No pipelines defined in this project yet. Paste a pipeline document into Define a pipeline above and choose Save.";
+      const empty = build_empty_state({ class_name: "pyc-pipelines__status", message: "No pipelines defined in this project yet. Paste a pipeline document into Define a pipeline above and choose Save." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

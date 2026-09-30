@@ -251,6 +251,29 @@ preview tag.
 
 ### Changed
 
+- One empty state for the bundle lists, and no page that contradicts itself
+  (ORC-34). An earlier pass gave the runs, builds, catalog and pipelines lists an
+  empty state with a next step; the rest still said what was missing and stopped
+  ("No pods defined in this project", "No SLOs defined", "No provisioning runs yet"),
+  and every project-scoped page said "No projects exist yet." while also saying
+  "Select a project to view ...". `shared/empty-state.js` now builds the empty state
+  for the bundle lists: what is missing, what to do first (the button to choose, or
+  the enrollment token to mint), and a link where there is a page for it. It is used
+  by provisioning runs (link to Environments), environments, blast-radius guards, SLOs,
+  alert rules, dashboards' tiles, pods and clients (both link to enrollment
+  tokens), resource pools, secrets, webhooks (both lists), Pychestrate updates,
+  feature flags, the extension registry, system health, the catalog, builds and
+  pipelines. The nine pages that work inside a project say "No projects exist yet.
+  This page works inside a project, so create one first." with a link to creating
+  one, and no longer also ask you to select a project; the provisioning runs page had
+  no such notice at all. `phase13/test_p32g_bundle_empty_states_m1.py` covers the lists,
+  the clients and updates pages, the nine project pages, and that no view builds an
+  empty state by hand except the two listed in the test. Not done: the runs list (an
+  empty filtered list offers "Clear filters" next to its message) and the test metrics
+  page (a link with its own marker) still build theirs by hand; the timeseries
+  "No metrics registered" and the "No source integration registered" and "No
+  environment registered" choices are select options, not empty states.
+
 - The words that meant several things are defined, and the interface uses one for
   each (ORG-F21). The UI glossary now defines *Pod* and *Client* (the client is the
   `pychestrate-client` program on a pod, and copy never calls it an "agent"; the word

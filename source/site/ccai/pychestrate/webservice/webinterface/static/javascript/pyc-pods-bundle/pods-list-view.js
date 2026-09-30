@@ -1,4 +1,5 @@
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
@@ -432,7 +433,7 @@ class PycPodsList extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-pods-list__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -585,6 +586,13 @@ class PycPodsList extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.needsProject === true) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const prompt = document.createElement("p");
       prompt.classList.add("pyc-pods-list__status");
       prompt.setAttribute("data-role", "needs-project");
@@ -628,10 +636,7 @@ class PycPodsList extends HTMLElement {
       return;
     }
     if (this._pods.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-pods-list__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No pods defined in this project";
+      const empty = build_empty_state({ class_name: "pyc-pods-list__status", message: "No pods in this project yet.", next_step: "A pod appears when a client enrolls with an enrollment token for it.", link: { href: "/admin/enrollment-tokens", label: "Mint an enrollment token" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;

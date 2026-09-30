@@ -9,6 +9,7 @@ import {
   format_timestamp,
   short_id
 } from "./environments-view.js";
+import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 const PROVISIONING_STATES = [
   "pending",
   "running",
@@ -127,6 +128,7 @@ class PycProvisioningList extends HTMLElement {
   _runs;
   _environments;
   _projects;
+  _projectsEmpty;
   _projectsAvailable;
   _root;
   _table_region;
@@ -146,6 +148,7 @@ class PycProvisioningList extends HTMLElement {
     this._runs = [];
     this._environments = [];
     this._projects = [];
+    this._projectsEmpty = false;
     this._projectsAvailable = false;
     this._root = null;
     this._table_region = null;
@@ -328,6 +331,9 @@ class PycProvisioningList extends HTMLElement {
         { reason: String(reason) }
       );
     }
+    // A list that came back empty means there is no project yet (the page then
+    // says so and links to creating one); a failed request is not the same.
+    this._projectsEmpty = projects !== null && projects.length === 0;
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
@@ -541,6 +547,12 @@ class PycProvisioningList extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsEmpty === true) {
+        // No project exists: say so and link to creating one, instead of asking to select one.
+        show_no_projects(region, {});
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -571,10 +583,7 @@ class PycProvisioningList extends HTMLElement {
       return;
     }
     if (this._runs.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No provisioning runs yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No provisioning runs in this project yet.", next_step: "Choose Trigger Provisioning above to start one; it needs a registered environment.", link: { href: "/environments", label: "Register an environment" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;

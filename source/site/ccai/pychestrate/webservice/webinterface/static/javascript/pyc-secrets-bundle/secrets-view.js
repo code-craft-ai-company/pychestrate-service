@@ -1,5 +1,6 @@
 import { confirm_action } from "../shared/confirm.js";
 import { format_instant, pad_two, parse_timestamp } from "../shared/datetime.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const SECRET_SCOPE_KINDS = [
   "ORG",
   "PROJECT",
@@ -1024,14 +1025,11 @@ class PycSecrets extends HTMLElement {
     this._state.total = filtered.length;
     if (filtered.length === 0) {
       this._table = null;
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-secrets__status");
-      empty.setAttribute("data-role", "empty-state");
-      if (this._secrets.length === 0) {
-        empty.textContent = "No secrets in this scope yet";
-      } else {
-        empty.textContent = "No secrets match the name filter";
-      }
+      const empty = build_empty_state({
+        class_name: "pyc-secrets__status",
+        message: this._secrets.length === 0 ? "No secrets in this scope yet." : "No secrets match the name filter.",
+        next_step: this._secrets.length === 0 ? "Fill in the Create Secret form above to add one." : "Clear the filter to see them all.",
+      });
       region.replaceChildren(empty);
       this._render_pager();
       return;

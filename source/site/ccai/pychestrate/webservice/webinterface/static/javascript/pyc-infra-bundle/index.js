@@ -212,6 +212,45 @@ function format_duration(started, finished, still_running, now) {
   return open ? text + " so far" : text;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+function show_no_projects(region, { link_class_name }) {
+  region.replaceChildren(
+    build_empty_state({
+      inline: true,
+      message: "No projects exist yet.",
+      next_step: "This page works inside a project, so create one first.",
+      link: { href: "/projects/create", label: "Create a project", class_name: link_class_name }
+    })
+  );
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
   "active",
@@ -775,7 +814,7 @@ var PycEnvironments = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-infra__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -949,6 +988,11 @@ var PycEnvironments = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -994,10 +1038,7 @@ var PycEnvironments = class extends HTMLElement {
       return;
     }
     if (this._environments.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No environments registered yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No environments registered in this project yet.", next_step: "Choose Register Environment above to add one." });
       region.replaceChildren(empty);
       this._render_pager();
       return;
@@ -2240,6 +2281,7 @@ var PycProvisioningList = class extends HTMLElement {
   _runs;
   _environments;
   _projects;
+  _projectsEmpty;
   _projectsAvailable;
   _root;
   _table_region;
@@ -2259,6 +2301,7 @@ var PycProvisioningList = class extends HTMLElement {
     this._runs = [];
     this._environments = [];
     this._projects = [];
+    this._projectsEmpty = false;
     this._projectsAvailable = false;
     this._root = null;
     this._table_region = null;
@@ -2431,6 +2474,7 @@ var PycProvisioningList = class extends HTMLElement {
         { reason: String(reason) }
       );
     }
+    this._projectsEmpty = projects !== null && projects.length === 0;
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
@@ -2643,6 +2687,11 @@ var PycProvisioningList = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsEmpty === true) {
+        show_no_projects(region, {});
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -2673,10 +2722,7 @@ var PycProvisioningList = class extends HTMLElement {
       return;
     }
     if (this._runs.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No provisioning runs yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No provisioning runs in this project yet.", next_step: "Choose Trigger Provisioning above to start one; it needs a registered environment.", link: { href: "/environments", label: "Register an environment" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;
@@ -4085,7 +4131,7 @@ var PycGuards = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-infra__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -4345,6 +4391,10 @@ var PycGuards = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -4395,10 +4445,7 @@ var PycGuards = class extends HTMLElement {
       return;
     }
     if (this._guards.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-infra__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No blast-radius guards attached yet";
+      const empty = build_empty_state({ class_name: "pyc-infra__status", message: "No blast-radius guards attached yet.", next_step: "Choose Attach Guard above to add one." });
       region.replaceChildren(empty);
       return;
     }

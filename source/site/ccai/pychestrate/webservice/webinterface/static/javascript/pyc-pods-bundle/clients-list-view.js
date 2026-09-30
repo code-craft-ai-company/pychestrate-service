@@ -7,6 +7,7 @@ import {
   format_clock_time,
   load_projects
 } from "./pods-list-view.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const CLIENT_STATUSES = [
   "ACTIVE",
   "SUSPENDED",
@@ -833,10 +834,7 @@ class PycClientsList extends HTMLElement {
       return;
     }
     if (this._clients.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-clients-list__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No enrolled clients yet";
+      const empty = build_empty_state({ class_name: "pyc-clients-list__status", message: "No enrolled clients yet.", next_step: "Mint an enrollment token, then enroll the pod client on the machine with it.", link: { href: "/admin/enrollment-tokens", label: "Mint an enrollment token" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;

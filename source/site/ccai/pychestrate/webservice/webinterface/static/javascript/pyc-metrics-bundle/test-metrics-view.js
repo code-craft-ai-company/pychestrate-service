@@ -1,3 +1,4 @@
+import { show_no_projects } from "../shared/empty-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -278,7 +279,7 @@ class PycTestMetrics extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-metrics__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -388,6 +389,12 @@ class PycTestMetrics extends HTMLElement {
     const region = this._content_region;
     region.replaceChildren();
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "no-project-state");

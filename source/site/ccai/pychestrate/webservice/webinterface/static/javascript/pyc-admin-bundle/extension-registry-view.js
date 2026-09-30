@@ -1,4 +1,5 @@
 import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
   const buckets = /* @__PURE__ */ new Map();
@@ -217,10 +218,7 @@ class PycExtensionRegistry extends HTMLElement {
       return;
     }
     if (this._extensions.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No extensions contribute REST routes.";
+      const empty = build_empty_state({ class_name: "pyc-admin__notice", message: "No extensions contribute REST routes." });
       region.replaceChildren(empty);
       return;
     }

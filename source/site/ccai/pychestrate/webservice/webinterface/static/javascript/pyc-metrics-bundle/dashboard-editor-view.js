@@ -17,6 +17,7 @@ import {
 import { access_request_sentence } from "../shared/admin-contact.js";
 import { may } from "../shared/permissions.js";
 import { query_value } from "../shared/view-state.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -648,10 +649,7 @@ class PycDashboardEditor extends HTMLElement {
       return;
     }
     if (this._tiles.length === 0) {
-      const notice = document.createElement("p");
-      notice.classList.add("pyc-metrics__notice");
-      notice.setAttribute("data-role", "empty-state");
-      notice.textContent = "No tiles yet \u2014 add one above.";
+      const notice = build_empty_state({ class_name: "pyc-metrics__notice", message: "No tiles yet \u2014 add one above." });
       region.appendChild(notice);
       return;
     }

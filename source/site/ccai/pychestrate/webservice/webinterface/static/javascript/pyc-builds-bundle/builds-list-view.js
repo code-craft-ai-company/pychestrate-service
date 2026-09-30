@@ -3,6 +3,7 @@ import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_source_label, build_title } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const BUILD_STATES = [
   "pending",
   "running",
@@ -765,10 +766,7 @@ class PycBuildsList extends HTMLElement {
       return;
     }
     if (this._builds.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-builds__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No builds in this project yet. Choose Trigger Build above to start one.";
+      const empty = build_empty_state({ class_name: "pyc-builds__status", message: "No builds in this project yet. Choose Trigger Build above to start one." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

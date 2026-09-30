@@ -1,5 +1,6 @@
 import { format_timestamp } from "../shared/datetime.js";
 import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
   if (typeof status !== "string") {
@@ -201,10 +202,7 @@ class PycSystemHealth extends HTMLElement {
     summary.appendChild(generated);
     children.push(summary);
     if (this._document.subsystems.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No subsystem probes reported.";
+      const empty = build_empty_state({ class_name: "pyc-admin__notice", message: "No subsystem probes reported." });
       children.push(empty);
     }
     for (const subsystem of this._document.subsystems) {

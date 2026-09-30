@@ -1,3 +1,42 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+function show_no_projects(region, { link_class_name }) {
+  region.replaceChildren(
+    build_empty_state({
+      inline: true,
+      message: "No projects exist yet.",
+      next_step: "This page works inside a project, so create one first.",
+      link: { href: "/projects/create", label: "Create a project", class_name: link_class_name }
+    })
+  );
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/test-metrics-view.js
 var PROJECTS_API_PATH = "/api/v1/projects";
 var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
@@ -275,7 +314,7 @@ var PycTestMetrics = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-metrics__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -385,6 +424,10 @@ var PycTestMetrics = class extends HTMLElement {
     const region = this._content_region;
     region.replaceChildren();
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "no-project-state");
@@ -1558,7 +1601,7 @@ var PycDashboardsList = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-metrics__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -1669,6 +1712,10 @@ var PycDashboardsList = class extends HTMLElement {
     const region = this._table_region;
     region.replaceChildren();
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "no-project-state");
@@ -2775,7 +2822,7 @@ var PycSlos = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-metrics__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -2918,6 +2965,10 @@ var PycSlos = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "no-project-state");
@@ -2960,10 +3011,7 @@ var PycSlos = class extends HTMLElement {
       return;
     }
     if (this._slos.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-metrics__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No SLOs defined for this project yet";
+      const empty = build_empty_state({ class_name: "pyc-metrics__notice", message: "No SLOs defined for this project yet.", next_step: "Choose Create SLO above to add one." });
       region.replaceChildren(empty);
       return;
     }
@@ -4089,10 +4137,7 @@ var PycAlertRules = class extends HTMLElement {
       return;
     }
     if (this._rules.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-metrics__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No alert rules defined for this project yet \u2014 create one above.";
+      const empty = build_empty_state({ class_name: "pyc-metrics__notice", message: "No alert rules defined for this project yet \u2014 create one above." });
       region.replaceChildren(empty);
       return;
     }
@@ -5181,10 +5226,7 @@ var PycDashboardEditor = class extends HTMLElement {
       return;
     }
     if (this._tiles.length === 0) {
-      const notice = document.createElement("p");
-      notice.classList.add("pyc-metrics__notice");
-      notice.setAttribute("data-role", "empty-state");
-      notice.textContent = "No tiles yet \u2014 add one above.";
+      const notice = build_empty_state({ class_name: "pyc-metrics__notice", message: "No tiles yet \u2014 add one above." });
       region.appendChild(notice);
       return;
     }

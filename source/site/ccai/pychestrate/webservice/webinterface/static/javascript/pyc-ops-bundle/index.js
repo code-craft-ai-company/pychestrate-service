@@ -204,6 +204,35 @@ function format_instant(instant) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
 var PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
 function extract_project_options(body) {
@@ -945,7 +974,7 @@ var PycWebhooks = class extends HTMLElement {
     }
     if (this._integrations.length === 0) {
       el.replaceChildren(
-        this._notice("No inbound integrations for this project yet")
+        build_empty_state({ class_name: "pyc-ops__notice", message: "No inbound integrations for this project yet.", next_step: "Choose Create Integration above to add one." })
       );
       return;
     }
@@ -1472,7 +1501,7 @@ var PycWebhooks = class extends HTMLElement {
     }
     if (this._subscriptions.length === 0) {
       el.replaceChildren(
-        this._notice("No outbound subscriptions for this project yet")
+        build_empty_state({ class_name: "pyc-ops__notice", message: "No outbound subscriptions for this project yet.", next_step: "Choose Create Subscription above to add one." })
       );
       return;
     }
@@ -2467,10 +2496,7 @@ var PycReleaseChannels = class extends HTMLElement {
       return;
     }
     if (this._entries.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-ops__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No Pychestrate updates published to any channel yet";
+      const empty = build_empty_state({ class_name: "pyc-ops__notice", message: "No Pychestrate updates published to any channel yet.", next_step: "Choose Publish Release above to publish one." });
       region.replaceChildren(empty);
       return;
     }

@@ -62,6 +62,35 @@ function format_instant(instant) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/secrets-view.js
 var SECRET_SCOPE_KINDS = [
   "ORG",
@@ -1030,14 +1059,11 @@ var PycSecrets = class extends HTMLElement {
     this._state.total = filtered.length;
     if (filtered.length === 0) {
       this._table = null;
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-secrets__status");
-      empty.setAttribute("data-role", "empty-state");
-      if (this._secrets.length === 0) {
-        empty.textContent = "No secrets in this scope yet";
-      } else {
-        empty.textContent = "No secrets match the name filter";
-      }
+      const empty = build_empty_state({
+        class_name: "pyc-secrets__status",
+        message: this._secrets.length === 0 ? "No secrets in this scope yet." : "No secrets match the name filter.",
+        next_step: this._secrets.length === 0 ? "Fill in the Create Secret form above to add one." : "Clear the filter to see them all."
+      });
       region.replaceChildren(empty);
       this._render_pager();
       return;

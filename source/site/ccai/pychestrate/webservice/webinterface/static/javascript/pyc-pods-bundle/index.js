@@ -50,6 +50,45 @@ function format_clock_instant(instant) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+function show_no_projects(region, { link_class_name }) {
+  region.replaceChildren(
+    build_empty_state({
+      inline: true,
+      message: "No projects exist yet.",
+      next_step: "This page works inside a project, so create one first.",
+      link: { href: "/projects/create", label: "Create a project", class_name: link_class_name }
+    })
+  );
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pods-bundle/pods-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
@@ -454,7 +493,7 @@ var PycPodsList = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-pods-list__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -607,6 +646,11 @@ var PycPodsList = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.needsProject === true) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const prompt = document.createElement("p");
       prompt.classList.add("pyc-pods-list__status");
       prompt.setAttribute("data-role", "needs-project");
@@ -650,10 +694,7 @@ var PycPodsList = class extends HTMLElement {
       return;
     }
     if (this._pods.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-pods-list__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No pods defined in this project";
+      const empty = build_empty_state({ class_name: "pyc-pods-list__status", message: "No pods in this project yet.", next_step: "A pod appears when a client enrolls with an enrollment token for it.", link: { href: "/admin/enrollment-tokens", label: "Mint an enrollment token" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;
@@ -2855,10 +2896,7 @@ var PycClientsList = class extends HTMLElement {
       return;
     }
     if (this._clients.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-clients-list__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No enrolled clients yet";
+      const empty = build_empty_state({ class_name: "pyc-clients-list__status", message: "No enrolled clients yet.", next_step: "Mint an enrollment token, then enroll the pod client on the machine with it.", link: { href: "/admin/enrollment-tokens", label: "Mint an enrollment token" } });
       region.replaceChildren(empty);
       this._render_pager();
       return;

@@ -121,6 +121,45 @@ function format_instant(instant) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words2 = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words2.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words2.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+function show_no_projects(region, { link_class_name }) {
+  region.replaceChildren(
+    build_empty_state({
+      inline: true,
+      message: "No projects exist yet.",
+      next_step: "This page works inside a project, so create one first.",
+      link: { href: "/projects/create", label: "Create a project", class_name: link_class_name }
+    })
+  );
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipelines-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
@@ -632,7 +671,7 @@ var PycPipelinesList = class extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-pipelines__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -807,6 +846,11 @@ var PycPipelinesList = class extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        region.replaceChildren();
+        this._render_pager();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-pipelines__status");
       notice.setAttribute("data-role", "no-project-state");
@@ -846,10 +890,7 @@ var PycPipelinesList = class extends HTMLElement {
       return;
     }
     if (this._pipelines.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-pipelines__status");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No pipelines defined in this project yet. Paste a pipeline document into Define a pipeline above and choose Save.";
+      const empty = build_empty_state({ class_name: "pyc-pipelines__status", message: "No pipelines defined in this project yet. Paste a pipeline document into Define a pipeline above and choose Save." });
       region.replaceChildren(empty);
       this._render_pager();
       return;

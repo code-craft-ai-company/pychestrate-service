@@ -5,6 +5,7 @@ import {
   announce_session_expired,
   list_load_message_for_status
 } from "./test-metrics-view.js";
+import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -418,7 +419,7 @@ class PycSlos extends HTMLElement {
     region.hidden = false;
     if (this._projectsNoticeKind === "empty") {
       region.classList.remove("pyc-metrics__projects-notice--error");
-      region.textContent = "No projects exist yet.";
+      show_no_projects(region, {});
       return;
     }
     if (this._projectsNoticeKind === "forbidden") {
@@ -561,6 +562,12 @@ class PycSlos extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.projectId.length === 0) {
+      if (this._projectsNoticeKind === "empty") {
+        // The notice above already says there are no projects and links to
+        // creating one; a second line asking to "select a project" contradicted it.
+        region.replaceChildren();
+        return;
+      }
       const notice = document.createElement("p");
       notice.classList.add("pyc-metrics__notice");
       notice.setAttribute("data-role", "no-project-state");
@@ -603,10 +610,7 @@ class PycSlos extends HTMLElement {
       return;
     }
     if (this._slos.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-metrics__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No SLOs defined for this project yet";
+      const empty = build_empty_state({ class_name: "pyc-metrics__notice", message: "No SLOs defined for this project yet.", next_step: "Choose Create SLO above to add one." });
       region.replaceChildren(empty);
       return;
     }

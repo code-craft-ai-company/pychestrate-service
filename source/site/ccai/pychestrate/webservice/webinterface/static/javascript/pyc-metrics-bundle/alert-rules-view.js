@@ -7,6 +7,7 @@ import {
 import {
   extract_projects
 } from "./test-metrics-view.js";
+import { build_empty_state } from "../shared/empty-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -564,10 +565,7 @@ class PycAlertRules extends HTMLElement {
       return;
     }
     if (this._rules.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-metrics__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No alert rules defined for this project yet \u2014 create one above.";
+      const empty = build_empty_state({ class_name: "pyc-metrics__notice", message: "No alert rules defined for this project yet \u2014 create one above." });
       region.replaceChildren(empty);
       return;
     }

@@ -150,6 +150,35 @@ function format_timestamp(value) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
+function build_empty_state({ class_name, message, next_step, link, inline, role }) {
+  const paragraph = document.createElement(inline === true ? "span" : "p");
+  if (typeof class_name === "string" && class_name.length > 0) {
+    paragraph.classList.add(class_name);
+  }
+  paragraph.setAttribute("data-role", "empty-state");
+  if (typeof role === "string" && role.length > 0) {
+    paragraph.setAttribute("role", role);
+  }
+  const words = [message];
+  if (typeof next_step === "string" && next_step.length > 0) {
+    words.push(next_step);
+  }
+  paragraph.appendChild(document.createTextNode(words.join(" ")));
+  if (link !== void 0 && link !== null) {
+    paragraph.appendChild(document.createTextNode(" "));
+    const anchor = document.createElement("a");
+    if (typeof link.class_name === "string" && link.class_name.length > 0) {
+      anchor.classList.add(link.class_name);
+    }
+    anchor.setAttribute("href", link.href);
+    anchor.setAttribute("data-role", "empty-state-link");
+    anchor.textContent = link.label;
+    paragraph.appendChild(anchor);
+  }
+  return paragraph;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
 var FLAGS_PATH = "/api/v1/flags";
 var FLAG_STATE_ENABLED = "enabled";
@@ -400,10 +429,11 @@ var PycFeatureFlags = class extends HTMLElement {
       return;
     }
     if (this._entries.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No feature flags are registered. A flag switches an optional behaviour on or off without a release; flags are created through the REST API (POST /api/v1/flags) or by an extension, and appear here for you to toggle.";
+      const empty = build_empty_state({
+        class_name: "pyc-admin__notice",
+        message: "No feature flags are registered.",
+        next_step: "A flag switches an optional behaviour on or off without a release; flags are created through the REST API (POST /api/v1/flags) or by an extension, and appear here for you to toggle."
+      });
       region.replaceChildren(empty);
       return;
     }
@@ -803,10 +833,7 @@ var PycSystemHealth = class extends HTMLElement {
     summary.appendChild(generated);
     children.push(summary);
     if (this._document.subsystems.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No subsystem probes reported.";
+      const empty = build_empty_state({ class_name: "pyc-admin__notice", message: "No subsystem probes reported." });
       children.push(empty);
     }
     for (const subsystem of this._document.subsystems) {
@@ -1098,10 +1125,7 @@ var PycExtensionRegistry = class extends HTMLElement {
       return;
     }
     if (this._extensions.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No extensions contribute REST routes.";
+      const empty = build_empty_state({ class_name: "pyc-admin__notice", message: "No extensions contribute REST routes." });
       region.replaceChildren(empty);
       return;
     }
