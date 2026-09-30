@@ -215,8 +215,8 @@ preview tag.
   `project:runs.cancel`) never appears in it and must not be used. Not done: the
   rest of the write actions (per-row actions on clients and pods, run cancel,
   secrets, flags, per-entry Run buttons in the test catalog, the pipeline save
-  form, and the older resource views, which already use the shell's own
-  permission check).
+  form, and the resource pool views, which already check the shell's own
+  permission set).
 
 - One toast service for the bundle views (ORC-41). Fourteen views built their own
   toast and the copies disagreed: some stacked up to a limit and some replaced,
