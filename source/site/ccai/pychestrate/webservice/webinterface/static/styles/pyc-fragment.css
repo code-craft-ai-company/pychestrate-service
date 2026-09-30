@@ -1236,3 +1236,23 @@
     overflow-wrap: anywhere;
 }
 
+/*
+ * ``anywhere`` also lets the browser shrink a column to one character, so a
+ * short value (an owner, a time, a state) is marked to keep its line and a
+ * name keeps a readable minimum, while the long description column absorbs
+ * the squeeze (PRJ-21).
+ */
+.pyc-admin-page-fragment .data-table td.nowrap {
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+.pyc-admin-page-fragment .data-table .nowrap-inline {
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+.pyc-admin-page-fragment .data-table td.min-name {
+    min-width: 9rem;
+}
+

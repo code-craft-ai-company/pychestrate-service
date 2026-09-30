@@ -27,14 +27,28 @@ from typing import Any, Dict
 
 from ccai import testbase
 
+from playwright.sync_api import Browser
+
+from ccai.testshared.factories.browsers.playwright_browser import (
+    create_playwright_browser,
+)
 from ccai.testshared.factories.webui.template_contexts import (
     MODE_POPULATED,
     build_template_context,
 )
 
+from ccai.tests.singlehost.pychestrate.webservice.phase13._shell_browser_harness import (
+    open_shell_page,
+)
 from ccai.tests.singlehost.pychestrate.webservice.phase13._template_harness import (
     strict_environment,
     undeclared_variables,
+)
+
+
+testbase.originate.parameter(
+    create_playwright_browser,
+    identifier="browser",
 )
 
 
@@ -138,5 +152,50 @@ def test_the_older_build_and_test_cards_show_only_when_they_hold_something_and_n
     testbase.assert_equal(
         ("Recent Builds" in empty, "Recent Tests" in empty, "Zed" in shown, "Project #" in shown, "Project 9" in shown, "Recent Tests" in shown),
         (False, False, True, False, True, False),
+    )
+    return
+
+
+def test_the_projects_table_keeps_short_values_on_one_line_at_desktop_width(browser: Browser):
+    """
+    **Feature: projects dashboard (PRJ-21)**
+    **Property: with the "Last run" column added, at 1440px a project's name, owner
+    and last-activity time each stay on one line (the long description absorbs the
+    squeeze) and the table does not scroll sideways.**
+    """
+    project = SimpleNamespace(
+        id=1, name="Orchestrate", description="Collections of python packages used for testing and orchestrating the lab", owner_username="admin",
+        last_activity_at=datetime(2026, 8, 8, 7, 0, tzinfo=timezone.utc),
+    )
+    done = dict(ROW, state="completed", state_label="Completed", tone="success")
+    html = _render(project=None, projects=[project], project_total=1, dashboard_last_runs={1: done}, dashboard_attention_runs=[ROW], dashboard_recent_runs=[done])
+    page = open_shell_page(browser, viewport={"width": 1440, "height": 900})
+    try:
+        page.evaluate(
+            """(html) => {
+                const main = document.querySelector('main.pyc-site-shell__main');
+                const section = document.createElement('section');
+                section.className = 'pyc-admin-page-fragment';
+                section.innerHTML = html;
+                main.appendChild(section);
+            }""",
+            html,
+        )
+        page.wait_for_timeout(300)
+        measured = page.evaluate(
+            """() => {
+                const table = [...document.querySelectorAll('.data-table')].find((t) => t.textContent.includes('Last run'));
+                const cells = [...table.querySelectorAll('tbody td')];
+                const text_height = (cell) => { const range = document.createRange(); range.selectNodeContents(cell); return Math.round(range.getBoundingClientRect().height); };
+                const wrapper = table.parentElement;
+                return {name: text_height(cells[0]), owner: text_height(cells[2]), activity: text_height(cells[3]), scrolls: wrapper.scrollWidth > wrapper.clientWidth + 1};
+            }"""
+        )
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (measured["name"] <= 30, measured["owner"] <= 30, measured["activity"] <= 30, measured["scrolls"]),
+        (True, True, True, False),
     )
     return
