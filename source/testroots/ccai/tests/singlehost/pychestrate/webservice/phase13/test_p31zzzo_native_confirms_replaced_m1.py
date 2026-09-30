@@ -1,7 +1,7 @@
 """
 .. module:: test_p31zzzo_native_confirms_replaced_m1
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15, ADM-?).
+    :synopsis: Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15).
 
 .. moduleauthor:: Code Craft AI LLC
 

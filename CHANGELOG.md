@@ -194,8 +194,7 @@ preview tag.
 
 ### Changed
 
-- Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15,
-  ADM-21). Sixteen places called `window.confirm`: cancel a run, revoke a client
+- Bundle views ask in the shell's dialog, not the browser's confirm box (XC-15). Sixteen places called `window.confirm`: cancel a run, revoke a client
   (list and detail), drain or deregister a pod, delete a pool, remove a pool
   member, release a reservation, retire, quarantine or move a resource, disable a
   flag (list and admin overview), disable an inbound integration or an outbound
