@@ -91,6 +91,37 @@ function build_empty_state({ class_name, message, next_step, link, inline, role 
   return paragraph;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function query_choice(name, allowed) {
+  const value = query_value(name);
+  return allowed.indexOf(value) >= 0 ? value : "";
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/secrets-view.js
 var SECRET_SCOPE_KINDS = [
   "ORG",
@@ -416,6 +447,11 @@ var PycSecrets = class extends HTMLElement {
    */
   connectedCallback() {
     this._render_chrome();
+    const wanted = query_choice("scope", ["project", "user"]).toUpperCase();
+    if (wanted.length > 0) {
+      this._select_scope(wanted);
+      return;
+    }
     void this._refresh();
     return;
   }
@@ -668,6 +704,7 @@ var PycSecrets = class extends HTMLElement {
       return;
     }
     this._state.scopeKind = scope_kind;
+    mirror_to_query({ scope: scope_kind === "ORG" ? "" : scope_kind.toLowerCase() });
     this._state.scopeRef = "";
     this._state.page = 1;
     this._revealed.clear();

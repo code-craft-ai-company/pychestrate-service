@@ -280,6 +280,37 @@ function reveal(region, options) {
   return focused;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function query_choice(name, allowed) {
+  const value = query_value(name);
+  return allowed.indexOf(value) >= 0 ? value : "";
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
 var PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
 function extract_project_options(body) {
@@ -518,7 +549,7 @@ var PycWebhooks = class extends HTMLElement {
     this._projects = [];
     this._project_region = null;
     this._projectId = "";
-    this._activeTab = "inbound";
+    this._activeTab = query_choice("tab", ["inbound", "outbound"]) || "inbound";
     this._integrations = [];
     this._inDeliveries = [];
     this._inProvider = "";
@@ -763,6 +794,7 @@ var PycWebhooks = class extends HTMLElement {
       clear_toasts(this._toast_region);
     }
     this._activeTab = tab_id;
+    mirror_to_query({ tab: tab_id === "inbound" ? "" : tab_id });
     if (this._root !== null) {
       for (const candidate of ["inbound", "outbound"]) {
         const tab = this._root.querySelector('[data-role="tab-' + candidate + '"]');

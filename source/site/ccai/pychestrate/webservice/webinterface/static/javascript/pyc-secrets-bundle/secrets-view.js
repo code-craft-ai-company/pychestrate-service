@@ -1,6 +1,7 @@
 import { confirm_action } from "../shared/confirm.js";
 import { format_instant, pad_two, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { mirror_to_query, query_choice } from "../shared/view-state.js";
 const SECRET_SCOPE_KINDS = [
   "ORG",
   "PROJECT",
@@ -374,6 +375,12 @@ class PycSecrets extends HTMLElement {
    */
   connectedCallback() {
     this._render_chrome();
+    // The scope the address names ("?scope=project"); Org, the first tab, is the default.
+    const wanted = query_choice("scope", ["project", "user"]).toUpperCase();
+    if (wanted.length > 0) {
+      this._select_scope(wanted);
+      return;
+    }
     void this._refresh();
     return;
   }
@@ -633,6 +640,7 @@ class PycSecrets extends HTMLElement {
       return;
     }
     this._state.scopeKind = scope_kind;
+    mirror_to_query({ scope: scope_kind === "ORG" ? "" : scope_kind.toLowerCase() });
     this._state.scopeRef = "";
     this._state.page = 1;
     this._revealed.clear();

@@ -5,6 +5,7 @@ import { message_with_detail, read_problem_detail } from "../shared/problem-deta
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state } from "../shared/empty-state.js";
 import { reveal } from "../shared/reveal.js";
+import { mirror_to_query, query_choice } from "../shared/view-state.js";
 // Every project the person can see (the registry holds every web-UI project too).
 const PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
 /* The projects of a projects-list body as {project_id, display_name}. */
@@ -256,7 +257,8 @@ class PycWebhooks extends HTMLElement {
     this._projects = [];
     this._project_region = null;
     this._projectId = "";
-    this._activeTab = "inbound";
+    // The tab the address names ("?tab=outbound"); Inbound, the first, is the default.
+    this._activeTab = query_choice("tab", ["inbound", "outbound"]) || "inbound";
     this._integrations = [];
     this._inDeliveries = [];
     this._inProvider = "";
@@ -507,6 +509,7 @@ class PycWebhooks extends HTMLElement {
       clear_toasts(this._toast_region);
     }
     this._activeTab = tab_id;
+    mirror_to_query({ tab: tab_id === "inbound" ? "" : tab_id });
     if (this._root !== null) {
       for (const candidate of ["inbound", "outbound"]) {
         const tab = this._root.querySelector('[data-role="tab-' + candidate + '"]');

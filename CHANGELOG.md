@@ -38,6 +38,12 @@ preview tag.
 
 ### Added
 
+- The tab a page is on is in its address (ORC-27). Webhooks (Inbound / Outbound) and Secrets (Org /
+  Project / User) always opened on their first tab, so a link to the outbound subscriptions, or a reload
+  after choosing them, went back to Inbound. The tab is now read from the address when the page opens
+  (`?tab=outbound`, `?scope=project`) and written back, without adding history entries, when it changes;
+  the first tab is the default and leaves the address bare, and an unknown value opens the first tab.
+
 - The build, provisioning-run and pipeline pages name their project and environment (ORC-18).
   They showed "Project  0f6c2c1e-..." (and the provisioning page an environment id) as a field's
   value. The Project field now reads the project's name and links to its page, the Environment
