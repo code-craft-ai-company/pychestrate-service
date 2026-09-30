@@ -48,7 +48,7 @@ preview tag.
   yet (the sample factory raises, so a placeholder must not win its slot) and the
   `pyproject.toml` entry point. `pychestrate-admin`, which the generator, the backup
   commands and the guides already named, is now a console script
-  (`ccai.pychestrate.admin.__main__:console_main`; `poetry install` creates it).
+  (`ccai.pychestrate.admin.__main__:console_main`; it exists when the service is installed as a package. The deploy script runs the service from its checkout and installs no console scripts, so on a deployed host use `python -m ccai.pychestrate.admin`, as the guides do).
   The extension guide is corrected to match: loading is by entry point (the "edit the
   bootstrap" step is gone), the generator is documented, the table of extension
   points lists the 15 protocols in the published Plugin Catalog (the guide listed
