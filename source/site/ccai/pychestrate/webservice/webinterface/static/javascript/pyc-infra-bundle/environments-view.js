@@ -3,6 +3,7 @@ import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
+import { choose_project_id, mirror_to_query } from "../shared/view-state.js";
 const ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -541,7 +542,7 @@ class PycEnvironments extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -687,6 +688,8 @@ class PycEnvironments extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

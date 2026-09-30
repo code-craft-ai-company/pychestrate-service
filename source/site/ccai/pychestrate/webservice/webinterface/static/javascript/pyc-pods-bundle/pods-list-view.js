@@ -1,5 +1,6 @@
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
+import { mirror_to_query } from "../shared/view-state.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
@@ -516,6 +517,8 @@ class PycPodsList extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;

@@ -37,6 +37,50 @@ function show_no_projects(region, { link_class_name }) {
   );
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function choose_project_id(projects) {
+  const wanted = query_value("project_id");
+  const named = projects.find((project) => project.project_id === wanted);
+  return named !== void 0 ? named.project_id : projects[0].project_id;
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/test-metrics-view.js
 var PROJECTS_API_PATH = "/api/v1/projects";
 var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
@@ -271,7 +315,7 @@ var PycTestMetrics = class extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -378,6 +422,7 @@ var PycTestMetrics = class extends HTMLElement {
       this._render_content();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
@@ -1257,45 +1302,6 @@ function message_with_detail(prefix, detail, generic) {
     return prefix + ": " + detail;
   }
   return generic;
-}
-
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
-function query_value(name) {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  const value = new URLSearchParams(window.location.search).get(name);
-  return value === null ? "" : value.trim();
-}
-function mirror_to_query(values) {
-  if (typeof window === "undefined" || typeof window.history === "undefined") {
-    return;
-  }
-  const url = new URL(window.location.href);
-  for (const name of Object.keys(values)) {
-    const value = values[name];
-    if (typeof value === "string" && value.length > 0) {
-      url.searchParams.set(name, value);
-    } else {
-      url.searchParams.delete(name);
-    }
-  }
-  const next = url.pathname + url.search + url.hash;
-  if (next !== window.location.pathname + window.location.search + window.location.hash) {
-    window.history.replaceState(window.history.state, "", next);
-  }
-}
-function keep_list_state_on_back(anchor, list_path) {
-  anchor.addEventListener("click", (event) => {
-    try {
-      const from = new URL(document.referrer);
-      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
-        event.preventDefault();
-        window.history.back();
-      }
-    } catch (reason) {
-    }
-  });
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboards-view.js
@@ -2779,7 +2785,7 @@ var PycSlos = class extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -2890,6 +2896,7 @@ var PycSlos = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
@@ -4017,7 +4024,7 @@ var PycAlertRules = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -4072,6 +4079,7 @@ var PycAlertRules = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._render_table_region();

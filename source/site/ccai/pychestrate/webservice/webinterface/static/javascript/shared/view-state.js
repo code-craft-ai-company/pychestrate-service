@@ -25,6 +25,18 @@ export function query_choice(name, allowed) {
   return allowed.indexOf(value) >= 0 ? value : "";
 }
 
+/*
+ * The project a page opens on: the one the address names when the person may
+ * see it, otherwise the first. A page that mirrored the project into the
+ * address but always opened on the first one made a shared link open the wrong
+ * project and then rewrite its own address to match (ORC-27).
+ */
+export function choose_project_id(projects) {
+  const wanted = query_value("project_id");
+  const named = projects.find((project) => project.project_id === wanted);
+  return named !== undefined ? named.project_id : projects[0].project_id;
+}
+
 /* The page number in the address (1 when absent or not a positive whole number). */
 export function page_from_query() {
   const parsed = Number.parseInt(query_value("page"), 10);

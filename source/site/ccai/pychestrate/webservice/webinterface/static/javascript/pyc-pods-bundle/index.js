@@ -89,6 +89,33 @@ function show_no_projects(region, { link_class_name }) {
   );
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pods-bundle/pods-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
@@ -576,6 +603,7 @@ var PycPodsList = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
@@ -2409,7 +2437,7 @@ var PycClientsList = class extends HTMLElement {
   constructor() {
     super();
     this._state = {
-      projectFilter: "",
+      projectFilter: query_value("project_id"),
       statusFilter: "",
       livenessFilter: "",
       page: 1,
@@ -2788,6 +2816,7 @@ var PycClientsList = class extends HTMLElement {
     return;
   }
   async _refresh() {
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

@@ -251,6 +251,58 @@ function show_no_projects(region, { link_class_name }) {
   );
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function query_choice(name, allowed) {
+  const value = query_value(name);
+  return allowed.indexOf(value) >= 0 ? value : "";
+}
+function choose_project_id(projects) {
+  const wanted = query_value("project_id");
+  const named = projects.find((project) => project.project_id === wanted);
+  return named !== void 0 ? named.project_id : projects[0].project_id;
+}
+function page_from_query() {
+  const parsed = Number.parseInt(query_value("page"), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
   "active",
@@ -771,7 +823,7 @@ var PycEnvironments = class extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -917,6 +969,7 @@ var PycEnvironments = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
@@ -2126,53 +2179,6 @@ function provisioning_title(run) {
   return driver.length > 0 ? action + " \xB7 " + driver : action;
 }
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
-function query_value(name) {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  const value = new URLSearchParams(window.location.search).get(name);
-  return value === null ? "" : value.trim();
-}
-function query_choice(name, allowed) {
-  const value = query_value(name);
-  return allowed.indexOf(value) >= 0 ? value : "";
-}
-function page_from_query() {
-  const parsed = Number.parseInt(query_value("page"), 10);
-  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-}
-function mirror_to_query(values) {
-  if (typeof window === "undefined" || typeof window.history === "undefined") {
-    return;
-  }
-  const url = new URL(window.location.href);
-  for (const name of Object.keys(values)) {
-    const value = values[name];
-    if (typeof value === "string" && value.length > 0) {
-      url.searchParams.set(name, value);
-    } else {
-      url.searchParams.delete(name);
-    }
-  }
-  const next = url.pathname + url.search + url.hash;
-  if (next !== window.location.pathname + window.location.search + window.location.hash) {
-    window.history.replaceState(window.history.state, "", next);
-  }
-}
-function keep_list_state_on_back(anchor, list_path) {
-  anchor.addEventListener("click", (event) => {
-    try {
-      const from = new URL(document.referrer);
-      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
-        event.preventDefault();
-        window.history.back();
-      }
-    } catch (reason) {
-    }
-  });
-}
-
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
   "pending",
@@ -2478,7 +2484,7 @@ var PycProvisioningList = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -4087,7 +4093,7 @@ var PycGuards = class extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -4305,6 +4311,7 @@ var PycGuards = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectId });
     if (this._state.environmentFilter.length === 0) {
       this._guards = [];
       this._render_table_region();

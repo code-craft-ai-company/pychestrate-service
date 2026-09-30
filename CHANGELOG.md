@@ -251,6 +251,21 @@ preview tag.
 
 ### Changed
 
+- A link to a project's page opens that project's page (ORC-27). Six bundle views
+  (provisioning runs, environments, blast-radius guards, SLOs, alert rules, test
+  metrics) always opened on the first project, whatever the address said, and the
+  provisioning runs list wrote the project into the address without ever reading it
+  back, so a link with `?project_id=<second project>` opened the first project and
+  then rewrote its own address to match. Each now opens on the project the address
+  names when the person can see it (otherwise the first) and keeps it in the
+  address; the pods, resource pools and clients lists, which already read it, now
+  write it back too (the clients list also reads it, and "All projects" leaves the
+  address bare). `phase13/test_p32h_projects_open_from_the_address_m1.py` covers all
+  nine. Not done: the test catalog, timeseries, secrets and webhooks tabs' other
+  state (webhooks' Inbound/Outbound, the run page's tabs) is still not in the
+  address, the other detail pages' back links (pod, environment, pool, resource,
+  dashboard) still go to the bare list, and sorting is not in the address.
+
 - The command palette finds users (XC-17). It found pages, projects, a run or build
   by its full id and a few actions, but not the "username" the finding gives as an
   example. For someone who holds `system:users.read`, typing at least two characters

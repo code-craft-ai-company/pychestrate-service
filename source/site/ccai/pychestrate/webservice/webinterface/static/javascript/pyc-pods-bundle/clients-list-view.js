@@ -8,6 +8,7 @@ import {
   load_projects
 } from "./pods-list-view.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { mirror_to_query, query_value } from "../shared/view-state.js";
 const CLIENT_STATUSES = [
   "ACTIVE",
   "SUSPENDED",
@@ -342,7 +343,7 @@ class PycClientsList extends HTMLElement {
   constructor() {
     super();
     this._state = {
-      projectFilter: "",
+      projectFilter: query_value("project_id"),
       statusFilter: "",
       livenessFilter: "",
       page: 1,
@@ -726,6 +727,8 @@ class PycClientsList extends HTMLElement {
     return;
   }
   async _refresh() {
+    // The address describes what is on screen; "all projects" leaves it out (ORC-27).
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

@@ -9,6 +9,7 @@ import {
   short_id
 } from "./environments-view.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
+import { choose_project_id, mirror_to_query } from "../shared/view-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -480,7 +481,7 @@ class PycGuards extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -700,6 +701,8 @@ class PycGuards extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({ project_id: this._state.projectId });
     // The collection endpoint requires environment_id -- fetching
     // without one earns a 400 the user cannot act on ("Failed to
     // load guards (HTTP 400). Try refreshing." never resolves,

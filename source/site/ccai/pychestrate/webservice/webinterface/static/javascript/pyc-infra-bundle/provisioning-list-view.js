@@ -3,7 +3,7 @@ import { show_toast } from "../shared/toast.js";
 import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { provisioning_title } from "../shared/run-labels.js";
-import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
+import { choose_project_id, mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import {
   build_environments_query_url,
   format_timestamp,
@@ -337,7 +337,7 @@ class PycProvisioningList extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;

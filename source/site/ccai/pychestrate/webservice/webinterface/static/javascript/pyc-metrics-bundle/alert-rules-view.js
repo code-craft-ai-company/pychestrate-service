@@ -8,6 +8,7 @@ import {
   extract_projects
 } from "./test-metrics-view.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { choose_project_id, mirror_to_query } from "../shared/view-state.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -445,7 +446,7 @@ class PycAlertRules extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = choose_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;
@@ -500,6 +501,8 @@ class PycAlertRules extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({ project_id: this._state.projectId });
     this._state.loading = true;
     this._state.errored = false;
     this._render_table_region();

@@ -88,6 +88,26 @@ function build_empty_state({ class_name, message, next_step, link, inline, role 
   return paragraph;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-pools-view.js
 var DEFAULT_PER_PAGE = 50;
 var RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
@@ -793,6 +813,7 @@ var PycResourcePools = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;

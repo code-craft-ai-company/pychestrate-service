@@ -1,5 +1,6 @@
 import { format_timestamp } from "../shared/datetime.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { mirror_to_query } from "../shared/view-state.js";
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -708,6 +709,8 @@ class PycResourcePools extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({ project_id: this._state.projectFilter });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
