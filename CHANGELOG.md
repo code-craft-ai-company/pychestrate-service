@@ -29,6 +29,21 @@ preview tag.
 
 ### Added
 
+- A contract between the service and the pod, checked by both repositories (E2E-14).
+  A valid REST test run was once refused by the pod because the service sent `root`
+  where the pod wanted `test_root`, and the pod's progress tag differed from the
+  service's; the pod side was fixed, and nothing kept the two in step.
+  `specs/contracts/pod-job-contract.json` records, for given catalog metadata and
+  trigger inputs, the `params` the testbase runner produces and the progress
+  format tag (`testbase-v1`). `phase10/test_p32c_pod_job_contract_m1.py` checks the
+  service against it; `pychestrate-client` keeps an identical copy and a test that
+  the pod builds the recorded `testbase` command from those params and reports under
+  that tag. When the client checkout sits next to this one, a test also checks the
+  two copies are identical. Not done: the envelope contract covers the test run
+  only (build, provisioning and RPA envelopes are not in it), the copy is kept in
+  step by hand, and the audit's larger fix, one shared versioned package both sides
+  import, is not attempted.
+
 - `GET /api/v1/identity/users` lists users for a picker (needs `system:users.read`):
   a page ordered by login name, `q` narrows it to users whose login or display name
   contains that text (a literal substring, so `%` and `_` are not wildcards), and
