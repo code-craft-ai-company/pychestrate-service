@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_source_label, build_title } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
@@ -1133,38 +1134,13 @@ class PycBuildsList extends HTMLElement {
    * @param outcome The trigger-build outcome.
    */
   _show_trigger_toast(outcome) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-builds__toast");
-    toast.setAttribute("data-role", "trigger-toast");
-    toast.setAttribute("data-tone", outcome.ok === true ? "ok" : "error");
-    const message = document.createElement("span");
-    message.classList.add("pyc-builds__toast-message");
-    message.textContent = outcome.message;
-    toast.appendChild(message);
-    if (outcome.ok === true && outcome.buildId.length > 0) {
-      const link = document.createElement("a");
-      link.classList.add("pyc-builds__toast-link");
-      link.setAttribute(
-        "href",
-        build_build_detail_link(this._state.projectId, outcome.buildId)
-      );
-      link.setAttribute("data-role", "trigger-toast-link");
-      link.textContent = "View build";
-      toast.appendChild(link);
-    }
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-builds__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
+    show_toast(this._toast_region, outcome.message, outcome.ok === true ? "ok" : "error", {
+      class_prefix: "pyc-builds",
+      data_role: "trigger-toast",
+      link: outcome.ok === true && outcome.buildId.length > 0
+        ? { href: build_build_detail_link(this._state.projectId, outcome.buildId), text: "View build", data_role: "trigger-toast-link" }
+        : null
     });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
     return;
   }
 }

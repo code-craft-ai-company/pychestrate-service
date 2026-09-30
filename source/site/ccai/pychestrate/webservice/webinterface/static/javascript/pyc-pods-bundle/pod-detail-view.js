@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import { confirm_action, label_from_button } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { set_entity_title } from "../shared/page-title.js";
@@ -38,7 +39,6 @@ const RETIRABLE_POD_STATES = [
 ];
 const POLL_INTERVAL_TRANSIENT_MS = 5e3;
 const POLL_INTERVAL_SETTLED_MS = 15e3;
-const TOAST_STACK_LIMIT = 3;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pod_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -1190,30 +1190,15 @@ class PycPodDetail extends HTMLElement {
     grid.appendChild(field);
     return;
   }
+  /**
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
+   *
+   * @param message The toast message text.
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
+   */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-pod-detail__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-pod-detail__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "×";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-pod-detail" });
     return;
   }
   _render_poll_banner() {

@@ -201,6 +201,20 @@ preview tag.
 
 ### Changed
 
+- One toast service for the bundle views (ORC-41). Fourteen views built their own
+  toast and the copies disagreed: some stacked up to a limit and some replaced,
+  only two marked their region as a live region (so in the other twelve a failure
+  was never announced to a screen reader), a message stayed on screen until it was
+  dismissed, and it stayed when the person moved to another tab. They now share
+  `shared/toast.js`: one toast at a time (a new outcome replaces the last), the
+  region is a polite live region and an error toast is an `alert`, a plain
+  success or neutral toast goes away by itself after eight seconds while an error
+  and a toast with a link (View build, View run) stay until dismissed or
+  replaced, and the Webhooks view clears its toast when the tab changes. The
+  markup and class names are unchanged, so the views' stylesheets still apply.
+  Not changed: the shell's own session-expiry toast, and details that open below
+  the fold (the report's second point) were not looked at.
+
 - A pipeline's page shows the runs it has had (ORC-13). A pipeline run started
   over REST failed and appeared nowhere in the UI. The pipeline page now has a
   "Runs (n)" section listing that pipeline's runs (the project's runs of other

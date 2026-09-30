@@ -1,3 +1,4 @@
+import { clear_toasts, show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -19,7 +20,6 @@ const WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 const WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 const TEST_EVENT_HISTORY_REFRESH_MS = 1500;
 const WEBHOOKS_PREVIEW_NOTE = "Preview: inbound deliveries are verified and recorded, but they do not start builds or pipelines yet. Outbound subscriptions receive test events only; entity events are not delivered to them yet.";
-const TOAST_STACK_LIMIT = 4;
 function build_integrations_url(project_id) {
   const params = new URLSearchParams();
   params.set("project_id", project_id);
@@ -498,6 +498,10 @@ class PycWebhooks extends HTMLElement {
   selectTab(tab_id) {
     if (tab_id !== "inbound" && tab_id !== "outbound") {
       return;
+    }
+    if (tab_id !== this._activeTab) {
+      // An outcome belongs to the tab it happened on.
+      clear_toasts(this._toast_region);
     }
     this._activeTab = tab_id;
     if (this._root !== null) {
@@ -1938,38 +1942,14 @@ class PycWebhooks extends HTMLElement {
     return notice;
   }
   /**
-   * Render a dismissible toast in the toast region. Toasts stack
-   * (newest last) instead of replacing one another so an earlier
-   * outcome is not silently destroyed; the stack is capped at
-   * ``TOAST_STACK_LIMIT``.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-ops__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-ops__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-ops" });
     return;
   }
 }
@@ -1977,7 +1957,6 @@ export {
   PycWebhooks,
   TEST_EVENT_HISTORY_REFRESH_MS,
   WEBHOOKS_PREVIEW_NOTE,
-  TOAST_STACK_LIMIT,
   build_in_deliveries_url,
   build_integration_resource_url,
   build_integrations_collection_url,

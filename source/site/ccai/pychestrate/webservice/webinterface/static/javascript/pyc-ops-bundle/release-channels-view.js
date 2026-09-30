@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 const UPDATES_HEADING = "Pychestrate Updates";
@@ -89,7 +90,6 @@ function publish_message_for_status(status, detail) {
   const rtnval = "Failed to publish release (HTTP " + String(status) + ").";
   return rtnval;
 }
-const RELEASE_TOAST_STACK_LIMIT = 4;
 class PycReleaseChannels extends HTMLElement {
   _entries;
   _loading;
@@ -762,38 +762,14 @@ class PycReleaseChannels extends HTMLElement {
     return input;
   }
   /**
-   * Render a dismissible toast in the toast region. Toasts stack
-   * (newest last) instead of replacing one another so an earlier
-   * outcome is not silently destroyed; the stack is capped at
-   * ``RELEASE_TOAST_STACK_LIMIT``.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-ops__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-ops__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= RELEASE_TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-ops" });
     return;
   }
 }

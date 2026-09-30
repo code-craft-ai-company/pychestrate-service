@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import {
   build_catalog_url,
   extract_catalog,
@@ -818,27 +819,15 @@ class PycDashboardEditor extends HTMLElement {
     };
     return rtnval;
   }
+  /**
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
+   *
+   * @param message The toast message text.
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
+   */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-metrics__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-metrics__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-metrics" });
     return;
   }
 }

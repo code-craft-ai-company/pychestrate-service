@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -20,7 +21,6 @@ const DEFAULT_PER_PAGE = 25;
 const CLIENTS_API_PATH = "/api/v1/clients";
 const CLIENTS_POLL_INTERVAL_MS = 15e3;
 const CAPABILITY_TAG_DISPLAY_LIMIT = 6;
-const TOAST_STACK_LIMIT = 3;
 function build_clients_query_url(state) {
   const params = new URLSearchParams();
   if (state.projectFilter.length > 0) {
@@ -989,30 +989,15 @@ class PycClientsList extends HTMLElement {
     }
     return;
   }
+  /**
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
+   *
+   * @param message The toast message text.
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
+   */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-clients-list__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-clients-list__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "×";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-clients-list" });
     return;
   }
   _render_pager() {

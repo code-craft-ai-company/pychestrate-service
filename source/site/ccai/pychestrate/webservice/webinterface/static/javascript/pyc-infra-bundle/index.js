@@ -1,3 +1,58 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
+var DEFAULT_AUTO_DISMISS_MS = 8e3;
+function show_toast(region, message, tone, options) {
+  if (region === null || region === void 0) {
+    return null;
+  }
+  const settings = options !== null && typeof options === "object" ? options : {};
+  const prefix = typeof settings.class_prefix === "string" ? settings.class_prefix : "pyc";
+  if (region.getAttribute("role") === null) {
+    region.setAttribute("role", "status");
+  }
+  if (region.getAttribute("aria-live") === null) {
+    region.setAttribute("aria-live", "polite");
+  }
+  const toast = document.createElement("div");
+  toast.classList.add(prefix + "__toast");
+  toast.setAttribute("data-role", typeof settings.data_role === "string" ? settings.data_role : "toast");
+  toast.setAttribute("data-tone", tone);
+  toast.setAttribute("role", tone === "error" ? "alert" : "status");
+  const text = document.createElement("span");
+  text.classList.add(prefix + "__toast-message");
+  text.textContent = message;
+  toast.appendChild(text);
+  const link = settings.link !== null && typeof settings.link === "object" ? settings.link : null;
+  if (link !== null) {
+    const anchor = document.createElement("a");
+    anchor.classList.add(prefix + "__toast-link");
+    anchor.setAttribute("href", link.href);
+    if (typeof link.data_role === "string") {
+      anchor.setAttribute("data-role", link.data_role);
+    }
+    anchor.textContent = link.text;
+    toast.appendChild(anchor);
+  }
+  const dismiss = document.createElement("mj-button");
+  dismiss.classList.add(prefix + "__toast-dismiss");
+  dismiss.setAttribute("type", "button");
+  dismiss.setAttribute("aria-label", typeof settings.dismiss_label === "string" ? settings.dismiss_label : "Dismiss");
+  dismiss.textContent = "\xD7";
+  dismiss.addEventListener("click", () => {
+    toast.remove();
+  });
+  toast.appendChild(dismiss);
+  region.replaceChildren(toast);
+  const delay = typeof settings.auto_dismiss_ms === "number" ? settings.auto_dismiss_ms : DEFAULT_AUTO_DISMISS_MS;
+  if (tone !== "error" && link === null && delay > 0) {
+    window.setTimeout(() => {
+      if (toast.parentNode === region) {
+        toast.remove();
+      }
+    }, delay);
+  }
+  return toast;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -1490,33 +1545,14 @@ var PycEnvironments = class extends HTMLElement {
     return rtnval;
   }
   /**
-   * Render a dismissible toast in the toast region.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-infra__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.classList.add("pyc-infra__toast-message");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-infra__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-infra" });
     return;
   }
 };
@@ -1988,28 +2024,15 @@ var PycEnvironmentDetail = class extends HTMLElement {
     grid.appendChild(field);
     return;
   }
+  /**
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
+   *
+   * @param message The toast message text.
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
+   */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-infra__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.classList.add("pyc-infra__toast-message");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-infra__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-infra" });
     return;
   }
 };
@@ -2951,41 +2974,11 @@ var PycProvisioningList = class extends HTMLElement {
    * @param outcome The trigger-provisioning outcome.
    */
   _show_trigger_toast(outcome) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-infra__toast");
-    toast.setAttribute("data-role", "trigger-toast");
-    toast.setAttribute("data-tone", outcome.ok === true ? "ok" : "error");
-    const message = document.createElement("span");
-    message.classList.add("pyc-infra__toast-message");
-    message.textContent = outcome.message;
-    toast.appendChild(message);
-    if (outcome.ok === true && outcome.runId.length > 0) {
-      const link = document.createElement("a");
-      link.classList.add("pyc-infra__toast-link");
-      link.setAttribute(
-        "href",
-        build_provisioning_detail_link(
-          this._state.projectId,
-          outcome.runId
-        )
-      );
-      link.setAttribute("data-role", "trigger-toast-link");
-      link.textContent = "View run";
-      toast.appendChild(link);
-    }
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-infra__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
+    show_toast(this._toast_region, outcome.message, outcome.ok === true ? "ok" : "error", {
+      class_prefix: "pyc-infra",
+      data_role: "trigger-toast",
+      link: outcome.ok === true && outcome.runId.length > 0 ? { href: build_provisioning_detail_link(this._state.projectId, outcome.runId), text: "View run", data_role: "trigger-toast-link" } : null
     });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
     return;
   }
 };
@@ -4971,33 +4964,14 @@ var PycGuards = class extends HTMLElement {
     return;
   }
   /**
-   * Render a dismissible toast in the toast region.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-infra__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.classList.add("pyc-infra__toast-message");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-infra__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-infra" });
     return;
   }
 };

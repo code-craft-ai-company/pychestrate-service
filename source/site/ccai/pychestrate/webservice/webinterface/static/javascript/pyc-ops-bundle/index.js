@@ -1,3 +1,63 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
+var DEFAULT_AUTO_DISMISS_MS = 8e3;
+function show_toast(region, message, tone, options) {
+  if (region === null || region === void 0) {
+    return null;
+  }
+  const settings = options !== null && typeof options === "object" ? options : {};
+  const prefix = typeof settings.class_prefix === "string" ? settings.class_prefix : "pyc";
+  if (region.getAttribute("role") === null) {
+    region.setAttribute("role", "status");
+  }
+  if (region.getAttribute("aria-live") === null) {
+    region.setAttribute("aria-live", "polite");
+  }
+  const toast = document.createElement("div");
+  toast.classList.add(prefix + "__toast");
+  toast.setAttribute("data-role", typeof settings.data_role === "string" ? settings.data_role : "toast");
+  toast.setAttribute("data-tone", tone);
+  toast.setAttribute("role", tone === "error" ? "alert" : "status");
+  const text = document.createElement("span");
+  text.classList.add(prefix + "__toast-message");
+  text.textContent = message;
+  toast.appendChild(text);
+  const link = settings.link !== null && typeof settings.link === "object" ? settings.link : null;
+  if (link !== null) {
+    const anchor = document.createElement("a");
+    anchor.classList.add(prefix + "__toast-link");
+    anchor.setAttribute("href", link.href);
+    if (typeof link.data_role === "string") {
+      anchor.setAttribute("data-role", link.data_role);
+    }
+    anchor.textContent = link.text;
+    toast.appendChild(anchor);
+  }
+  const dismiss = document.createElement("mj-button");
+  dismiss.classList.add(prefix + "__toast-dismiss");
+  dismiss.setAttribute("type", "button");
+  dismiss.setAttribute("aria-label", typeof settings.dismiss_label === "string" ? settings.dismiss_label : "Dismiss");
+  dismiss.textContent = "\xD7";
+  dismiss.addEventListener("click", () => {
+    toast.remove();
+  });
+  toast.appendChild(dismiss);
+  region.replaceChildren(toast);
+  const delay = typeof settings.auto_dismiss_ms === "number" ? settings.auto_dismiss_ms : DEFAULT_AUTO_DISMISS_MS;
+  if (tone !== "error" && link === null && delay > 0) {
+    window.setTimeout(() => {
+      if (toast.parentNode === region) {
+        toast.remove();
+      }
+    }, delay);
+  }
+  return toast;
+}
+function clear_toasts(region) {
+  if (region !== null && region !== void 0) {
+    region.replaceChildren();
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
 function confirm_action(source, message, confirm_label) {
   return new Promise((resolve) => {
@@ -121,7 +181,6 @@ var WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 var WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 var TEST_EVENT_HISTORY_REFRESH_MS = 1500;
 var WEBHOOKS_PREVIEW_NOTE = "Preview: inbound deliveries are verified and recorded, but they do not start builds or pipelines yet. Outbound subscriptions receive test events only; entity events are not delivered to them yet.";
-var TOAST_STACK_LIMIT = 4;
 function build_integrations_url(project_id) {
   const params = new URLSearchParams();
   params.set("project_id", project_id);
@@ -583,6 +642,9 @@ var PycWebhooks = class extends HTMLElement {
   selectTab(tab_id) {
     if (tab_id !== "inbound" && tab_id !== "outbound") {
       return;
+    }
+    if (tab_id !== this._activeTab) {
+      clear_toasts(this._toast_region);
     }
     this._activeTab = tab_id;
     if (this._root !== null) {
@@ -2016,38 +2078,14 @@ var PycWebhooks = class extends HTMLElement {
     return notice;
   }
   /**
-   * Render a dismissible toast in the toast region. Toasts stack
-   * (newest last) instead of replacing one another so an earlier
-   * outcome is not silently destroyed; the stack is capped at
-   * ``TOAST_STACK_LIMIT``.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-ops__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-ops__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-ops" });
     return;
   }
 };
@@ -2143,7 +2181,6 @@ function publish_message_for_status(status, detail) {
   const rtnval = "Failed to publish release (HTTP " + String(status) + ").";
   return rtnval;
 }
-var RELEASE_TOAST_STACK_LIMIT = 4;
 var PycReleaseChannels = class extends HTMLElement {
   _entries;
   _loading;
@@ -2813,38 +2850,14 @@ var PycReleaseChannels = class extends HTMLElement {
     return input;
   }
   /**
-   * Render a dismissible toast in the toast region. Toasts stack
-   * (newest last) instead of replacing one another so an earlier
-   * outcome is not silently destroyed; the stack is capped at
-   * ``RELEASE_TOAST_STACK_LIMIT``.
+   * Show a toast in the toast region through the shared service: one at a
+   * time, announced to assistive technology, a plain success goes away by itself.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
   _show_toast(message, tone) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-ops__toast");
-    toast.setAttribute("data-role", "toast");
-    toast.setAttribute("data-tone", tone);
-    const text = document.createElement("span");
-    text.textContent = message;
-    toast.appendChild(text);
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-ops__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
-    });
-    toast.appendChild(dismiss);
-    while (this._toast_region.children.length >= RELEASE_TOAST_STACK_LIMIT) {
-      this._toast_region.removeChild(this._toast_region.firstElementChild);
-    }
-    this._toast_region.appendChild(toast);
+    show_toast(this._toast_region, message, tone, { class_prefix: "pyc-ops" });
     return;
   }
 };

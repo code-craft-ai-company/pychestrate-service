@@ -1,3 +1,4 @@
+import { show_toast } from "../shared/toast.js";
 import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { provisioning_title } from "../shared/run-labels.js";
@@ -919,41 +920,13 @@ class PycProvisioningList extends HTMLElement {
    * @param outcome The trigger-provisioning outcome.
    */
   _show_trigger_toast(outcome) {
-    if (this._toast_region === null) {
-      return;
-    }
-    const toast = document.createElement("div");
-    toast.classList.add("pyc-infra__toast");
-    toast.setAttribute("data-role", "trigger-toast");
-    toast.setAttribute("data-tone", outcome.ok === true ? "ok" : "error");
-    const message = document.createElement("span");
-    message.classList.add("pyc-infra__toast-message");
-    message.textContent = outcome.message;
-    toast.appendChild(message);
-    if (outcome.ok === true && outcome.runId.length > 0) {
-      const link = document.createElement("a");
-      link.classList.add("pyc-infra__toast-link");
-      link.setAttribute(
-        "href",
-        build_provisioning_detail_link(
-          this._state.projectId,
-          outcome.runId
-        )
-      );
-      link.setAttribute("data-role", "trigger-toast-link");
-      link.textContent = "View run";
-      toast.appendChild(link);
-    }
-    const dismiss = document.createElement("mj-button");
-    dismiss.classList.add("pyc-infra__toast-dismiss");
-    dismiss.setAttribute("type", "button");
-    dismiss.setAttribute("aria-label", "Dismiss");
-    dismiss.textContent = "\xD7";
-    dismiss.addEventListener("click", () => {
-      toast.remove();
+    show_toast(this._toast_region, outcome.message, outcome.ok === true ? "ok" : "error", {
+      class_prefix: "pyc-infra",
+      data_role: "trigger-toast",
+      link: outcome.ok === true && outcome.runId.length > 0
+        ? { href: build_provisioning_detail_link(this._state.projectId, outcome.runId), text: "View run", data_role: "trigger-toast-link" }
+        : null
     });
-    toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
     return;
   }
 }
