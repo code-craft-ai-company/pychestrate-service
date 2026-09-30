@@ -201,6 +201,24 @@ preview tag.
 
 ### Changed
 
+- The deployment guide (`deployment/README.md`) is written for any host, not the
+  maintainer's (DOC-12). It named the maintainer's machine and account 48 times; it
+  now uses `HOST`, `USER` and `PUBLIC_HOSTNAME` placeholders, explained once at
+  the top. It also had two step 7s in the table of what the deploy does (a stale
+  `make dev-up` in tmux row; the script has eight steps and a probe, now
+  listed as 1 to 9), said the service runs under tmux and under systemd (it runs
+  under systemd, restarted on failure), named "API-key REST" (REST calls use
+  bearer tokens), showed an admin token that looked real, used `CN=worker-1` as
+  an example, and put the database in `.cache/dev-db` (the script uses
+  `~/pychestrate/pychestrate.sqlite`). All corrected, and
+  `phase10/test_p32b_deployment_readme_generic_m1.py` keeps it that way. The
+  deploy workflow's own defaults for the target host and user are unchanged.
+  Not done: `renew-cert.sh`, `install-deploy-sudoers.sh` and
+  `bootstrap-client-ca.sh` still default `--host`, `--user` and
+  `--public-hostname` to the maintainers' host (the README says to always pass
+  all three), and the private runbook the audit suggested moving out of the
+  repository is the maintainers' call.
+
 - Embeddable views are not served until they work (ORC-07). The surface answered
   200 for a catalog of five view kinds that could not be embedded: signing a view's
   URL answered 405 (the router does not treat a path segment such as

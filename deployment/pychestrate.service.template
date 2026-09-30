@@ -2,7 +2,7 @@
 #
 # Rendered + installed by ``deployment/deploy-alpha-to-host.sh``.
 # Placeholders:
-#   @USER@   -- the deploy user (e.g. myron)
+#   @USER@   -- the deploy user (e.g. deploy)
 #   @PORT@   -- the loopback bind port (e.g. 8888)
 #   @PUBLIC_HOSTNAME@ -- the name on the TLS certificate (--public-hostname)
 #

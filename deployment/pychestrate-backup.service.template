@@ -3,7 +3,7 @@
 # Rendered + installed by ``deployment/deploy-alpha-to-host.sh``
 # next to pychestrate.service; started daily by
 # ``pychestrate-backup.timer``.  Placeholders:
-#   @USER@   -- the deploy user (e.g. myron)
+#   @USER@   -- the deploy user (e.g. deploy)
 #
 # What it writes (both under the presence directory, mode 0700):
 #

@@ -6,6 +6,14 @@ The scripts in this directory drive the existing
 the remote does not need to be pre-provisioned beyond a stock
 Debian / Ubuntu install with SSH access for the deploy user.
 
+The examples use three placeholders; replace them with your own values:
+
+| Placeholder | Meaning |
+|---|---|
+| `HOST` | how you reach the target machine over SSH (a DNS name or an address) |
+| `USER` | the account you deploy as on the target; the service runs as this user |
+| `PUBLIC_HOSTNAME` | the name browsers and pods use, the one on the TLS certificate (it can equal `HOST`) |
+
 ## mTLS for orchestration-ingest endpoints
 
 The nginx :443 server block verifies client certificates for
@@ -16,7 +24,7 @@ the three orchestration-ingest endpoints (worker callbacks):
 - `POST /api/v1/runs/<id>/dispatch-ack`
 
 `ssl_verify_client` is `optional` so the bulk of the surface
-(cookie-session UI + API-key REST) keeps working without a
+(cookie-session UI and bearer-token REST) keeps working without a
 client cert. The three paths above are gated explicitly in
 nginx (`if ($ssl_client_verify != "SUCCESS") return 401;`) and
 again at the application layer: the pod routes (heartbeat,
@@ -80,7 +88,7 @@ or `POST /api/v1/enrollment-tokens`), then on the pod:
 
 ```bash
 pychestrate-client enroll \
-    --server-url https://tc-app-server.tailb75ce6.ts.net \
+    --server-url https://PUBLIC_HOSTNAME \
     --token <secret> --name <pod label the token was minted for>
 ```
 
@@ -89,8 +97,8 @@ id** (plus a `urn:uuid:<client id>` subject alternative name).
 That CN is what nginx forwards as `X-Client-Cert-CN`, and every
 pod route requires it to equal the client id in its path, so
 the registry, the certificate and the URLs share one identity.
-Hand-issued certificates (e.g. `CN=worker-1`) are rejected by the
-pod routes. Enrolling also registers the client on the pod the
+A certificate issued by hand, whose CN is anything other than the
+client id, is rejected by the pod routes. Enrolling also registers the client on the pod the
 token names (creating a static pod when none is defined), which
 is what makes the pod eligible for dispatch.
 
@@ -101,7 +109,7 @@ is what makes the pod eligible for dispatch.
 # ~/.local/share/pychestrate-client/, else ~/.pychestrate-client/ on a pod
 # enrolled by an older client)
 curl --cert client.crt --key client.key \
-    https://tc-app-server.tailb75ce6.ts.net/api/v1/clients/$(cat client_id)/heartbeat
+    https://PUBLIC_HOSTNAME/api/v1/clients/$(cat client_id)/heartbeat
 ```
 
 Without a client cert the orchestration-ingest endpoints
@@ -124,8 +132,12 @@ whole site unreachable for browsers, so renewal is
 operationally load-bearing.
 
 ```bash
-deployment/renew-cert.sh            # defaults match the alpha host
+deployment/renew-cert.sh --host=HOST --user=USER --public-hostname=PUBLIC_HOSTNAME
 ```
+
+`renew-cert.sh`, `install-deploy-sudoers.sh` and `bootstrap-client-ca.sh`
+still default `--host`, `--user` and `--public-hostname` to the maintainers'
+host, so always pass all three (the deploy script has no such defaults).
 
 The script mints a fresh cert on the host via `tailscale cert`,
 installs the pair with the right ownership/modes, validates and
@@ -153,10 +165,11 @@ remote host end-to-end. The remote ends up with:
 ```
 external clients ──> nginx :80 ──> 127.0.0.1:8888 (gunicorn under systemd)
                                        │
-                                       └── ~/pychestrate-service/
-                                           ├── .venv/             (poetry-installed deps)
-                                           ├── .cache/dev-secrets/  (KEK, pepper, cookie 0600)
-                                           └── .cache/dev-db/pychestrate.sqlite
+                                       ├── ~/pychestrate-service/
+                                       │   ├── .venv/             (poetry-installed deps)
+                                       │   └── .cache/dev-secrets/  (KEK, pepper, cookie 0600)
+                                       └── ~/pychestrate/         (mode 0700)
+                                           └── pychestrate.sqlite
 ```
 
 Specifically:
@@ -168,8 +181,8 @@ Specifically:
   job-envelope signing key, the result-upload presign secret and
   the client-enrollment CA (`dev.enrollment-ca.pem`, plus its
   certificate `dev.enrollment-ca.crt` that nginx trusts)
-- `~/pychestrate-service/.cache/dev-db/pychestrate.sqlite` —
-  the SQLite database, upgraded to head via alembic
+- `~/pychestrate/pychestrate.sqlite` — the SQLite database (in the
+  presence directory, outside the checkout), upgraded to head via alembic
 - `/etc/systemd/system/pychestrate.service` — systemd unit
   rendered from `deployment/pychestrate.service.template`,
   invoking `development/run-staging-gunicorn` which runs
@@ -192,9 +205,9 @@ export CODECRAFTAI_REPO_TOKEN=ghp_xxx     # the same fine-grained
                                        # private codecraftai-* deps
 
 deployment/deploy-alpha-to-host.sh \
-    --host tc-app-server.local \
-    --user myron \
-    --public-hostname tc-app-server.tailb75ce6.ts.net
+    --host HOST \
+    --user USER \
+    --public-hostname PUBLIC_HOSTNAME
 ```
 
 `--host` and `--user` are required; there are no host-specific
@@ -255,39 +268,39 @@ The script aborts with a typed error if:
 | Step | Command | Notes |
 |---|---|---|
 | 1 | `rsync` | excludes `.venv`, `.output`, `.cache`, `.git`, `.claude`, `.kiro`, `.vscode`, `__pycache__`, `*.pyc`, `.DS_Store`, `.env`, `*.sqlite`. |
-| 2 | `repository-setup/setup-debian-machine` | installs `build-essential`, `python3`, `python3-dev`, `python3-venv`, `python3-pip`, `pipx`, `tmux`, `make`, `nginx`, plus poetry via pipx. **Requires sudo on the remote** — you'll be prompted for the password. |
+| 2 | `repository-setup/setup-debian-machine` | installs `build-essential`, `python3`, `python3-dev`, `python3-venv`, `python3-pip`, `pipx`, `make`, `nginx`, plus poetry via pipx, and `tmux` (a development convenience; the deployed service runs under systemd, not tmux). **Requires sudo on the remote** — you'll be prompted for the password. |
 | 3 | `git config --global url.<base>.insteadOf` | injects the PAT for cloning private `codecraftai-*` deps. |
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
 | 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
 | 6 | `alembic upgrade head`, `development/run-staging-gunicorn --provision-only` | applies the migrations against `~/pychestrate/pychestrate.sqlite`, then generates the service secrets (including the client-enrollment CA nginx trusts in step 7). |
 | 7 | nginx site write + reload | renders `deployment/pychestrate.nginx.conf.template` to `/etc/nginx/sites-available/pychestrate`: listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888), gzip on for text responses, verifies pod client certificates against the enrollment CA and forwards their identity (`X-Client-Cert-CN` / `X-Client-Cert-Verify`). Validate a template edit locally with `nginx -t` against a rendered copy before deploying. |
-| 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`. |
-| 7 | `make dev-up` (in tmux) | starts the service. tmux session name: `pychestrate`. |
+| 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`, restarted on failure. Also installs the daily backup timer and the log rotation policy. |
+| 9 | probe | polls `http://HOST/` from your workstation until nginx and gunicorn answer. |
 
 ### Verifying / managing the running instance
 
 ```bash
 # Probe (through nginx)
-curl -fsS http://tc-app-server.local/
+curl -fsS http://HOST/
 
 # Service status
-ssh myron@tc-app-server.local sudo systemctl status pychestrate
+ssh USER@HOST sudo systemctl status pychestrate
 
 # Live logs (journalctl -- canonical)
-ssh myron@tc-app-server.local sudo journalctl -u pychestrate -f
+ssh USER@HOST sudo journalctl -u pychestrate -f
 
 # Or the file log (tee'd by systemd)
-ssh myron@tc-app-server.local 'tail -f ~/.pychestrate/server.log'
+ssh USER@HOST 'tail -f ~/.pychestrate/server.log'
 
 # Restart
-ssh myron@tc-app-server.local sudo systemctl restart pychestrate
+ssh USER@HOST sudo systemctl restart pychestrate
 
 # Stop
-ssh myron@tc-app-server.local sudo systemctl stop pychestrate
+ssh USER@HOST sudo systemctl stop pychestrate
 
 # nginx side
-ssh myron@tc-app-server.local sudo nginx -t          # validate config
-ssh myron@tc-app-server.local sudo systemctl reload nginx
+ssh USER@HOST sudo nginx -t          # validate config
+ssh USER@HOST sudo systemctl reload nginx
 ```
 
 ### The user guide at `/docs`
@@ -317,18 +330,18 @@ service user's home, which is the
 systemd unit logs the path on startup:
 
 ```bash
-ssh myron@tc-app-server.local 'grep "Initial-admin token path" ~/.pychestrate/server.log | tail -1'
-# Initial-admin token path: /home/myron/pychestrate/initial-admin-token
+ssh USER@HOST 'grep "Initial-admin token path" ~/.pychestrate/server.log | tail -1'
+# Initial-admin token path: /home/USER/pychestrate/initial-admin-token
 
-ssh myron@tc-app-server.local cat ~/pychestrate/initial-admin-token
-# fwoxEWV8UmSJ5qPXqgbdu89v14bzSVU-71_EWPUTCMY
+ssh USER@HOST cat ~/pychestrate/initial-admin-token
+# <the initial-admin token: a long random string>
 ```
 
 No `sudo` needed — the file is owned by the service user.
 
 #### 2. Walk through the wizard
 
-Open `http://tc-app-server.local/` (or any URL on the service).
+Open `http://HOST/` (or any URL on the service).
 While setup is pending, every request 302-redirects to
 `/setup/unlock`.
 
@@ -343,12 +356,12 @@ While setup is pending, every request 302-redirects to
 
 ```bash
 # Should 404 — wizard is permanently disabled.
-curl -I http://tc-app-server.local/setup/unlock
+curl -I http://HOST/setup/unlock
 
 # Should show only pychestrate.sqlite — the token file is
 # deleted on completion. ~/pychestrate/ is mode 0700 so other
 # accounts on the box cannot enumerate it.
-ssh myron@tc-app-server.local ls -l ~/pychestrate/
+ssh USER@HOST ls -l ~/pychestrate/
 ```
 
 #### Recovery: lost the token before completing setup
@@ -359,8 +372,8 @@ generates a fresh token, updates the stored hash, and writes a
 new file:
 
 ```bash
-ssh myron@tc-app-server.local sudo systemctl restart pychestrate
-ssh myron@tc-app-server.local cat ~/pychestrate/initial-admin-token
+ssh USER@HOST sudo systemctl restart pychestrate
+ssh USER@HOST cat ~/pychestrate/initial-admin-token
 ```
 
 The wizard is one-way **after completion** — there is no operator
@@ -379,9 +392,9 @@ Re-running the script:
 - **nginx site config** is overwritten + reloaded.
 - **pychestrate.service** unit is overwritten + `systemctl restart`'d.
 
-The KEK / pepper / cookie-secret + SQLite DB **persist** across
-re-deploys — they live under the checkout's `.cache/` and rsync
-explicitly excludes that path.
+The KEK / pepper / cookie-secret live under the checkout's `.cache/`
+and the SQLite database in `~/pychestrate/`; both **persist** across
+re-deploys because rsync excludes `.cache` and `*.sqlite`.
 
 ### Passwordless `systemctl restart` for CI re-deploys
 
@@ -397,8 +410,8 @@ Add a `sudoers.d` rule that grants the deploy user
 pychestrate.service` (not all of sudo):
 
 ```bash
-ssh myron@tc-app-server.local 'sudo tee /etc/sudoers.d/pychestrate-ci > /dev/null <<EOF
-myron ALL=(root) NOPASSWD: /bin/systemctl restart pychestrate.service, /bin/systemctl status pychestrate.service
+ssh USER@HOST 'sudo tee /etc/sudoers.d/pychestrate-ci > /dev/null <<EOF
+USER ALL=(root) NOPASSWD: /bin/systemctl restart pychestrate.service, /bin/systemctl status pychestrate.service
 EOF
 sudo chmod 0440 /etc/sudoers.d/pychestrate-ci
 sudo visudo -c  # validate
@@ -410,7 +423,7 @@ password, and it can NOT do anything else with sudo.
 
 #### Option B: passwordless sudo (broader; not recommended)
 
-`myron ALL=(ALL) NOPASSWD: ALL` in `/etc/sudoers.d/myron`
+`USER ALL=(ALL) NOPASSWD: ALL` in `/etc/sudoers.d/USER`
 gives passwordless sudo for everything. Easier to set up but
 defeats the principle of least privilege.
 
@@ -421,9 +434,8 @@ defeats the principle of least privilege.
   deployments need the FK ordering migration fix from #175 and
   the operator procedure documented in
   `userguide/13-00-alpha-deployment.rst`.
-- **No process supervisor.** Service runs under `tmux`; survives
-  ssh disconnect but not host reboot. Convert to a systemd unit
-  for that.
+- **One host, one unit.** The service runs as a single systemd unit
+  (`Restart=on-failure`, enabled at boot), with no clustering or failover.
 - **Client isolation networks.** If the workstation cannot
   L2-route to the target (e.g., guest WiFi), this driver fails
   at step 1. Run from a host that has direct LAN access to the
@@ -454,7 +466,7 @@ scrape_configs:
     authorization:
       credentials_file: /etc/prometheus/pychestrate-metrics-token
     static_configs:
-      - targets: ["tc-app-server.tailb75ce6.ts.net"]
+      - targets: ["PUBLIC_HOSTNAME"]
 ```
 
 Counters and latency histograms are per gunicorn worker (series carry
@@ -594,7 +606,7 @@ Update the ACL policy (Settings → Access controls) to declare
     {
       "action": "accept",
       "src":    ["tag:ci"],
-      "dst":    ["tc-app-server:22", "tc-app-server:80"]
+      "dst":    ["HOST:22", "HOST:80"]
     }
   ]
 }
@@ -614,8 +626,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/pychestrate-deploy -N "" \
     -C "pychestrate-ci-deploy@github-actions"
 ```
 
-- Add the **public** key to `~myron/.ssh/authorized_keys` on
-  `tc-app-server` (so the CI deploy user can log in).
+- Add the **public** key to `~USER/.ssh/authorized_keys` on
+  `HOST` (so the CI deploy user can log in).
 - The **private** key (`~/.ssh/pychestrate-deploy`) goes into
   GitHub as a secret in step 3.
 
@@ -641,8 +653,8 @@ and assumes this one-time provisioning is already in place.
 
 ```bash
 CODECRAFTAI_REPO_TOKEN=ghp_xxx \
-    deployment/deploy-alpha-to-host.sh --host tc-app-server --user myron \
-        --public-hostname tc-app-server.tailb75ce6.ts.net
+    deployment/deploy-alpha-to-host.sh --host HOST --user USER \
+        --public-hostname PUBLIC_HOSTNAME
 ```
 
 Subsequent deploys (CI or workstation) are entirely
@@ -653,8 +665,10 @@ non-interactive.
 GitHub UI → **Actions** tab → **deploy** workflow →
 **Run workflow**. Inputs:
 
-- `target_host` — defaults to `tc-app-server`
-- `target_user` — defaults to `myron`
+- `target_host` — the target's tailnet name (the workflow's default is the
+  maintainers' staging host; change it in `.github/workflows/deploy.yml`
+  for your own)
+- `target_user` — the deploy account (same note about the default)
 - `target_port` — defaults to `8888`
 - `git_ref` — branch / tag / SHA to deploy (defaults to `main`)
 
