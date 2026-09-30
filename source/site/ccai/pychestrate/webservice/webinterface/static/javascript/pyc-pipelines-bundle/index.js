@@ -1457,6 +1457,41 @@ function pipeline_delete_message_for_status(status, name) {
   const rtnval = "Failed to delete the pipeline (HTTP " + String(status) + ").";
   return rtnval;
 }
+function pipeline_runs_url(project_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/pipeline-runs?per_page=100";
+  return rtnval;
+}
+function run_state_tone(state) {
+  if (state === "completed" || state === "succeeded") {
+    return "ok";
+  }
+  if (state === "failed" || state === "rejected") {
+    return "error";
+  }
+  if (state === "cancelled" || state === "skipped") {
+    return "warn";
+  }
+  return "neutral";
+}
+function words(text) {
+  const spaced = typeof text === "string" ? text.replace(/_/g, " ").trim() : "";
+  return spaced.length > 0 ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : "";
+}
+function stage_progress_text(run) {
+  const stages = Array.isArray(run.stages) ? run.stages : [];
+  if (stages.length === 0) {
+    return "";
+  }
+  const done = stages.filter((stage) => stage.state === "completed" || stage.state === "succeeded").length;
+  return String(done) + " of " + String(stages.length) + (stages.length === 1 ? " stage" : " stages") + " completed";
+}
+function sort_runs_newest_first(runs) {
+  return runs.slice().sort((left, right) => {
+    const a = left.started_at ? new Date(left.started_at).getTime() : Infinity;
+    const b = right.started_at ? new Date(right.started_at).getTime() : Infinity;
+    return b - a;
+  });
+}
 function pipeline_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -1652,6 +1687,7 @@ var PycPipelineDetail = class extends HTMLElement {
   _deleted;
   _delete_notice;
   _delete_pending;
+  _runs;
   constructor() {
     super();
     this._pipeline_id = "";
@@ -1666,6 +1702,7 @@ var PycPipelineDetail = class extends HTMLElement {
     this._deleted = false;
     this._delete_notice = "";
     this._delete_pending = false;
+    this._runs = { status: "idle", items: [], error_status: 0 };
   }
   /**
    * Observed attributes -- ``pipeline-id`` and ``project-id`` may
@@ -1755,6 +1792,38 @@ var PycPipelineDetail = class extends HTMLElement {
     this._project_id = pipeline.project_id;
     this._loading = false;
     this._errored = false;
+    this._render_body();
+    void this._load_runs();
+    return;
+  }
+  // The project's pipeline runs, kept to this pipeline's. A person without
+  // access to runs still sees the pipeline, with a note.
+  async _load_runs() {
+    this._runs = { status: "loading", items: [], error_status: 0 };
+    this._render_body();
+    try {
+      const response = await fetch(pipeline_runs_url(this._project_id), {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        const items = body !== null && Array.isArray(body.items) ? body.items : [];
+        this._runs = { status: "ok", items: sort_runs_newest_first(items.filter((run) => run.pipeline_id === this._pipeline_id)), error_status: 0 };
+      } else {
+        this._runs = { status: "error", items: [], error_status: response.status };
+        if (response.status === 401) {
+          announce_session_expired();
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.pipelines.runs_fetch_failed",
+        { reason: String(reason) }
+      );
+      this._runs = { status: "error", items: [], error_status: 0 };
+    }
     this._render_body();
     return;
   }
@@ -1895,6 +1964,7 @@ var PycPipelineDetail = class extends HTMLElement {
     fragment.appendChild(this._build_summary(this._pipeline));
     fragment.appendChild(this._build_dag_section(this._pipeline.stages));
     fragment.appendChild(this._build_stage_list(this._pipeline.stages));
+    fragment.appendChild(this._build_runs_section());
     body.replaceChildren(fragment);
     return;
   }
@@ -2179,6 +2249,137 @@ var PycPipelineDetail = class extends HTMLElement {
    *
    * @returns A populated stage-list section element.
    */
+  _build_runs_section() {
+    const section = document.createElement("section");
+    section.classList.add("pyc-pipeline-detail__runs");
+    section.setAttribute("data-role", "runs-section");
+    section.setAttribute("role", "region");
+    section.setAttribute("aria-label", "Pipeline runs");
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-pipeline-detail__section-heading");
+    const state = this._runs;
+    heading.textContent = state.status === "ok" ? "Runs (" + String(state.items.length) + ")" : "Runs";
+    section.appendChild(heading);
+    const note = (text, role, error) => {
+      const p = document.createElement("p");
+      p.classList.add("pyc-pipeline-detail__status");
+      if (error === true) {
+        p.classList.add("pyc-pipeline-detail__status--error");
+      }
+      p.setAttribute("data-role", role);
+      p.textContent = text;
+      section.appendChild(p);
+    };
+    if (state.status === "idle" || state.status === "loading") {
+      note("Loading runs\u2026", "runs-loading", false);
+      return section;
+    }
+    if (state.status === "error") {
+      note(state.error_status === 403 ? "You don't have access to pipeline runs." : "Couldn't load this pipeline's runs.", "runs-error", state.error_status !== 403);
+      return section;
+    }
+    if (state.items.length === 0) {
+      note("This pipeline has not been run yet.", "runs-empty", false);
+      return section;
+    }
+    const list = document.createElement("ul");
+    list.classList.add("pyc-pipeline-detail__run-list");
+    list.setAttribute("data-role", "runs-list");
+    for (const run of state.items) {
+      list.appendChild(this._build_run_row(run));
+    }
+    section.appendChild(list);
+    return section;
+  }
+  _build_run_row(run) {
+    const item = document.createElement("li");
+    item.classList.add("pyc-pipeline-detail__run");
+    item.setAttribute("data-role", "run-row");
+    item.setAttribute("data-state", String(run.state));
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.classList.add("pyc-pipeline-detail__run-summary");
+    const chip = document.createElement("span");
+    chip.classList.add("pyc-pipeline-detail__run-chip");
+    chip.setAttribute("data-tone", run_state_tone(run.state));
+    chip.textContent = words(run.state);
+    summary.appendChild(chip);
+    const when = document.createElement("span");
+    when.classList.add("pyc-pipeline-detail__run-when");
+    when.textContent = run.started_at ? format_timestamp(run.started_at) : "Not started";
+    summary.appendChild(when);
+    const progress = stage_progress_text(run);
+    const cause = words(run.trigger_cause);
+    const facts = [cause, progress].filter((part) => part.length > 0).join(" \xB7 ");
+    if (facts.length > 0) {
+      const meta = document.createElement("span");
+      meta.classList.add("pyc-pipeline-detail__run-meta");
+      meta.textContent = facts;
+      summary.appendChild(meta);
+    }
+    if (typeof run.final_state_reason === "string" && run.final_state_reason.length > 0) {
+      const reason = document.createElement("span");
+      reason.classList.add("pyc-pipeline-detail__run-reason", "pyc-pipeline-detail__run-reason--line");
+      reason.setAttribute("data-role", "run-reason");
+      reason.textContent = run.final_state_reason;
+      summary.appendChild(reason);
+    }
+    details.appendChild(summary);
+    const stages = Array.isArray(run.stages) ? run.stages.slice().sort((left, right) => left.stage_index - right.stage_index) : [];
+    for (const stage of stages) {
+      const block = document.createElement("div");
+      block.classList.add("pyc-pipeline-detail__run-stage");
+      const head = document.createElement("div");
+      head.classList.add("pyc-pipeline-detail__run-stage-head");
+      const stage_chip = document.createElement("span");
+      stage_chip.classList.add("pyc-pipeline-detail__run-chip");
+      stage_chip.setAttribute("data-tone", run_state_tone(stage.state));
+      stage_chip.textContent = words(stage.state);
+      head.appendChild(stage_chip);
+      const stage_name = document.createElement("strong");
+      stage_name.textContent = String(stage.stage_id);
+      head.appendChild(stage_name);
+      block.appendChild(head);
+      if (typeof stage.final_state_reason === "string" && stage.final_state_reason.length > 0) {
+        const stage_reason = document.createElement("p");
+        stage_reason.classList.add("pyc-pipeline-detail__run-reason");
+        stage_reason.textContent = stage.final_state_reason;
+        block.appendChild(stage_reason);
+      }
+      const steps = Array.isArray(stage.steps) ? stage.steps.slice().sort((left, right) => left.step_index - right.step_index) : [];
+      for (const step of steps) {
+        const line = document.createElement("div");
+        line.classList.add("pyc-pipeline-detail__run-step");
+        line.setAttribute("data-role", "run-step");
+        const step_chip = document.createElement("span");
+        step_chip.classList.add("pyc-pipeline-detail__run-chip");
+        step_chip.setAttribute("data-tone", run_state_tone(step.state));
+        step_chip.textContent = words(step.state);
+        line.appendChild(step_chip);
+        const label = document.createElement("span");
+        label.textContent = String(step.step_id) + (typeof step.kind_name === "string" && step.kind_name.length > 0 ? " (" + step.kind_name + ")" : "");
+        line.appendChild(label);
+        if (typeof step.layer5_run_id === "string" && step.layer5_run_id.length > 0) {
+          const link = document.createElement("a");
+          link.classList.add("pyc-pipeline-detail__back-link");
+          link.setAttribute("data-role", "run-step-link");
+          link.setAttribute("href", "/runs/" + encodeURIComponent(step.layer5_run_id));
+          link.textContent = "Open the run";
+          line.appendChild(link);
+        }
+        if (typeof step.final_state_reason === "string" && step.final_state_reason.length > 0) {
+          const step_reason = document.createElement("span");
+          step_reason.classList.add("pyc-pipeline-detail__run-reason");
+          step_reason.textContent = step.final_state_reason;
+          line.appendChild(step_reason);
+        }
+        block.appendChild(line);
+      }
+      details.appendChild(block);
+    }
+    item.appendChild(details);
+    return item;
+  }
   _build_stage_list(stages) {
     const section = document.createElement("section");
     section.classList.add("pyc-pipeline-detail__stages");

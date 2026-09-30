@@ -201,6 +201,16 @@ preview tag.
 
 ### Changed
 
+- A pipeline's page shows the runs it has had (ORC-13). A pipeline run started
+  over REST failed and appeared nowhere in the UI. The pipeline page now has a
+  "Runs (n)" section listing that pipeline's runs (the project's runs of other
+  pipelines are left out), newest first: each run's state, when it started, how it
+  was started and how far it got ("Api \u00b7 1 of 2 stages completed"), and its
+  reason when it did not finish, on the line rather than behind the disclosure.
+  A run expands to its stages and steps, and a step that started a run links to
+  it. A pipeline that has never run, a person without access to pipeline runs, and
+  a failed request each say so. Not done: starting a run from the page.
+
 - A secret's project or user is chosen by name, not typed as an id (ADM-29,
   PRJ-16). The Project and User tabs of the Secrets page asked for a "Scope
   reference" with the same placeholder on both ("project id or user id"). Each
