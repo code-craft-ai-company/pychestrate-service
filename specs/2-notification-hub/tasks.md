@@ -30,10 +30,16 @@
       CRUD REST endpoints.
 - [ ] T1.6 — Implement a hard-coded in-tree `RunFailedTemplate` as
       the first `NotificationTemplateExtension`.
-- [ ] T1.7 — Implement `subscriber.py` wildcard bus subscription and
+- [x] T1.7 — Implement `subscriber.py` wildcard bus subscription and
       wire it to `router.compute_routes` → `dispatcher.dispatch`.
-- [ ] T1.8 — Implement a minimal `router.compute_routes` (no tag
+      *Done as `run_notifier.py`: subscribes to `entity.run.failed` and
+      `entity.run.completed` (not a wildcard), queues events, and one daemon
+      thread per process delivers them, so sending never runs in the request
+      that commits the run's end; wired from `bootstrap_phase2_runtime`.*
+- [x] T1.8 — Implement a minimal `router.compute_routes` (no tag
       filter, no preferences) for M1 end-to-end smoke.
+      *Done in `router.py`, with event-pattern globs, a template-versus-event
+      guard and a per-rule, per-process rate limit.*
 
 ### M2 — Core Behavior
 
@@ -43,6 +49,10 @@
 - [ ] T2.2 — Implement `service.create_routing_rule` and routing rule
       CRUD endpoints including `filter_tag_expression` validation
       against `2-tagging`.
+      *Partly: `/api/v1/notifications/routing-rules` (create, list, disable or
+      enable, delete; system administrators). Not done: the project-scoped path
+      of Requirement 2, project-owner permissions, tag filters (refused, not
+      ignored).*
 - [ ] T2.3 — Implement `service.update_user_preferences` and
       `GET/PUT /users/me/notification-preferences`.
 - [ ] T2.4 — Expand `router.compute_routes` to honor rule event-pattern
@@ -52,6 +62,8 @@
       template registry; load via `E-resource-extensions`.
 - [ ] T2.6 — Ship `RunSucceededTemplate` and
       `ProjectMemberAddedTemplate` in-tree.
+      *`RunSucceededTemplate` (`run_succeeded`, for `entity.run.completed`)
+      is done; `ProjectMemberAddedTemplate` is not.*
 - [ ] T2.7 — Implement DLQ persistence, retry backoff, and the
       `GET/DELETE /notifications/dead-letter` endpoints.
 - [ ] T2.8 — Implement `POST /notifications/dead-letter/{id}/replay`

@@ -17,7 +17,7 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Mapping, Tuple
 
 from ccai.pychestrate.webservice.extensions.resource_extension import ResourceExtension
 
@@ -45,6 +45,10 @@ class NotificationTemplateExtension(ResourceExtension):
     template_name: ClassVar[str] = ""
     default_severity: ClassVar[str] = "INFO"
     description: ClassVar[str] = ""
+
+    #: The event topics this template describes; empty means it fits any event. A rule that
+    #: routes another topic to it is skipped (a "run failed" message about a completed run is wrong).
+    event_topics: ClassVar[Tuple[str, ...]] = ()
 
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (

@@ -147,6 +147,56 @@ administrator can cancel any run.
 A run that has already finished cannot be cancelled.
 
 
+Be told when a run fails
+========================
+
+The service can send a message when a run ends: an email, or a message to
+Slack, Microsoft Teams, PagerDuty or any webhook. It sends nothing until a
+system administrator sets up two things through the REST API (the same
+operations are ``pyc`` commands; see ``pyc notifications --help``).
+
+**A channel** is where messages go. For email:
+
+.. code-block:: text
+
+    POST /api/v1/notifications/channels
+    {"name": "ops-mail", "kind": "smtp_email", "scope_level": "SYSTEM",
+     "config": {"host": "smtp.example.com", "port": 587, "use_tls": true,
+                "from_address": "pychestrate@example.com"}}
+
+(``username`` and ``password`` are optional. The configuration is stored as
+you send it.) The other kinds are ``slack_webhook``, ``ms_teams_webhook``,
+``pagerduty_events_v2`` and ``generic_webhook``.
+
+**A routing rule** says which events go through which channels to whom:
+
+.. code-block:: text
+
+    POST /api/v1/notifications/routing-rules
+    {"event_pattern": "entity.run.failed", "template_name": "run_failed",
+     "channel_ids": ["<the channel's id>"],
+     "recipients": ["oncall@example.com"],
+     "project_id": "<a project's id, or leave out for every project>",
+     "rate_limit_per_minute": 10}
+
+``entity.run.failed`` (a run that failed) with the ``run_failed`` template, and
+``entity.run.completed`` (a run that finished) with ``run_succeeded``, are the two
+events that can be sent. A rule that could never send is refused with the reason:
+a pattern that matches neither event, an unknown template or channel, a template
+that does not describe the event, no recipient. ``rate_limit_per_minute`` caps how
+many messages the rule sends in a minute, so a burst of failures does not flood
+one inbox. ``GET /api/v1/notifications/routing-rules`` lists the rules,
+``PATCH`` with ``{"disabled": true}`` turns one off, and ``DELETE`` removes it.
+
+The message names the run and the project and gives the reason. It is sent by a
+background thread of the service, never by the request that receives the pod's
+result, so a slow mail relay cannot hold a run up. A message that cannot be
+delivered is recorded with its error and parked as a dead letter
+(``GET /api/v1/notifications/dead-letter`` lists them); it does not stop the other
+messages, and it does not change the run. Failures are also in the service log
+(``pychestrate.notifications.delivery_failed``).
+
+
 What the states mean
 ====================
 

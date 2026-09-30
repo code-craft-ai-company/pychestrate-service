@@ -27,6 +27,7 @@ from typing import Callable, Optional
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.webservice.audit.bus_subscriber import wire_bus_subscribers
+from ccai.pychestrate.webservice.notifications.run_notifier import wire_run_notifications
 from ccai.pychestrate.webservice.projects.bus_subscriber import (
     wire_bus_subscribers as wire_projects_bus_subscribers,
 )
@@ -113,5 +114,7 @@ def bootstrap_phase2_runtime(*, config: Phase2BootstrapConfig) -> None:
     if config.session_factory is not None:
         wire_bus_subscribers(session_factory=config.session_factory)
         wire_projects_bus_subscribers(session_factory=config.session_factory)
+        # Run failures and completions reach the notification rules (ORG-F08).
+        wire_run_notifications(session_factory=config.session_factory)
 
     return

@@ -22,6 +22,9 @@ from ccai.pychestrate.webservice.notifications.extensions.template import (
 from ccai.pychestrate.webservice.notifications.extensions.run_failed_template import (
     RunFailedTemplate,
 )
+from ccai.pychestrate.webservice.notifications.extensions.run_succeeded_template import (
+    RunSucceededTemplate,
+)
 from ccai.pychestrate.webservice.notifications.factories.smtp_email import (
     SmtpEmailChannel,
 )
@@ -48,5 +51,9 @@ def register_builtin_extensions() -> None:
     register_resource_extension(
         base_class=NotificationTemplateExtension,
         extension=RunFailedTemplate,
+    )
+    register_resource_extension(
+        base_class=NotificationTemplateExtension,
+        extension=RunSucceededTemplate,
     )
     return

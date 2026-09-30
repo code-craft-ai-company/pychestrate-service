@@ -63,6 +63,9 @@ from ccai.pychestrate.webservice.middleware_webworks import (
 from ccai.pychestrate.webservice.notifications.restapi.v1.channels_routes import (
     register_channels_routes,
 )
+from ccai.pychestrate.webservice.notifications.restapi.v1.routing_rules_routes import (
+    register_routing_rules_routes,
+)
 from ccai.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
@@ -504,6 +507,7 @@ def register_service_extensions() -> None:
     if embed_views_enabled() is True:
         register_embed_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
+    register_routing_rules_routes(app=app, version_prefix="/api/v1")
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_me_routes(app=app, version_prefix="/api/v1")
     register_ui_metrics_routes(app=app, version_prefix="/api/v1")

@@ -1587,6 +1587,88 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationChannel' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /notifications/routing-rules:
+    get:
+      tags: [notifications]
+      summary: List notification routing rules.
+      description: >-
+        Lists the rules that turn a run event into messages, optionally only
+        those of one project. Requires `system:ui.admin.view`.
+      operationId: notifications_list_routing_rules
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+          description: Only the rules of this project.
+      responses:
+        '200':
+          description: Routing rules, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/NotificationRoutingRule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [notifications]
+      summary: Create a notification routing rule.
+      description: >-
+        When a run fails or completes (the events `entity.run.failed` and
+        `entity.run.completed`), send the template through each channel to each
+        recipient. A rule with a `project_id` applies to that project's runs; one
+        without it applies to every project. A rule that could never fire is
+        refused with the reason: a pattern that matches neither event, an unknown
+        template, a channel that does not exist, no recipient. Requires
+        `system:ui.admin.view`.
+      operationId: notifications_create_routing_rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationRoutingRuleCreateRequest' }
+      responses:
+        '201':
+          description: Rule created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationRoutingRule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /notifications/routing-rules/{rule_id}:
+    parameters:
+      - in: path
+        name: rule_id
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [notifications]
+      summary: Turn a notification routing rule off or on.
+      operationId: notifications_update_routing_rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disabled]
+              additionalProperties: false
+              properties:
+                disabled: { type: boolean }
+      responses:
+        '200':
+          description: The rule.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationRoutingRule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [notifications]
+      summary: Delete a notification routing rule.
+      operationId: notifications_delete_routing_rule
+      responses:
+        '204':
+          description: Rule deleted.
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # =====================================================================
   # project_templates
@@ -7432,6 +7514,60 @@ components:
         config:
           type: object
           additionalProperties: true
+    NotificationRoutingRule:
+      type: object
+      required: [rule_id, event_pattern, template_name, channel_ids, recipients, disabled]
+      properties:
+        rule_id: { type: string, format: uuid }
+        project_id: { type: [string, 'null'], format: uuid }
+        event_pattern:
+          type: string
+          example: entity.run.failed
+        template_name:
+          type: string
+          example: run_failed
+        channel_ids:
+          type: array
+          items: { type: string, format: uuid }
+        recipients:
+          type: array
+          items: { type: string }
+        rate_limit_per_minute: { type: [integer, 'null'] }
+        disabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotificationRoutingRuleCreateRequest:
+      type: object
+      required: [event_pattern, template_name, channel_ids, recipients]
+      properties:
+        event_pattern:
+          type: string
+          description: >-
+            The event to be told about, `entity.run.failed` or `entity.run.completed`,
+            or a glob such as `entity.run.*`.
+        template_name:
+          type: string
+          description: The message template, `run_failed` or `run_succeeded`.
+        channel_ids:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { type: string, format: uuid }
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { type: string }
+          description: Addresses the channel understands (email addresses for an email channel).
+        project_id:
+          type: string
+          format: uuid
+          description: Only this project's runs; leave out for every project.
+        rate_limit_per_minute:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: At most this many messages per minute from this rule in one worker; leave out for no limit.
 
     # ----------------------------------------------------------------
     # project_templates

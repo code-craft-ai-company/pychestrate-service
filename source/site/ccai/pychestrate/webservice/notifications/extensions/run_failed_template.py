@@ -12,8 +12,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Mapping, Tuple
 
+from ccai.pychestrate.webservice.jobs.run.state.events import RunStateEventTopics
 from ccai.pychestrate.webservice.notifications.extensions.template import (
     NotificationTemplateExtension,
     RenderedMessage,
@@ -31,6 +32,7 @@ class RunFailedTemplate(NotificationTemplateExtension):
     template_name: ClassVar[str] = "run_failed"
     default_severity: ClassVar[str] = "ERROR"
     description: ClassVar[str] = "Reference template emitted when a run fails."
+    event_topics: ClassVar[Tuple[str, ...]] = (RunStateEventTopics.FAILED,)
 
     @classmethod
     def render(cls, *, payload: Mapping[str, Any]) -> RenderedMessage:

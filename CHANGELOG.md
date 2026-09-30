@@ -29,6 +29,35 @@ preview tag.
 
 ### Added
 
+- Run failures and completions can now be sent as notifications (ORG-F08). Nothing
+  was ever sent: `dispatch_envelope` had no caller, routing rules could be stored
+  but not created through the API, and the Webhooks, Alert Rules and Notifications
+  settings had no effect. A system administrator now creates a **channel**
+  (`POST /api/v1/notifications/channels`: email, Slack, Teams, PagerDuty or a
+  generic webhook) and a **routing rule** (`POST /api/v1/notifications/routing-rules`
+  with `event_pattern` `entity.run.failed` or `entity.run.completed`, a template,
+  channels, recipients, optionally a project and a per-minute limit; `GET` lists,
+  `PATCH {"disabled": true}` turns one off, `DELETE` removes it). A rule that could
+  never send is refused with the reason. When a run fails or completes the service
+  queues the event and a background thread per process delivers it through the
+  matching rules, so a slow mail relay never holds up the request that receives the
+  pod's result. A delivery that cannot be made (a channel that reports failure, a
+  disabled channel, a rate-limited rule, an unknown template) is recorded and does
+  not stop the others or affect the run; failed sends are parked as dead letters
+  and logged. The new `run_succeeded` template covers completed runs, and a
+  template now says which events it describes so a "failed" message is never sent
+  for a completed run. Documented in "Be told when a run fails" (running and
+  reading work), the OpenAPI document, and `specs/2-notification-hub` (T1.7, T1.8
+  done, T2.2 and T2.6 partly). Tests: `phase10/test_p32i_run_notifications_m1.py`
+  (matching, rate limit, delivery and failure paths, queue and worker, startup
+  wiring) and `phase10/test_p32j_notification_routing_rules_api_m1.py`. Not done:
+  a page to manage rules and channels (REST and `pyc` only), reservation-expiring
+  and device-quarantined events, tag filters, per-user preferences and quiet
+  hours, digests, retries with backoff (a failed send is parked for manual replay),
+  the project-scoped path and project-owner permission, and outbound webhooks and
+  alert rules, which still send nothing (they stay labelled Preview). Each worker
+  process delivers the runs it ends and rate limits its own share of a rule.
+
 - Extension packs load without forking the service (DOC-11). The guide said teams
   could add extensions "without forking", then told them to edit the service's
   bootstrap code to call their pack's `register()`. The service now looks, at start
