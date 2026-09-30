@@ -444,11 +444,12 @@ def test_audit_routes_declare_documented_permissions():
 def test_identity_users_routes_declare_documented_permissions():
     """
     **Feature: REST route permissions (LD-12)**
-    **Property: creating a user needs users.write; reading one needs
-    users.read.**
+    **Property: creating a user needs users.write; reading one and listing
+    them (the picker list) need users.read.**
     """
     base = VERSION_PREFIX + "/identity/users"
     expected = {
+        ("GET", base): "system:users.read",
         ("POST", base): "system:users.write",
         ("GET", base + "/{user_id}"): "system:users.read",
     }

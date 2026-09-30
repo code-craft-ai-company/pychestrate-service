@@ -741,6 +741,53 @@ paths:
   # =====================================================================
 
   /identity/users:
+    get:
+      tags: [users]
+      summary: List users for a picker.
+      description: |
+        A page of users ordered by login name, optionally narrowed to those whose
+        login name or display name contains `q` (a literal substring). Only what a
+        picker needs is returned (id, login name, display name, status), not the
+        email address. Requires `system:users.read`.
+      operationId: users_list
+      parameters:
+        - name: q
+          in: query
+          description: A substring of the login name or display name.
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageParam'
+        - name: per_page
+          in: query
+          description: Users per page (default 50, at most 200).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: One page of users.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, meta]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [user_id, login_name]
+                      properties:
+                        user_id: { type: string }
+                        login_name: { type: string }
+                        display_name: { type: string }
+                        status: { type: string, nullable: true }
+                  meta:
+                    type: object
+                    properties:
+                      page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer, description: 'Users matching `q`.' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [users]
       summary: Create a user account.

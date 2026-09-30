@@ -29,6 +29,13 @@ preview tag.
 
 ### Added
 
+- `GET /api/v1/identity/users` lists users for a picker (needs `system:users.read`):
+  a page ordered by login name, `q` narrows it to users whose login or display name
+  contains that text (a literal substring, so `%` and `_` are not wildcards), and
+  `per_page` is at most 200. Only the id, login name, display name and status are
+  returned, not the email address. It was the missing half of the API for anything
+  that needs to choose a user without typing an id.
+
 - The account menu links to documentation that exists (DOC-20): "API
   reference" (`/api/docs`) and "Error types" (`/errors`), between API tokens
   and Sign out. There is no link to the user guide yet: the documentation
@@ -193,6 +200,17 @@ preview tag.
   new `docs-site` job in CI.
 
 ### Changed
+
+- A secret's project or user is chosen by name, not typed as an id (ADM-29,
+  PRJ-16). The Project and User tabs of the Secrets page asked for a "Scope
+  reference" with the same placeholder on both ("project id or user id"). Each
+  tab now offers a labelled list (projects from the projects list, users from
+  the new user list, shown as "Ada Lovelace (ada)") and starts on the first
+  owner, so the tab shows a real owner's secrets at once instead of an empty
+  query; the table's scope column names the owner and keeps the id on hover, and
+  a new secret is created for the chosen owner. When a list cannot be read
+  (no permission to list users) or holds fewer rows than exist, the typed field
+  returns, labelled "Project id" or "User id", with a note saying why.
 
 - The projects dashboard leads with what needs attention (PRJ-21). Its largest
   element was a count ("3"); it listed builds and tests from tables nothing

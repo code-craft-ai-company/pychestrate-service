@@ -12,8 +12,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.webservice.identity.users.models import IdentityUser
@@ -93,3 +94,39 @@ def list_page(
     query = db_session.query(IdentityUser).order_by(IdentityUser.created_at.asc())
     rtnval = query.offset(offset).limit(limit).all()
     return rtnval
+
+
+def search_page(
+        *,
+        db_session: DbSession,
+        text: str,
+        offset: int,
+        limit: int
+    ) -> Tuple[List[IdentityUser], int]:
+    """
+        A page of identity users whose login name or display name contains ``text``
+        (any user when it is empty), ordered by login name, and how many match.
+
+        The text is matched literally: ``%`` and ``_`` are not wildcards.
+
+        :param db_session: Active SQLAlchemy session.
+        :param text: Substring to look for; empty matches every user.
+        :param offset: Row offset.
+        :param limit: Maximum rows to return.
+
+        :returns: ``(rows, total matching)``.
+    """
+    query = db_session.query(IdentityUser)
+    needle = text.strip()
+    if len(needle) > 0:
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = "%" + escaped + "%"
+        query = query.filter(
+            or_(
+                IdentityUser.login_name.ilike(pattern, escape="\\"),
+                IdentityUser.display_name.ilike(pattern, escape="\\"),
+            )
+        )
+    total = query.count()
+    rows = query.order_by(IdentityUser.login_name.asc()).offset(offset).limit(limit).all()
+    return list(rows), int(total)

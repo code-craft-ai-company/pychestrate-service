@@ -7,6 +7,34 @@ const SECRET_SCOPE_KINDS = [
 ];
 const SECRETS_API_PATH = "/api/v1/secrets";
 const SECRETS_PER_PAGE = 25;
+// Where each non-org scope's owner is chosen from (ADM-29): a project by its
+// name, a user by their name, instead of an id typed from memory.
+const SCOPE_PICKERS = {
+  PROJECT: { label: "Project", url: "/api/v1/projects?per_page=500", noun: "projects" },
+  USER: { label: "User", url: "/api/v1/identity/users?per_page=200", noun: "users" },
+};
+// What the picker offers for one scope, from the list endpoint's body:
+// ``{options: [{value, label}], complete}``; ``complete`` is false when the list
+// holds fewer rows than exist, so the person still needs the typed field.
+function extract_scope_options(scope_kind, body) {
+  const items = Array.isArray(body) ? body : body !== null && typeof body === "object" && Array.isArray(body.items) ? body.items : [];
+  const options = [];
+  for (const item of items) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    if (scope_kind === "PROJECT" && typeof item.project_id === "string") {
+      const name = typeof item.display_name === "string" && item.display_name.length > 0 ? item.display_name : typeof item.slug === "string" ? item.slug : item.project_id;
+      options.push({ value: item.project_id, label: name });
+    } else if (scope_kind === "USER" && typeof item.user_id === "string") {
+      const login = typeof item.login_name === "string" ? item.login_name : item.user_id;
+      const display = typeof item.display_name === "string" ? item.display_name.trim() : "";
+      options.push({ value: item.user_id, label: display.length > 0 && display !== login ? display + " (" + login + ")" : login });
+    }
+  }
+  const total = body !== null && typeof body === "object" && body.meta !== null && typeof body.meta === "object" && typeof body.meta.total === "number" ? body.meta.total : options.length;
+  return { options, complete: total <= options.length };
+}
 function build_secrets_list_url(scope_kind, scope_ref) {
   const params = new URLSearchParams();
   if (scope_kind.length > 0) {
@@ -309,6 +337,9 @@ class PycSecrets extends HTMLElement {
     this._revealed = /* @__PURE__ */ new Map();
     this._reveal_errors = /* @__PURE__ */ new Map();
     this._sort = { key: "", direction: "none" };
+    // Per non-org scope: what its picker offers. status is "idle", "loading",
+    // "ok" (a complete list) or "typed" (no list: the id is typed).
+    this._scope_options = { PROJECT: { status: "idle", options: [] }, USER: { status: "idle", options: [] } };
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the scope
@@ -480,6 +511,23 @@ class PycSecrets extends HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.classList.add("pyc-secrets__scope-ref");
     wrapper.setAttribute("data-role", "scope-ref-field");
+    // A wrapping label names the select (mj-select draws no label of its own).
+    const picker = document.createElement("label");
+    picker.classList.add("pyc-secrets__field");
+    picker.setAttribute("data-role", "scope-ref-picker");
+    const picker_text = document.createElement("span");
+    picker_text.setAttribute("data-role", "scope-ref-picker-label");
+    picker.appendChild(picker_text);
+    const select = document.createElement("mj-select");
+    select.classList.add("pyc-secrets__select");
+    select.setAttribute("data-role", "scope-ref-select");
+    select.addEventListener("change", () => {
+      this._state.scopeRef = String(select.value || "").trim();
+      this._state.page = 1;
+      void this._refresh();
+    });
+    picker.appendChild(select);
+    wrapper.appendChild(picker);
     const label = document.createElement("div");
     label.classList.add("pyc-secrets__field");
     const input = document.createElement("mj-text-field");
@@ -494,6 +542,11 @@ class PycSecrets extends HTMLElement {
     });
     label.appendChild(input);
     wrapper.appendChild(label);
+    const note = document.createElement("p");
+    note.classList.add("pyc-secrets__scope-note");
+    note.setAttribute("data-role", "scope-ref-note");
+    note.hidden = true;
+    wrapper.appendChild(note);
     return wrapper;
   }
   /**
@@ -603,24 +656,111 @@ class PycSecrets extends HTMLElement {
       }
     }
     this._sync_scope_ref_visibility();
+    if (scope_kind !== "ORG" && this._scope_options[scope_kind].status === "idle") {
+      // The picker decides which owner to list; ask once it has its choices.
+      void this._load_scope_options(scope_kind);
+      return;
+    }
+    if (scope_kind !== "ORG" && this._scope_options[scope_kind].status === "ok") {
+      this._choose_default_scope_ref(scope_kind);
+    }
     void this._refresh();
+    return;
+  }
+  /*
+   * Fetch what the picker of ``scope_kind`` offers. A list that cannot be read, or
+   * that is longer than one page, leaves the typed field in place with a note.
+   */
+  async _load_scope_options(scope_kind) {
+    const picker = SCOPE_PICKERS[scope_kind];
+    const state = this._scope_options[scope_kind];
+    state.status = "loading";
+    this._sync_scope_ref_visibility();
+    let result = { options: [], complete: false };
+    try {
+      const response = await fetch(picker.url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        result = extract_scope_options(scope_kind, await response.json());
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.secrets.scope_options_failed",
+        { reason: String(reason) }
+      );
+    }
+    state.options = result.options;
+    state.status = result.complete === true && result.options.length > 0 ? "ok" : "typed";
+    if (this._state.scopeKind === scope_kind) {
+      if (state.status === "ok") {
+        this._choose_default_scope_ref(scope_kind);
+      }
+      this._sync_scope_ref_visibility();
+      await this._refresh();
+    }
+    return;
+  }
+  /* Start on the first choice, or keep the one already made. */
+  _choose_default_scope_ref(scope_kind) {
+    const options = this._scope_options[scope_kind].options;
+    const kept = options.find((option) => option.value === this._state.scopeRef);
+    this._state.scopeRef = kept !== void 0 ? kept.value : options.length > 0 ? options[0].value : "";
     return;
   }
   /**
    * Show the scope-ref field for PROJECT / USER scopes and hide
-   * it for ORG scope.
+   * it for ORG scope: a list of names when the picker has one, the typed
+   * field (with the reason) when it does not.
    */
   _sync_scope_ref_visibility() {
     if (this._root === null) {
       return;
     }
     const field = this._root.querySelector('[data-role="scope-ref-field"]');
-    if (field instanceof HTMLElement) {
-      if (this._state.scopeKind === "ORG") {
-        field.hidden = true;
-      } else {
-        field.hidden = false;
+    if (field instanceof HTMLElement === false) {
+      return;
+    }
+    const kind = this._state.scopeKind;
+    field.hidden = kind === "ORG";
+    if (kind === "ORG") {
+      return;
+    }
+    const picker = SCOPE_PICKERS[kind];
+    const state = this._scope_options[kind];
+    const picker_box = field.querySelector('[data-role="scope-ref-picker"]');
+    const select = field.querySelector('[data-role="scope-ref-select"]');
+    const input_box = field.querySelector('[data-role="scope-ref-input"]');
+    const note = field.querySelector('[data-role="scope-ref-note"]');
+    const show_list = state.status === "ok";
+    if (picker_box instanceof HTMLElement) {
+      picker_box.hidden = show_list === false;
+    }
+    if (input_box instanceof HTMLElement) {
+      input_box.parentElement.hidden = show_list === true || state.status === "loading";
+      input_box.setAttribute("label", picker.label + " id");
+      input_box.setAttribute("placeholder", picker.label.toLowerCase() + " id");
+    }
+    const picker_text = field.querySelector('[data-role="scope-ref-picker-label"]');
+    if (picker_text instanceof HTMLElement) {
+      picker_text.textContent = picker.label;
+    }
+    if (select instanceof HTMLElement) {
+      if (show_list === true) {
+        select.replaceChildren(...state.options.map((option) => {
+          const item = document.createElement("mj-option");
+          item.setAttribute("value", option.value);
+          item.textContent = option.label;
+          return item;
+        }));
+        select.value = this._state.scopeRef;
       }
+    }
+    if (note instanceof HTMLElement) {
+      note.hidden = state.status !== "typed" && state.status !== "loading";
+      note.textContent = state.status === "loading" ? "Loading " + picker.noun + "\u2026" : "The list of " + picker.noun + " could not be loaded in full, so type the id.";
     }
     return;
   }
@@ -1044,10 +1184,11 @@ class PycSecrets extends HTMLElement {
     badge.textContent = SCOPE_LABELS[secret.scope_kind] || secret.scope_kind;
     scope.appendChild(badge);
     if (secret.scope_ref !== null && secret.scope_ref !== void 0 && secret.scope_ref.length > 0) {
+      const known = (this._scope_options[secret.scope_kind] || { options: [] }).options.find((option) => option.value === secret.scope_ref);
       const ref = document.createElement("code");
       ref.classList.add("pyc-secrets__scope-ref-text");
       ref.setAttribute("title", secret.scope_ref);
-      ref.textContent = secret.scope_ref;
+      ref.textContent = known !== void 0 ? known.label : secret.scope_ref;
       scope.appendChild(ref);
       scope.appendChild(build_copy_button(secret.scope_ref, "Copy the scope reference " + secret.scope_ref));
     }
@@ -1491,6 +1632,8 @@ class PycSecrets extends HTMLElement {
   }
 }
 export {
+  SCOPE_PICKERS,
+  extract_scope_options,
   PycSecrets,
   SECRET_SCOPE_KINDS,
   SECRETS_PER_PAGE,

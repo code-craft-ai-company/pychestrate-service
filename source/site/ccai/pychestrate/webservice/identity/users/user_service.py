@@ -20,7 +20,7 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -146,6 +146,30 @@ def read_user(*, db_session: DbSession, user_id: str) -> IdentityUser:
         raise UserNotFoundError(err_msg) from None
 
     rtnval = user
+    return rtnval
+
+
+def list_users(
+        *,
+        db_session: DbSession,
+        text: str = "",
+        page: int = 1,
+        per_page: int = 50
+    ) -> Tuple[List[IdentityUser], int]:
+    """
+        A page of users for a picker: those whose login or display name contains
+        ``text``, by login name.
+
+        :param db_session: Active SQLAlchemy session.
+        :param text: Substring to look for (empty for every user).
+        :param page: 1-based page number.
+        :param per_page: Users per page.
+
+        :returns: ``(users, total matching)``.
+    """
+    rtnval = user_repository.search_page(
+        db_session=db_session, text=text, offset=(max(page, 1) - 1) * per_page, limit=per_page,
+    )
     return rtnval
 
 

@@ -282,6 +282,62 @@ def handle_read_user(request: Request) -> Response:
     return rtnval
 
 
+#: The most users one page of the picker list returns.
+MAX_USERS_PAGE_SIZE: int = 200
+DEFAULT_USERS_PAGE_SIZE: int = 50
+
+
+def handle_list_users(request: Request) -> Response:
+    """
+        ``GET /api/v1/identity/users`` -- a page of users for a picker.
+
+        Query params: ``q`` (a substring of the login or display name), ``page``,
+        ``per_page`` (at most 200). Only what a picker needs is returned: the id,
+        the login name, the display name and the status (not the email address).
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) carrying ``{items, meta}``, or a problem response.
+    """
+    try:
+        db_session = _require_session(request=request)
+
+        def number(name: str, default: int, maximum: int) -> int:
+            raw = request.query_params.get(name, None)
+            if raw is None or len(str(raw)) == 0:
+                return default
+            try:
+                value = int(raw)
+            except ValueError:
+                _abort_problem(request=request, status=400, detail="Query param '{}' must be an integer.".format(name), extensions={"query_param": name})
+            if value < 1 or value > maximum:
+                _abort_problem(request=request, status=400, detail="Query param '{}' must be between 1 and {}.".format(name, maximum), extensions={"query_param": name})
+            return value
+
+        page = number("page", 1, 1000000)
+        per_page = number("per_page", DEFAULT_USERS_PAGE_SIZE, MAX_USERS_PAGE_SIZE)
+        users, total = user_service.list_users(
+            db_session=db_session, text=str(request.query_params.get("q", "") or ""), page=page, per_page=per_page,
+        )
+        body = {
+            "items": [
+                {
+                    "user_id": str(user.user_id),
+                    "login_name": user.login_name,
+                    "display_name": user.display_name,
+                    "status": user.status.value if user.status is not None else None,
+                }
+                for user in users
+            ],
+            "meta": {"page": page, "per_page": per_page, "total": total},
+        }
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -300,6 +356,7 @@ def register_users_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + USERS_PATH
 
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_users, permission_key="system:users.read"))
     app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_user, permission_key="system:users.write"))
     app.attach_route(
         base + "/{user_id}", methods=["GET"]
@@ -309,7 +366,10 @@ def register_users_routes(*, app: Any, version_prefix: str) -> None:
 
 
 __all__ = [
+    "DEFAULT_USERS_PAGE_SIZE",
+    "MAX_USERS_PAGE_SIZE",
     "USERS_PATH",
+    "handle_list_users",
     "register_users_routes",
     "handle_create_user",
     "handle_read_user",

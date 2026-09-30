@@ -148,16 +148,18 @@ def _raises(exc: BaseException) -> Callable[..., Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_register_users_routes_attaches_two_routes():
+def test_register_users_routes_attaches_three_routes():
     """
     **Feature: 1-user-management T1.1 (webworks routes)**
-    **Property: register_users_routes attaches the same two
-    method+path pairs the flask_restx controller exposed.**
+    **Property: register_users_routes attaches the two method+path pairs
+    the flask_restx controller exposed and the picker list (a
+    searchable, paged ``GET /identity/users``).**
     """
     app = _FakeApp()
     users_routes.register_users_routes(app=app, version_prefix="/api/v1")
 
     expected_pairs = (
+        ("/api/v1/identity/users", ("GET",)),
         ("/api/v1/identity/users", ("POST",)),
         ("/api/v1/identity/users/{user_id}", ("GET",)),
     )
