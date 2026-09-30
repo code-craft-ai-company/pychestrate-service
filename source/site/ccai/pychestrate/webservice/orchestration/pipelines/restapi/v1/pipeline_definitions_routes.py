@@ -50,7 +50,7 @@ import json
 import logging
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
@@ -407,6 +407,34 @@ def _stage_view_to_dict(view: Any) -> Dict[str, Any]:
     return rtnval
 
 
+def collapse_by_definition(*, views: List[Any]) -> List[Tuple[Any, List[Any]]]:
+    """
+        Collapse cache rows that hold the same definition into one entry.
+
+        A row is keyed by ``(commit, filename)`` but a pipeline is identified by the
+        digest of its document, so saving the same document from a second commit or
+        file adds a row with the same ``pipeline_id``. The list shows the pipeline once.
+
+        :param views: The definition views, newest first.
+
+        :returns: ``(newest view, the older views of the same definition)`` per
+                  distinct ``pipeline_id``, in the order the newest views appear.
+    """
+    order: List[str] = []
+    newest: Dict[str, Any] = {}
+    others: Dict[str, List[Any]] = {}
+    for view in views:
+        key = str(view.pipeline_id)
+        if key not in newest:
+            order.append(key)
+            newest[key] = view
+            others[key] = []
+        else:
+            others[key].append(view)
+    rtnval = [(newest[key], others[key]) for key in order]
+    return rtnval
+
+
 def _definition_view_to_dict(view: Any) -> Dict[str, Any]:
     """
         Serialize a :class:`PipelineDefinitionView` to the OpenAPI
@@ -719,13 +747,27 @@ def handle_list_pipelines(request: Request) -> Response:
             limit=MAX_PAGE_SIZE,
         )
 
-        total = len(all_views)
+        # One row per definition: the same document saved from another commit
+        # or file is the same pipeline (its id is the document's digest), so it
+        # is listed once with its newest source and the others named.
+        collapsed = collapse_by_definition(views=all_views)
+
+        total = len(collapsed)
         offset = (page - 1) * per_page
-        window = all_views[offset:offset + per_page]
+        window = collapsed[offset:offset + per_page]
 
         items: List[Dict[str, Any]] = []
-        for view in window:
-            items.append(_definition_view_to_dict(view=view))
+        for view, others in window:
+            entry = _definition_view_to_dict(view=view)
+            entry["other_sources"] = [
+                {
+                    "filename": other.filename,
+                    "commit_sha": other.commit_sha,
+                    "cached_at": _iso_or_none(other.cached_at),
+                }
+                for other in others
+            ]
+            items.append(entry)
 
         body = {
             "items": items,
@@ -1115,6 +1157,7 @@ __all__ = [
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
     "register_pipeline_definitions_routes",
+    "collapse_by_definition",
     "handle_list_pipelines",
     "handle_upsert_pipeline",
     "handle_read_pipeline",

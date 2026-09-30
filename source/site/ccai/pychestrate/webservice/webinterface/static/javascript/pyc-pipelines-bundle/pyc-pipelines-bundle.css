@@ -362,6 +362,10 @@ pyc-pipeline-detail {
     stroke-width: 0.125rem;
 }
 
+.pyc-pipeline-detail__dag-arrow {
+    fill: var(--pyc-pipelines-border);
+}
+
 .pyc-pipeline-detail__dag-box {
     fill: var(--pyc-pipelines-neutral-surface);
     stroke: var(--pyc-pipelines-accent);

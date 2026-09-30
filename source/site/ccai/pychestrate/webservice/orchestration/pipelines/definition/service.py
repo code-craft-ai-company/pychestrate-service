@@ -410,28 +410,23 @@ def delete_definition(
         pipeline_id: str
     ) -> None:
     """
-        Delete a cached pipeline-definition document by its
-        canonical-document digest (``pipeline_id``).
+        Delete a pipeline definition by its canonical-document digest
+        (``pipeline_id``): every cached copy of it, whichever commit or file
+        it was saved from.
 
         :raises: PipelineRunNotFoundError when nothing matches.
     """
-    row = repository.find_document_cache_by_digest(
+    removed = repository.delete_document_cache_by_digest(
         db_session=db_session,
         project_id=project_id,
         pipeline_digest_sha256=pipeline_id,
     )
-    if row is None:
+    if removed == 0:
         err_lines = ["Pipeline definition not found."]
         err_lines.append("PROJECT_ID: {}".format(project_id))
         err_lines.append("PIPELINE_ID: {}".format(pipeline_id))
         err_msg = os.linesep.join(err_lines)
         raise PipelineRunNotFoundError(err_msg) from None
-    repository.delete_document_cache(
-        db_session=db_session,
-        project_id=project_id,
-        commit_sha=row.commit_sha,
-        filename=row.filename,
-    )
     db_session.commit()
     return
 

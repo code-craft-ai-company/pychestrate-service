@@ -29,6 +29,20 @@ preview tag.
 
 ### Added
 
+- Pipeline stage dependencies have arrowheads, and a pipeline saved again is one row (ORC-37).
+  The pipeline page drew the stage graph's edges as bare lines; each edge now ends in an
+  arrowhead at the stage that needs the other, in the edge's own colour. The pipelines list
+  returned one row per cached (commit, file) although a pipeline is identified by the digest of
+  its document, so saving the same definition again, or from another commit, looked like a
+  duplicate. `GET /api/v1/projects/{id}/pipelines` now returns one entry per definition with its
+  newest source in `commit_sha`/`filename` and the older ones in the new `other_sources` array
+  (`meta.total` counts definitions); the list shows "+N other sources" in the Source column, and
+  Save says "Nothing changed: this pipeline was already saved from ..." or "Saved. This is the same
+  pipeline as ..., so it is listed once" when the definition was already there.
+  Deleting a pipeline (`DELETE .../pipelines/{pipeline_id}`) now removes every cached copy of the
+  definition, whichever commit or file it was saved from; before, one copy was removed and the
+  next request could still find the pipeline.
+
 - Content a person opens on a bundle page is brought into view and given focus (ORC-41).
   "Show Published Release" on a long list of release channels and "Delivery History" on a
   long list of webhook subscriptions rendered the detail below the list, out of sight, with

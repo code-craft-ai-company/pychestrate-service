@@ -32,6 +32,15 @@ function build_pipelines_expand_matrix_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/pipelines:expand-matrix";
   return rtnval;
 }
+// "ci.yaml @ 1a2b3c4": the file and the short commit a definition came from ("\u2014" when neither is known).
+function source_label(filename, commit_sha) {
+  const file = typeof filename === "string" ? filename : "";
+  const commit = typeof commit_sha === "string" ? commit_sha.slice(0, 7) : "";
+  if (file.length > 0 && commit.length > 0) {
+    return file + " @ " + commit;
+  }
+  return file.length > 0 ? file : commit.length > 0 ? commit : "\u2014";
+}
 function short_id(value) {
   if (typeof value !== "string" || value.length === 0) {
     const rtnval2 = "";
@@ -803,12 +812,21 @@ class PycPipelinesList extends HTMLElement {
         width: "20rem",
         sortable: false,
         render: (pipeline) => {
-          const file = typeof pipeline.filename === "string" ? pipeline.filename : "";
-          const commit = typeof pipeline.commit_sha === "string" ? pipeline.commit_sha.slice(0, 7) : "";
-          if (file.length > 0 && commit.length > 0) {
-            return file + " @ " + commit;
+          const label = source_label(pipeline.filename, pipeline.commit_sha);
+          const others = Array.isArray(pipeline.other_sources) ? pipeline.other_sources : [];
+          if (others.length === 0) {
+            return label;
           }
-          return file.length > 0 ? file : commit.length > 0 ? commit : "\u2014";
+          // The same definition saved from other commits or files is one row, not several.
+          const cell = document.createElement("span");
+          cell.appendChild(document.createTextNode(label));
+          const more = document.createElement("span");
+          more.classList.add("pyc-pipelines__pipeline-id");
+          more.setAttribute("data-role", "other-sources");
+          more.textContent = " +" + String(others.length) + " other source" + (others.length === 1 ? "" : "s");
+          more.title = "Also saved from " + others.map((other) => source_label(other.filename, other.commit_sha)).join(", ");
+          cell.appendChild(more);
+          return cell;
         }
       },
       {
@@ -1080,6 +1098,11 @@ class PycPipelinesList extends HTMLElement {
     }
     const ok = status === 200 || status === 201;
     let message = "Pipeline saved.";
+    const existing = ok === true && pipeline_id.length > 0 ? this._pipelines.find((entry) => entry.pipeline_id === pipeline_id) : void 0;
+    if (existing !== void 0) {
+      const same_source = existing.filename === filename && existing.commit_sha === commit_sha;
+      message = same_source ? "Nothing changed: this pipeline was already saved from " + source_label(filename, commit_sha) + "." : "Saved. This is the same pipeline as " + (existing.name || short_id(pipeline_id)) + ", so it is listed once; " + source_label(filename, commit_sha) + " is now its latest source.";
+    }
     if (ok === false) {
       if (status === 422) {
         message = "Pipeline document was rejected \u2014 check the DAG.";

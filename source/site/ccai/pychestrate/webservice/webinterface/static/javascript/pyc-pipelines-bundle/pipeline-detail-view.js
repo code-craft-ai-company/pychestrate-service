@@ -253,6 +253,15 @@ function compute_dag_layout(stages) {
   return rtnval;
 }
 const SVG_NS = "http://www.w3.org/2000/svg";
+// An edge runs from the stage a stage needs to the stage that needs it, so the
+// arrowhead sits at the dependent stage: the direction the work flows.
+const DAG_ARROW_SIZE = 10;
+let dag_arrow_count = 0;
+function next_dag_arrow_number() {
+  dag_arrow_count = dag_arrow_count + 1;
+  const rtnval = dag_arrow_count;
+  return rtnval;
+}
 class PycPipelineDetail extends HTMLElement {
   _pipeline_id;
   _project_id;
@@ -756,8 +765,29 @@ class PycPipelineDetail extends HTMLElement {
     svg.classList.add("pyc-pipeline-detail__dag-svg");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "Pipeline stage DAG");
+    const arrow_id = "pyc-dag-arrow-" + String(next_dag_arrow_number());
+    const defs = document.createElementNS(SVG_NS, "defs");
+    const marker = document.createElementNS(SVG_NS, "marker");
+    marker.setAttribute("id", arrow_id);
+    marker.setAttribute("markerWidth", String(DAG_ARROW_SIZE));
+    marker.setAttribute("markerHeight", String(DAG_ARROW_SIZE));
+    marker.setAttribute("refX", String(DAG_ARROW_SIZE));
+    marker.setAttribute("refY", String(DAG_ARROW_SIZE / 2));
+    marker.setAttribute("orient", "auto");
+    marker.setAttribute("markerUnits", "userSpaceOnUse");
+    const arrow = document.createElementNS(SVG_NS, "path");
+    arrow.setAttribute(
+      "d",
+      "M0,0 L" + String(DAG_ARROW_SIZE) + "," + String(DAG_ARROW_SIZE / 2) + " L0," + String(DAG_ARROW_SIZE) + " Z"
+    );
+    arrow.setAttribute("class", "pyc-pipeline-detail__dag-arrow");
+    arrow.setAttribute("data-role", "dag-arrow");
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
     for (const edge of layout.edges) {
       const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("marker-end", "url(#" + arrow_id + ")");
       line.setAttribute("x1", String(edge.x1));
       line.setAttribute("y1", String(edge.y1));
       line.setAttribute("x2", String(edge.x2));

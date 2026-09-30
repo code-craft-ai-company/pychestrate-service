@@ -4053,7 +4053,10 @@ paths:
         cached for the project, newest-cached first. A pipeline
         definition is the parsed + DAG-validated + canonicalized
         document; its `pipeline_id` is the canonical-document
-        SHA-256 digest.
+        SHA-256 digest. A document saved from several commits or
+        files is listed once (the newest source), with the older
+        sources in `other_sources`; `meta.total` counts distinct
+        definitions.
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/PerPageParam'
@@ -9594,6 +9597,23 @@ components:
           type: string
           format: date-time
           nullable: true
+        other_sources:
+          type: array
+          description: |
+            Present in list responses only. The same document (same
+            `pipeline_id`) is cached once per commit and file it was saved from;
+            the list shows it once, with the newest source in `commit_sha` and
+            `filename`, and the older ones here (newest first).
+          items:
+            type: object
+            required: [filename, commit_sha]
+            properties:
+              filename: { type: string }
+              commit_sha: { type: string }
+              cached_at:
+                type: string
+                format: date-time
+                nullable: true
 
     PipelineDefinitionPage:
       type: object

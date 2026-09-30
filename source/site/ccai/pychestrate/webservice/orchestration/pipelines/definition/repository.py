@@ -324,6 +324,36 @@ def delete_document_cache(
     return rtnval
 
 
+def delete_document_cache_by_digest(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        pipeline_digest_sha256: str
+    ) -> int:
+    """
+        Delete every cached copy of a pipeline definition: the same document saved
+        from several commits or files is one pipeline (its id is the digest), so
+        deleting the pipeline removes them all.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param pipeline_digest_sha256: Canonical-document SHA-256.
+
+        :returns: How many cache rows were deleted.
+    """
+    rows = (
+        db_session.query(PipelineDocumentCache)
+        .filter(PipelineDocumentCache.project_id == project_id)
+        .filter(PipelineDocumentCache.pipeline_digest_sha256 == pipeline_digest_sha256)
+        .all()
+    )
+    for row in rows:
+        db_session.delete(row)
+    db_session.flush()
+    rtnval = len(rows)
+    return rtnval
+
+
 def find_document_cache_by_digest(
         *,
         db_session: DbSession,
