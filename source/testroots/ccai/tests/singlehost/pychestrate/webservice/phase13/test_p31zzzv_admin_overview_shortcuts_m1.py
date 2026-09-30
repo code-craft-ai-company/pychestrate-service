@@ -60,11 +60,18 @@ ADMIN_PERMISSIONS = [
 ]
 
 
-def _open_overview(browser: Browser, *, permissions: Any, total: Optional[int] = 12, user_reads: Optional[List[str]] = None, **context_options: Any) -> Any:
+def _open_overview(
+        browser: Browser, *, permissions: Any, total: Optional[int] = 12, deactivated: int = 0, listed: Optional[int] = None,
+        user_reads: Optional[List[str]] = None, **context_options: Any
+    ) -> Any:
     def users(query: Dict[str, Any]) -> Dict[str, Any]:
         if user_reads is not None:
             user_reads.append("read")
-        return {"items": [], "meta": {"page": 1, "per_page": 1, "total": total}} if total is not None else {"items": []}
+        if total is None:
+            return {"items": []}
+        held = total if listed is None else listed
+        items = [{"user_id": str(number), "status": "DEACTIVATED" if number < deactivated else "ACTIVE"} for number in range(held)]
+        return {"items": items, "meta": {"page": 1, "per_page": 200, "total": total}}
 
     stubs: Dict[str, Any] = {
         "/api/v1/system/health": HEALTH,
@@ -122,6 +129,36 @@ def test_an_administrator_finds_a_way_into_every_admin_area_and_the_user_count(b
             ["Accounts, their status and their roles.", "What each role may do."],
         ),
     )
+    return
+
+
+def test_deactivated_accounts_are_not_counted_as_users(browser: Browser):
+    """
+    **Feature: one admin landing page (XC-18)**
+    **Property: with 12 accounts of which 5 are deactivated the tile says "7
+    active users" and, under it, "5 deactivated"; when the list is too long to
+    hold every user it cannot count them by status and says the plain total
+    ("500 users") with no second line.**
+    """
+    page = _open_overview(browser, permissions=ADMIN_PERMISSIONS, total=12, deactivated=5, **DESKTOP)
+    try:
+        counted = (page.locator('[data-role="user-count"]').inner_text(), page.locator('[data-role="user-count-detail"]').inner_text())
+    finally:
+        page.context.close()
+
+    page = _open_overview(browser, permissions=ADMIN_PERMISSIONS, total=500, listed=200, deactivated=50, **DESKTOP)
+    try:
+        truncated = (page.locator('[data-role="user-count"]').inner_text(), page.locator('[data-role="user-count-detail"]').count())
+    finally:
+        page.context.close()
+
+    page = _open_overview(browser, permissions=ADMIN_PERMISSIONS, total=1, **DESKTOP)
+    try:
+        single = page.locator('[data-role="user-count"]').inner_text()
+    finally:
+        page.context.close()
+
+    testbase.assert_equal((counted, truncated, single), (("7 active users", "5 deactivated"), ("500 users", 0), "1 user"))
     return
 
 

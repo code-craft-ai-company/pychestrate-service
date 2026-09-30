@@ -1235,7 +1235,8 @@ var SYSTEM_HEALTH_ROUTE = "/admin/system-health";
 var FEATURE_FLAGS_ROUTE = "/admin/feature-flags";
 var EXTENSION_REGISTRY_ROUTE = "/admin/extensions";
 var QUICK_FLAG_LIMIT = 8;
-var USERS_COUNT_URL = "/api/v1/identity/users?per_page=1";
+var USERS_COUNT_URL = "/api/v1/identity/users?per_page=200";
+var USER_STATUS_DEACTIVATED = "DEACTIVATED";
 var USERS_PERMISSION = "system:users.read";
 var SHORTCUT_GROUPS = [
   {
@@ -1257,12 +1258,19 @@ var SHORTCUT_GROUPS = [
     ]
   }
 ];
-function user_count_text(count) {
-  if (typeof count !== "number" || Number.isInteger(count) === false || count < 0) {
-    const rtnval2 = "";
+function user_count_lines(count) {
+  if (count === null || typeof count !== "object" || typeof count.total !== "number" || Number.isInteger(count.total) === false || count.total < 0) {
+    const rtnval2 = [];
     return rtnval2;
   }
-  const rtnval = String(count) + (count === 1 ? " user" : " users");
+  const deactivated = Number.isInteger(count.deactivated) === true && count.deactivated > 0 && count.deactivated <= count.total ? count.deactivated : 0;
+  const shown = count.total - deactivated;
+  const noun = shown === 1 ? " user" : " users";
+  if (deactivated === 0) {
+    const rtnval2 = [String(shown) + noun];
+    return rtnval2;
+  }
+  const rtnval = [String(shown) + " active" + noun, String(deactivated) + " deactivated"];
   return rtnval;
 }
 var PycAdminOverview = class extends HTMLElement {
@@ -1435,7 +1443,9 @@ var PycAdminOverview = class extends HTMLElement {
       const body = await response.json();
       const total = body !== null && typeof body === "object" && body.meta !== null && typeof body.meta === "object" ? body.meta.total : null;
       if (typeof total === "number" && Number.isInteger(total) === true && total >= 0) {
-        this._userCount = total;
+        const items = Array.isArray(body.items) === true ? body.items : [];
+        const deactivated = items.length === total ? items.filter((entry) => entry !== null && typeof entry === "object" && entry.status === USER_STATUS_DEACTIVATED).length : null;
+        this._userCount = { total, deactivated };
       }
     } catch (reason) {
       console.warn(
@@ -1463,12 +1473,20 @@ var PycAdminOverview = class extends HTMLElement {
       title.classList.add("pyc-admin__tile-title");
       title.textContent = group.title;
       children.push(title);
-      if (group.role === "people-tile" && user_count_text(this._userCount).length > 0) {
+      const count_lines = group.role === "people-tile" ? user_count_lines(this._userCount) : [];
+      if (count_lines.length > 0) {
         const value = document.createElement("p");
         value.classList.add("pyc-admin__tile-value");
         value.setAttribute("data-role", "user-count");
-        value.textContent = user_count_text(this._userCount);
+        value.textContent = count_lines[0];
         children.push(value);
+      }
+      if (count_lines.length > 1) {
+        const detail = document.createElement("p");
+        detail.classList.add("pyc-admin__tile-detail");
+        detail.setAttribute("data-role", "user-count-detail");
+        detail.textContent = count_lines[1];
+        children.push(detail);
       }
       const list = document.createElement("ul");
       list.classList.add("pyc-admin__tile-links");

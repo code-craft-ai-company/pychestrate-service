@@ -206,7 +206,8 @@ preview tag.
   content and styling, and `/admin/overview` was a third address for the first.
   `/admin` is now the only one. It keeps system health, the extension registry and
   the feature flags, and gains what the dashboard had: a "People & access" tile
-  (how many users there are, and Users, Roles, Sessions and Audit Logs) and a
+  (how many active users there are and how many accounts are deactivated, and
+  Users, Roles, Sessions and Audit Logs) and a
   "Configuration" tile (Variables and Secrets), each link with a line saying what
   it opens and shown only to a viewer who may use it (the labels, addresses and
   permissions are the sidebar's Admin group; a test keeps them in step).
