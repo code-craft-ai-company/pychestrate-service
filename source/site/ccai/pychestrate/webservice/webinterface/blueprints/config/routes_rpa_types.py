@@ -131,7 +131,7 @@ def _deny_read(auth: Any) -> Optional[Response]:
     rtnval = _require_permission_or_redirect(
         auth=auth,
         permission=RPA_TYPES_READ_PERMISSION,
-        deny_redirect_url=_url_for_module.url_for("config.dashboard"),
+        deny_redirect_url=_url_for_module.url_for("config.dashboard_root"),
         deny_message="You do not have permission to view RPA job types.",
     )
     return rtnval

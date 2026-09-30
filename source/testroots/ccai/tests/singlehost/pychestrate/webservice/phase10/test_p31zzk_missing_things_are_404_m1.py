@@ -119,20 +119,22 @@ def test_an_unknown_admin_path_is_a_404_and_the_real_ones_still_open():
     **Feature: real 404s (ADM-22)**
     **Property: ``/admin/nope`` answers 404 (also when signed out, since a
     mistyped address is not a reason to ask for a sign-in); the admin pages the
-    bundle serves and the ones the blueprints serve still answer 200.**
+    bundle serves and the ones the blueprints serve still answer 200, and the
+    two retired landing addresses (``/admin/overview``, ``/admin/dashboard``)
+    redirect to ``/admin`` (XC-18).**
     """
     setup = _setup()
     unknown = _get(setup, "/admin/nope")
     unknown_signed_out = _get(setup, "/admin/nope", signed_in=False)
     deeper = _get(setup, "/admin/feature-flags/nope")
     served = {path: _get(setup, path).status_code for path in (
-        "/admin", "/admin/overview", "/admin/feature-flags", "/admin/extensions",
-        "/admin/system-health", "/admin/dashboard", "/admin/users",
+        "/admin", "/admin/feature-flags", "/admin/extensions", "/admin/system-health", "/admin/users",
     )}
+    retired = {path: _get(setup, path).status_code for path in ("/admin/overview", "/admin/dashboard")}
 
     testbase.assert_equal(
-        (unknown.status_code, unknown_signed_out.status_code, deeper.status_code, sorted(set(served.values()))),
-        (404, 404, 404, [200]),
+        (unknown.status_code, unknown_signed_out.status_code, deeper.status_code, sorted(set(served.values())), sorted(set(retired.values()))),
+        (404, 404, 404, [200], [301]),
     )
     return
 

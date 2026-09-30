@@ -201,6 +201,22 @@ preview tag.
 
 ### Changed
 
+- Administration has one landing page (XC-18). `/admin` ("Administration") and
+  `/admin/dashboard` ("Dashboard", six cards) did the same job with different
+  content and styling, and `/admin/overview` was a third address for the first.
+  `/admin` is now the only one. It keeps system health, the extension registry and
+  the feature flags, and gains what the dashboard had: a "People & access" tile
+  (how many users there are, and Users, Roles, Sessions and Audit Logs) and a
+  "Configuration" tile (Variables and Secrets), each link with a line saying what
+  it opens and shown only to a viewer who may use it (the labels, addresses and
+  permissions are the sidebar's Admin group; a test keeps them in step).
+  `/admin/dashboard` and `/admin/overview` redirect to `/admin` (301, after the
+  usual sign-in and admin-permission checks), so a bookmark still works. The UI
+  Profile page's Cancel link and the RPA job types page's permission redirect
+  now go to `/admin`. Not done: "pending actions" (nothing in the product
+  queues admin work to show), and the admin sub-pages (users, roles and so on)
+  still use the older server-rendered style.
+
 - Bundle views leave out the primary actions the viewer cannot use (ORC-33). The
   views showed every write action to every viewer and the missing permission
   surfaced only after a form was submitted. Start a build, attach a guard, create
@@ -934,6 +950,9 @@ preview tag.
   solid red block (the confirmation is unchanged).
 
 ### Removed
+
+- The server-rendered admin "Dashboard" page (`config/dashboard.html`), replaced by
+  the administration overview at `/admin` (XC-18).
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder
   with debug-colored regions), which was never registered or reachable,

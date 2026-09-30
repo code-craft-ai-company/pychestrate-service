@@ -146,17 +146,19 @@ _AUTH_ROUTE_TABLE = (
 
 # Authenticated dashboard pages under the ``/admin`` prefix.
 #
-# The ``config.admin_overview`` / ``config.feature_flags`` /
+# The ``config.dashboard_root`` / ``config.feature_flags`` /
 # ``config.extension_registry`` / ``config.system_health`` entries
 # are shell-native Web Component views (PR p21f / audit items
-# 9-admin-ui + E-extension-registry-ui). Their server handler is
-# the shared :func:`handle_dashboard` flow -- it performs the auth
-# check and renders the shell document -- and ``pyc-admin-bundle``
+# 9-admin-ui + E-extension-registry-ui). Their server handler
+# (:func:`handle_bundle_mount`) performs the auth check and renders the
+# shell document with an empty mount point, and ``pyc-admin-bundle``
 # replaces the shell ``<main>`` content with the route-appropriate
 # Custom Element client-side. The bare ``/admin`` path (the
-# ``config.dashboard_root`` entry) also mounts the shell-native
-# ``<pyc-admin-overview>`` view: the WC overview wins for ``/admin``
-# because the bundle replaces ``<main>`` for every route it owns.
+# ``config.dashboard_root`` entry) mounts ``<pyc-admin-overview>``, the
+# one administration landing page. ``config.dashboard`` (``/admin/dashboard``,
+# the old server-rendered landing) and ``config.admin_overview``
+# (``/admin/overview``, an alias of ``/admin``) only redirect there
+# (:func:`handle_dashboard`), so an old bookmark still works.
 _ADMIN_ROUTE_TABLE = (
     ("config.dashboard_root", "/", ("GET",)),
     ("config.dashboard", "/dashboard", ("GET",)),
@@ -190,8 +192,6 @@ _ADMIN_ROUTE_PERMISSIONS: Dict[str, str] = {
 # modules' route prefixes; an unmatched path falls back to the
 # bare product name.
 _ADMIN_PAGE_TITLE_TABLE: Tuple[Tuple[str, str], ...] = (
-    (ADMIN_PATH + "/dashboard", "Dashboard"),
-    (ADMIN_PATH + "/overview", "Overview"),
     (ADMIN_PATH + "/feature-flags", "Feature Flags"),
     (ADMIN_PATH + "/ui-profile", "UI Profile"),
     (ADMIN_PATH + "/rpa-job-types", "RPA Job Types"),
@@ -2003,20 +2003,25 @@ def _render_admin_landing(
 
 def handle_dashboard(request: Request) -> Response:
     """
-        ``GET /admin/dashboard`` -- the server-rendered dashboard
-        cards for an authenticated session.
+        ``GET /admin/dashboard`` and ``GET /admin/overview`` -- retired
+        landing pages. The administration overview at ``/admin`` is the one
+        landing page (XC-18: the server-rendered "Dashboard" and the bundle's
+        "Administration" did the same job with different content and styling),
+        so both paths now send the browser there. Signing in and the admin
+        permission are enforced by the route's gate before this runs, so an
+        anonymous request still meets the sign-in page first.
+
+        :param request: Incoming webworks request.
+
+        :returns: A permanent redirect to ``/admin``.
     """
-    rtnval = _render_admin_landing(
-        request,
-        template_name="config/dashboard.html",
-        request_endpoint="config.dashboard",
-    )
+    rtnval = RedirectResponse(url=ADMIN_PATH, status_code=301)
     return rtnval
 
 
 def handle_bundle_mount(request: Request) -> Response:
     """
-        ``GET /admin``, ``/admin/overview``, ``/admin/feature-flags``,
+        ``GET /admin``, ``/admin/feature-flags``,
         ``/admin/extensions``, ``/admin/system-health`` -- routes the
         ``pyc-admin-bundle`` web components own. The handler still
         enforces authentication and renders inside the shell, but
@@ -2044,7 +2049,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Any] = {
     "config.logout": handle_logout,
     "config.dashboard_root": handle_bundle_mount,
     "config.dashboard": handle_dashboard,
-    "config.admin_overview": handle_bundle_mount,
+    "config.admin_overview": handle_dashboard,
     "config.feature_flags": handle_bundle_mount,
     "config.extension_registry": handle_bundle_mount,
     "config.system_health": handle_bundle_mount,

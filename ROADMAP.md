@@ -188,8 +188,9 @@ records the decisions and status that the code alone does not show.
   project-scoped server pages own the per-project view. The
   `/admin` landing routes owned by `pyc-admin-bundle` no longer
   render the server dashboard first (they emit an empty mount point),
-  and `/admin/dashboard` remains the only server-rendered landing
-  page.
+  and `/admin` is the one administration landing page: the old
+  server-rendered `/admin/dashboard` and the `/admin/overview` alias
+  redirect to it.
 - **Strict templates.** The jinja environment runs with
   `StrictUndefined`; a template that reads an attribute the handler
   never supplied fails loudly instead of rendering a blank. The

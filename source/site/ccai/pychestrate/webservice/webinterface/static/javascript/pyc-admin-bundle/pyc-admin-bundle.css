@@ -152,6 +152,27 @@ pyc-system-health {
     color: var(--pyc-admin-fg-muted);
 }
 
+/* an author display rule beats the browser's [hidden], so say it */
+.pyc-admin__tile[hidden] {
+    display: none;
+}
+
+/* the links a tile offers: the link, then a muted line saying what it opens */
+.pyc-admin__tile-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pyc-admin__tile-links li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
 /* tables -- mj-data-table virtualizes rows with absolute
  * positioning, so the host needs an explicit block layout +
  * height for the body scroller. Top-level list views get the

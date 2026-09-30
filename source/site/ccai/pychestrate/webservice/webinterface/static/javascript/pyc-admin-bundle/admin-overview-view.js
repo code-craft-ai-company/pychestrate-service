@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { may } from "../shared/permissions.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   fetch_system_health,
@@ -23,6 +24,40 @@ const SYSTEM_HEALTH_ROUTE = "/admin/system-health";
 const FEATURE_FLAGS_ROUTE = "/admin/feature-flags";
 const EXTENSION_REGISTRY_ROUTE = "/admin/extensions";
 const QUICK_FLAG_LIMIT = 8;
+const USERS_COUNT_URL = "/api/v1/identity/users?per_page=1";
+const USERS_PERMISSION = "system:users.read";
+// The administration overview is the one admin landing page (XC-18), so it
+// carries a way in to each administration area, described in a line. The
+// links, labels and permissions are the ones the sidebar's Admin group uses
+// (a test keeps the two in step); a viewer sees only the links they may use.
+const SHORTCUT_GROUPS = [
+  {
+    role: "people-tile",
+    title: "People & access",
+    links: [
+      { label: "Users", href: "/admin/users", permission: "system:users.read", detail: "Accounts, their status and their roles." },
+      { label: "Roles", href: "/admin/roles", permission: "system:rbac.read", detail: "What each role may do." },
+      { label: "Sessions", href: "/admin/sessions", permission: "system:auth.read", detail: "Who is signed in now." },
+      { label: "Audit Logs", href: "/admin/audit-logs", permission: "system:audit.read", detail: "Security events and system activity." }
+    ]
+  },
+  {
+    role: "configuration-tile",
+    title: "Configuration",
+    links: [
+      { label: "Variables", href: "/admin/variables", permission: "system:ui.admin.view", detail: "Settings shared by the whole installation." },
+      { label: "Secrets (legacy)", href: "/admin/secrets", permission: "system:secrets.read", detail: "Stored credentials, by scope." }
+    ]
+  }
+];
+function user_count_text(count) {
+  if (typeof count !== "number" || Number.isInteger(count) === false || count < 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = String(count) + (count === 1 ? " user" : " users");
+  return rtnval;
+}
 class PycAdminOverview extends HTMLElement {
   _loading;
   _health;
@@ -40,10 +75,12 @@ class PycAdminOverview extends HTMLElement {
   _healthFailure;
   _flagsFailure;
   _extensionsFailure;
+  _userCount;
   _health_region;
   _flags_region;
   _flags_status_region;
   _ext_region;
+  _shortcut_regions;
   constructor() {
     super();
     this._loading = false;
@@ -60,6 +97,8 @@ class PycAdminOverview extends HTMLElement {
     this._flags_region = null;
     this._flags_status_region = null;
     this._ext_region = null;
+    this._userCount = null;
+    this._shortcut_regions = [];
   }
   /**
    * Diagnostic accessor used by unit tests to read the loading
@@ -87,7 +126,7 @@ class PycAdminOverview extends HTMLElement {
     root.appendChild(heading);
     const lede = document.createElement("p");
     lede.classList.add("pyc-admin__lede");
-    lede.textContent = "System health, feature flags and the extension registry at a glance.";
+    lede.textContent = "System health, who has access, and the settings and features that shape this installation.";
     root.appendChild(lede);
     const controls = document.createElement("div");
     controls.classList.add("pyc-admin__controls");
@@ -113,6 +152,15 @@ class PycAdminOverview extends HTMLElement {
     ext_region.setAttribute("data-role", "extension-tile");
     tiles.appendChild(ext_region);
     this._ext_region = ext_region;
+    this._shortcut_regions = [];
+    for (const group of SHORTCUT_GROUPS) {
+      const region = document.createElement("div");
+      region.classList.add("pyc-admin__tile");
+      region.setAttribute("data-role", group.role);
+      region.hidden = true;
+      tiles.appendChild(region);
+      this._shortcut_regions.push({ group, region });
+    }
     root.appendChild(tiles);
     const flags_heading = document.createElement("h2");
     flags_heading.classList.add("pyc-admin__subheading");
@@ -148,12 +196,93 @@ class PycAdminOverview extends HTMLElement {
     await Promise.all([
       this._load_health(),
       this._load_flags(),
-      this._load_extensions()
+      this._load_extensions(),
+      this._load_user_count()
     ]);
     this._loading = false;
     this._render_health();
     this._render_extensions();
     this._render_flags();
+    await this._render_shortcuts();
+    return;
+  }
+  /**
+   * How many users there are, for the people tile. Read only by a viewer who
+   * may list users, and left unknown (the tile just omits the count) when the
+   * read fails: the count is a courtesy beside the links, not a health check.
+   */
+  async _load_user_count() {
+    this._userCount = null;
+    if ((await may(USERS_PERMISSION)) === false) {
+      return;
+    }
+    try {
+      const response = await fetch(USERS_COUNT_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return;
+      }
+      const body = await response.json();
+      const total = body !== null && typeof body === "object" && body.meta !== null && typeof body.meta === "object" ? body.meta.total : null;
+      if (typeof total === "number" && Number.isInteger(total) === true && total >= 0) {
+        this._userCount = total;
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.admin.overview_users_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    return;
+  }
+  /**
+   * Fill the people and configuration tiles with the links the viewer may
+   * use; a tile with none stays hidden.
+   */
+  async _render_shortcuts() {
+    for (const { group, region } of this._shortcut_regions) {
+      const allowed = await Promise.all(group.links.map((link) => may(link.permission)));
+      const links = group.links.filter((link, index) => allowed[index] === true);
+      if (links.length === 0) {
+        region.hidden = true;
+        region.replaceChildren();
+        continue;
+      }
+      const children = [];
+      const title = document.createElement("p");
+      title.classList.add("pyc-admin__tile-title");
+      title.textContent = group.title;
+      children.push(title);
+      if (group.role === "people-tile" && user_count_text(this._userCount).length > 0) {
+        const value = document.createElement("p");
+        value.classList.add("pyc-admin__tile-value");
+        value.setAttribute("data-role", "user-count");
+        value.textContent = user_count_text(this._userCount);
+        children.push(value);
+      }
+      const list = document.createElement("ul");
+      list.classList.add("pyc-admin__tile-links");
+      for (const entry of links) {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.classList.add("pyc-admin__link");
+        link.setAttribute("href", entry.href);
+        link.setAttribute("data-role", "shortcut-link");
+        link.textContent = entry.label;
+        item.appendChild(link);
+        const detail = document.createElement("span");
+        detail.classList.add("pyc-admin__tile-detail");
+        detail.textContent = entry.detail;
+        item.appendChild(detail);
+        list.appendChild(item);
+      }
+      children.push(list);
+      region.replaceChildren(...children);
+      region.hidden = false;
+    }
     return;
   }
   async _load_health() {
@@ -567,5 +696,7 @@ export {
   FEATURE_FLAGS_ROUTE,
   PycAdminOverview,
   QUICK_FLAG_LIMIT,
-  SYSTEM_HEALTH_ROUTE
+  SHORTCUT_GROUPS,
+  SYSTEM_HEALTH_ROUTE,
+  user_count_text
 };

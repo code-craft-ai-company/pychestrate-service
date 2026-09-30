@@ -19,8 +19,8 @@ blueprint to webworks. These tests cover:
 * ``handle_logout`` (POST) calls ``SecurityManager.logout`` and
   returns a 303 redirect to the login page with a fresh empty
   session.
-* ``handle_dashboard`` (GET) -- anonymous, expired-token, and
-  happy paths.
+* ``handle_dashboard`` (GET) -- the retired landing page redirects to
+  /admin.
 * ``runtime_bootstrap._load_ui_cookie_secret_or_none`` -- file +
   env + None + short-material paths.
 
@@ -1235,146 +1235,29 @@ def test_handle_logout_get_renders_confirmation_without_logging_out():
 
 
 # ===========================================================================
-# handle_dashboard (GET /config and /admin/dashboard)
+# handle_dashboard (GET /admin/dashboard and /admin/overview)
 # ===========================================================================
 
 
-def test_handle_dashboard_redirects_anonymous_to_login_with_flash():
+def test_handle_dashboard_sends_the_browser_to_the_administration_overview():
     """
-    **Feature: webworks config blueprint port T1.5 (D1)**
-    **Property: An anonymous request to the dashboard returns a
-    302 redirect to /login, with a warning-category flash
-    queued on the session cookie.**
+    **Feature: one admin landing page (XC-18)**
+    **Property: the retired dashboard handler is a permanent redirect to
+    /admin and renders nothing. Signing in and the admin permission are
+    the route gate's job (test_p31zzzv drives the whole app), so the
+    handler needs neither a session nor a template.**
     """
     _reset_global_state()
     try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        app = _FakeApp()
-        config_routes.register_config_routes(app=app)
-
+        env = _install_stub_environment()
         request = _FakeRequest(cookies={})
         response = config_routes.handle_dashboard(request)
 
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(response.status_code, 302)
-        testbase.assert_equal(
-            response.headers["Location"], "/login"
-        )
+        testbase.assert_equal(isinstance(response, RedirectResponse), True)
+        testbase.assert_equal(response.status_code, 301)
+        testbase.assert_equal(response.headers["Location"], "/admin")
+        testbase.assert_equal(env.template_lookups, [])
     finally:
-        _reset_global_state()
-    return
-
-
-def test_handle_dashboard_redirects_when_token_no_longer_valid():
-    """
-    **Feature: webworks config blueprint port T1.5 (D1)**
-    **Property: A cookie with a session_token whose
-    SecurityManager.validate_token returns None (expired /
-    revoked) is treated as expired -- the cookie is reset and
-    the user is redirected to /login.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        db_session = _FakeDbSession()
-        _install_db_session_factory(db_session=db_session)
-        app = _FakeApp()
-        config_routes.register_config_routes(app=app)
-
-        def _build_returning_none(db_session_arg: Any) -> _FakeSecurityManager:
-            instance = _FakeSecurityManager(db_session_arg)
-            instance.validate_token_response = None
-            return instance
-
-        sm_patch = _patch_security_manager(side_effect=_build_returning_none)
-
-        cookie_value = cookie_session.sign_session_payload(
-            payload={
-                "user_id": "u-1",
-                "username": "admin",
-                "session_token": "tok-abc",
-            },
-            secret=_TEST_UI_COOKIE_SECRET,
-        )
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-        )
-        response = config_routes.handle_dashboard(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(response.status_code, 303)
-        testbase.assert_equal(
-            response.headers["Location"], "/login"
-        )
-        instance = _FakeSecurityManager.last_instance
-        testbase.assert_equal(instance.validate_token_calls, ["tok-abc"])
-        testbase.assert_equal(db_session.close_count, 1)
-    finally:
-        if sm_patch is not None:
-            sm_patch.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_dashboard_renders_dashboard_template_when_token_valid():
-    """
-    **Feature: webworks config blueprint port T1.5 (D1)**
-    **Property: A cookie with a still-valid session_token yields
-    a 200 HTMLResponse from config/dashboard.html. The render
-    context carries username + user_id + csrf_token + flashes.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        app = _FakeApp()
-        config_routes.register_config_routes(app=app)
-
-        def _build_with_valid_token(db_session_arg: Any) -> _FakeSecurityManager:
-            instance = _FakeSecurityManager(db_session_arg)
-            instance.validate_token_response = _FakeSessionInfo(
-                user_id="u-1",
-                username="admin",
-                csrf_token="csrf-fresh",
-            )
-            return instance
-
-        sm_patch = _patch_security_manager(side_effect=_build_with_valid_token)
-
-        cookie_value = cookie_session.sign_session_payload(
-            payload={
-                "user_id": "u-1",
-                "username": "admin",
-                "session_token": "tok-abc",
-            },
-            secret=_TEST_UI_COOKIE_SECRET,
-        )
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-        )
-        response = config_routes.handle_dashboard(request)
-
-        is_html = isinstance(response, HTMLResponse)
-        testbase.assert_equal(is_html, True)
-        testbase.assert_equal(response.status_code, 200)
-        testbase.assert_equal(
-            env.template_lookups, ["config/dashboard.html"]
-        )
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["username"], "admin")
-        testbase.assert_equal(ctx["user_id"], "u-1")
-        testbase.assert_equal(ctx["csrf_token"], "csrf-fresh")
-        testbase.assert_equal(ctx["request_endpoint"], "config.dashboard")
-    finally:
-        if sm_patch is not None:
-            sm_patch.deactivate()
         _reset_global_state()
     return
 

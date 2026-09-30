@@ -222,16 +222,18 @@ def test_every_resources_handler_renders_inside_the_shell():
 
 def test_admin_bundle_routes_render_the_mount_point_not_the_dashboard():
     """
-    **Feature: ui-remediation admin landing**
-    **Property: /admin, /admin/overview, /admin/feature-flags,
-    /admin/extensions and /admin/system-health map to the bundle mount
-    handler; only /admin/dashboard renders the dashboard cards.**
+    **Feature: ui-remediation admin landing (XC-18)**
+    **Property: /admin, /admin/feature-flags, /admin/extensions and
+    /admin/system-health map to the bundle mount handler; the two older
+    landing paths, /admin/dashboard and /admin/overview, only redirect to
+    /admin (there is one administration landing page).**
     """
     from ccai.pychestrate.webservice.webinterface.blueprints.config import routes as config_routes
     table = config_routes._HANDLERS_BY_ENDPOINT
-    for endpoint in ("config.dashboard_root", "config.admin_overview", "config.feature_flags", "config.extension_registry", "config.system_health"):
+    for endpoint in ("config.dashboard_root", "config.feature_flags", "config.extension_registry", "config.system_health"):
         testbase.assert_equal(table[endpoint] is config_routes.handle_bundle_mount, True, endpoint)
-    testbase.assert_equal(table["config.dashboard"] is config_routes.handle_dashboard, True)
+    for endpoint in ("config.dashboard", "config.admin_overview"):
+        testbase.assert_equal(table[endpoint] is config_routes.handle_dashboard, True, endpoint)
     return
 
 

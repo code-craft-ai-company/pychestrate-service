@@ -1,6 +1,6 @@
 {#
     Mount point for routes owned by the pyc-admin-bundle web
-    components (/admin, /admin/overview, /admin/feature-flags,
+    components (/admin, /admin/feature-flags,
     /admin/extensions, /admin/system-health). The bundle replaces
     the shell's <main> once it loads; this fragment only has to be
     honest about the loading state in the meantime.
@@ -8,6 +8,6 @@
 <section class="pyc-admin-page-fragment" data-role="bundle-mount" aria-busy="true" aria-live="polite">
     <p class="pyc-admin-page-fragment__loading">Loading&hellip;</p>
     <noscript>
-        <p>This page needs JavaScript. Enable it, or use the <a href="/admin/dashboard">dashboard</a> instead.</p>
+        <p>This page needs JavaScript. Enable it to use the administration pages.</p>
     </noscript>
 </section>
