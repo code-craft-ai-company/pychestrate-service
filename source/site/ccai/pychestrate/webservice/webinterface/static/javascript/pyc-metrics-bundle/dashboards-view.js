@@ -1,4 +1,5 @@
 import { may } from "../shared/permissions.js";
+import { reveal } from "../shared/reveal.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { keep_list_state_on_back, mirror_to_query, query_value } from "../shared/view-state.js";
 import { format_clock_instant, parse_timestamp } from "../shared/datetime.js";
@@ -544,6 +545,7 @@ class PycDashboardsList extends HTMLElement {
     }
     this._form_region.hidden = false;
     this._render_create_form();
+    reveal(this._form_region);
     return;
   }
   _render_create_form() {

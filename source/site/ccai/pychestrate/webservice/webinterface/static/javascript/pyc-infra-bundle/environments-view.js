@@ -4,6 +4,7 @@ import { message_with_detail, read_problem_detail } from "../shared/problem-deta
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 import { choose_project_id, mirror_to_query } from "../shared/view-state.js";
+import { reveal } from "../shared/reveal.js";
 const ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -1111,6 +1112,7 @@ class PycEnvironments extends HTMLElement {
     if (region.hidden === true) {
       this._render_register_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }

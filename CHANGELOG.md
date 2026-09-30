@@ -29,6 +29,15 @@ preview tag.
 
 ### Added
 
+- Content a person opens on a bundle page is brought into view and given focus (ORC-41).
+  "Show Published Release" on a long list of release channels and "Delivery History" on a
+  long list of webhook subscriptions rendered the detail below the list, out of sight, with
+  focus left on the button; the create/attach/trigger/register/import forms opened without
+  moving focus into them. One helper (`shared/reveal.js`, `reveal(region)`) now scrolls the
+  opened content into view when it is not already, and focuses the first field of a form,
+  else the heading of a detail. It is called only for something the person just asked for,
+  never for a refresh. Built into every bundle.
+
 - Roles can be copied, and a role's page says who has it (ADM-06). Building a role
   meant ticking permissions from an empty form, and the role page showed only a
   count. The create form now starts from any role: **Copy Role** on a role's page or

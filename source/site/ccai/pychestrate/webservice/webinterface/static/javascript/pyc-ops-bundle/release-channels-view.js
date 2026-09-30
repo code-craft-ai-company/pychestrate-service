@@ -2,6 +2,7 @@ import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { reveal } from "../shared/reveal.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 const UPDATES_HEADING = "Pychestrate Updates";
 const UPDATES_INTRO = "Releases of the Pychestrate service and its pod client, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
@@ -432,6 +433,7 @@ class PycReleaseChannels extends HTMLElement {
     button.toggleAttribute("disabled", false);
     this._detailChannelId = entry.channel_id;
     this._render_detail(detail);
+    reveal(this._detail_region);
     return;
   }
   /**
@@ -531,6 +533,7 @@ class PycReleaseChannels extends HTMLElement {
     if (region.hidden === true) {
       this._render_publish_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }

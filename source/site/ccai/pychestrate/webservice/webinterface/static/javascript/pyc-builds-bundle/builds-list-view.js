@@ -4,6 +4,7 @@ import { format_clock_instant, format_duration, format_instant, parse_timestamp 
 import { build_source_label, build_title } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { reveal } from "../shared/reveal.js";
 const BUILD_STATES = [
   "pending",
   "running",
@@ -898,6 +899,7 @@ class PycBuildsList extends HTMLElement {
     if (region.hidden === true) {
       this._render_trigger_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }

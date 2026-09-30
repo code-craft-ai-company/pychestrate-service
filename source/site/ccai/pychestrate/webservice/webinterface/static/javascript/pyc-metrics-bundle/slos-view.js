@@ -7,6 +7,7 @@ import {
 } from "./test-metrics-view.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 import { choose_project_id, mirror_to_query } from "../shared/view-state.js";
+import { reveal } from "../shared/reveal.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
@@ -915,6 +916,7 @@ class PycSlos extends HTMLElement {
     if (region.hidden === true) {
       this._render_create_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }

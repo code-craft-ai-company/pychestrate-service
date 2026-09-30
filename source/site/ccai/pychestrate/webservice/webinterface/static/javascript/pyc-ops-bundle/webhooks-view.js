@@ -4,6 +4,7 @@ import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state } from "../shared/empty-state.js";
+import { reveal } from "../shared/reveal.js";
 // Every project the person can see (the registry holds every web-UI project too).
 const PROJECTS_LIST_URL = "/api/v1/projects?per_page=500";
 /* The projects of a projects-list body as {project_id, display_name}. */
@@ -975,6 +976,7 @@ class PycWebhooks extends HTMLElement {
     if (el.hidden === true) {
       this._render_inbound_form(el);
       el.hidden = false;
+      reveal(el);
     } else {
       el.hidden = true;
     }
@@ -1555,6 +1557,8 @@ class PycWebhooks extends HTMLElement {
   async _on_history(subscription, button) {
     await this._load_and_render_history(subscription);
     button.toggleAttribute("disabled", false);
+    const region = this._panel_region !== null ? this._panel_region.querySelector('[data-role="outbound-history-region"]') : null;
+    reveal(region);
     return;
   }
   /**
@@ -1673,6 +1677,7 @@ class PycWebhooks extends HTMLElement {
     if (el.hidden === true) {
       this._render_outbound_form(el);
       el.hidden = false;
+      reveal(el);
     } else {
       el.hidden = true;
     }

@@ -1262,6 +1262,53 @@ function hide_unless_may(element, permission_key) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/reveal.js
+var CONTROL_SELECTOR = [
+  "mj-text-field",
+  "mj-textarea",
+  "mj-select",
+  'input:not([type="hidden"]):not([disabled])',
+  "select:not([disabled])",
+  "textarea:not([disabled])"
+].join(", ");
+var HEADING_SELECTOR = "h1, h2, h3, h4";
+function focus_target_for(region, wanted) {
+  if (typeof wanted === "string") {
+    const found = region.querySelector(wanted);
+    return found;
+  }
+  if (wanted !== null && wanted !== void 0) {
+    return wanted;
+  }
+  const control = region.querySelector(CONTROL_SELECTOR);
+  if (control !== null) {
+    return control;
+  }
+  const heading = region.querySelector(HEADING_SELECTOR);
+  const target = heading !== null ? heading : region;
+  if (target.hasAttribute("tabindex") === false) {
+    target.setAttribute("tabindex", "-1");
+  }
+  return target;
+}
+function reveal(region, options) {
+  if (region === null || region === void 0 || region.hidden === true || region.isConnected !== true) {
+    return null;
+  }
+  const settings = options !== null && typeof options === "object" ? options : {};
+  const target = focus_target_for(region, settings.focus);
+  if (target !== null && target !== void 0 && typeof target.focus === "function") {
+    target.focus();
+  }
+  const box = region.getBoundingClientRect();
+  const height = window.innerHeight || document.documentElement.clientHeight;
+  if (box.top < 0 || box.bottom > height) {
+    region.scrollIntoView({ block: box.height > height ? "start" : "nearest", behavior: "auto" });
+  }
+  const focused = target !== null && target !== void 0 ? target : null;
+  return focused;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -1823,6 +1870,7 @@ var PycDashboardsList = class extends HTMLElement {
     }
     this._form_region.hidden = false;
     this._render_create_form();
+    reveal(this._form_region);
     return;
   }
   _render_create_form() {
@@ -3318,6 +3366,7 @@ var PycSlos = class extends HTMLElement {
     if (region.hidden === true) {
       this._render_create_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }
@@ -4270,6 +4319,7 @@ var PycAlertRules = class extends HTMLElement {
     if (region.hidden === true) {
       this._render_create_form();
       region.hidden = false;
+      reveal(region);
     } else {
       region.hidden = true;
     }
