@@ -358,12 +358,12 @@ pyc-pipeline-detail {
 }
 
 .pyc-pipeline-detail__dag-edge {
-    stroke: var(--pyc-pipelines-border);
+    stroke: var(--pyc-pipelines-fg-muted);
     stroke-width: 0.125rem;
 }
 
 .pyc-pipeline-detail__dag-arrow {
-    fill: var(--pyc-pipelines-border);
+    fill: var(--pyc-pipelines-fg-muted);
 }
 
 .pyc-pipeline-detail__dag-box {
