@@ -1,7 +1,7 @@
 pychestrate-ext-{{ name }}
 {{ "=" * (16 + name|length) }}
 
-Pychestrate extension pack scaffolded by ``pychestrate-admin pack-template``.
+Pychestrate extension pack scaffolded by ``python -m ccai.pychestrate.admin pack-template new``.
 
 Generated from corpus version ``v{{ template_version }}``.
 
@@ -15,8 +15,11 @@ License: {{ license }}
 Layout
 ------
 
-* ``pychestrate_ext.yaml`` — Layer E manifest. Declares which factory
+* ``pychestrate_ext.yaml`` — the manifest. Declares which factory
   protocols and resource extensions this pack contributes.
+* ``source/packages/ccai/extensions/pychestrate/{{ name | replace("-", "_") }}/register.py`` —
+  the function the service calls to load the pack (declared as an entry point
+  in ``pyproject.toml``).
 * ``source/packages/ccai/factories/pychestrate/{{ name | replace("-", "_") }}/`` —
   factory protocol implementations.
 * ``source/packages/ccai/extensions/pychestrate/{{ name | replace("-", "_") }}/`` —

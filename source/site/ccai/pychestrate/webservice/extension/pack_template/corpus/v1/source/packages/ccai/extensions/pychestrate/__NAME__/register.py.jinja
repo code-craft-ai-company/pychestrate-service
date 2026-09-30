@@ -1,0 +1,35 @@
+"""
+.. module:: ccai.extensions.pychestrate.{{ name | replace("-", "_") }}.register
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: The function the service calls to load pack '{{ name }}'.
+
+.. moduleauthor:: {% if author %}{{ author }}{% else %}<author>{% endif %}
+
+``pyproject.toml`` declares this function as the pack's entry point in the group
+``pychestrate.extensions``. When the pack is installed next to the service, the
+service imports this module at start and calls :func:`register` once, after its
+own extensions are registered. Nothing in the service is edited.
+"""
+
+__author__ = "{% if author %}{{ author }}{% else %}<author>{% endif %}"
+__copyright__ = "Copyright 2026"
+__credits__ = []
+__version__ = "0.1.0"
+
+
+def register() -> None:
+    """
+        Register this pack's implementations with the service's registries.
+
+        The scaffold registers nothing: the sample factory raises until you
+        implement it, and a placeholder that won its slot would break the service
+        at the first call. Replace the body with your registrations once the
+        implementation is real (the extension guide shows how), for example::
+
+            from ccai.pychestrate.webservice.extensions.registry import register_factory_implementation
+
+            register_factory_implementation(implementation=MyImplementation)
+
+        :returns: None.
+    """
+    return

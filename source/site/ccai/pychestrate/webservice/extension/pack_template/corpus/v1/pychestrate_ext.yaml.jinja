@@ -1,8 +1,9 @@
 # Pychestrate extension manifest.
 #
-# Layer E loads packs by walking installed Python packages, finding
-# this manifest, and validating the declared protocols against the
-# host's compat surface. See the Layer E docs for the full schema.
+# Describes what this pack contributes. The service loads the pack through the
+# entry point in pyproject.toml (group "pychestrate.extensions"), which calls
+# register() in the register module; this file records the protocols and
+# capabilities the pack declares for people and tools that read it.
 name: {{ name }}
 version: 0.1.0
 {% if author -%}
@@ -14,20 +15,14 @@ license: {{ license }}
 min_service_version: 1
 max_service_version: 1
 factory_protocols:
-{% for proto in protocol_names -%}
-  - name: {{ proto }}
+{% for proto in protocol_names %}  - name: {{ proto }}
     implementation: ccai.factories.pychestrate.{{ name | replace("-", "_") }}.sample_factory
-{% else -%}
-  []
-{% endfor -%}
-resource_extensions:
-{% for base in resource_base_names -%}
-  - base: {{ base }}
+{% else %}  []
+{% endfor %}resource_extensions:
+{% for base in resource_base_names %}  - base: {{ base }}
     module: ccai.extensions.pychestrate.{{ name | replace("-", "_") }}.sample_resource
-{% else -%}
-  []
-{% endfor -%}
-capabilities:
+{% else %}  []
+{% endfor %}capabilities:
   read:secrets: false
   write:artifacts: false
   dispatch:jobs: false

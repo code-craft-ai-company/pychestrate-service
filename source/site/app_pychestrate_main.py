@@ -66,6 +66,9 @@ from ccai.pychestrate.webservice.notifications.restapi.v1.channels_routes import
 from ccai.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
+from ccai.pychestrate.webservice.extensions.discovery import (
+    discover_and_register_extensions,
+)
 from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
     embed_views_enabled,
     register_embed_routes,
@@ -481,6 +484,10 @@ def register_service_extensions() -> None:
     # registered (audit ORC-04).
     register_phase7_builtin_extensions()
     register_phase8_builtin_extensions()
+    # Packs installed next to the service that declare the
+    # ``pychestrate.extensions`` entry point (DOC-11): after the in-tree
+    # registrations, before the plugin catalog is built from the registries.
+    discover_and_register_extensions()
     build_and_validate_plugin_api_catalog()
     mount_extension_routes()
     register_flags_routes(app=app, version_prefix="/api/v1")

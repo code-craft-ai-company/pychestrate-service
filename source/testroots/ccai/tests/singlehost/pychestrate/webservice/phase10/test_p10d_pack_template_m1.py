@@ -216,7 +216,8 @@ def test_generate_substitutes_name_in_manifest_and_factory():
     """
     **Feature: E-extension-pack-template M1 (T1.3)**
     **Property: Rendered files contain the normalized name in the
-    expected places.**
+    expected places (the manifest, and the importable package directory, which
+    uses underscores where the pack name has hyphens).**
     """
     with tempfile.TemporaryDirectory() as parent_str:
         parent = Path(parent_str)
@@ -235,7 +236,7 @@ def test_generate_substitutes_name_in_manifest_and_factory():
             / "ccai"
             / "factories"
             / "pychestrate"
-            / "my-pack"
+            / "my_pack"
             / "sample_factory.py"
         ).read_text(encoding="utf-8")
         testbase.assert_equal('factory_protocol_name: str = "object_store_driver"' in factory_text, True)

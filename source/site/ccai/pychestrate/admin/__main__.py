@@ -92,5 +92,17 @@ def main(*, argv: Optional[Sequence[str]]) -> int:
     return rtnval
 
 
-if __name__ == "__main__":
+def console_main() -> None:
+    """
+        The ``pychestrate-admin`` console script's entry point (declared in
+        ``pyproject.toml``): runs :func:`main` on :data:`sys.argv` and exits with
+        its code. ``main`` takes ``argv`` as a keyword-only argument, so a console
+        script cannot name it directly.
+
+        :returns: None (raises :class:`SystemExit`).
+    """
     sys.exit(main(argv=None))
+
+
+if __name__ == "__main__":
+    console_main()

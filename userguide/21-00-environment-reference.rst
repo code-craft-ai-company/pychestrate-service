@@ -223,6 +223,18 @@ Two more secrets are single values:
        invent its own and an upload fails whenever a different worker
        receives it, so set one shared value. The readiness check reports
        it.
+   * - ``PYCHESTRATE_LOAD_EXTENSIONS``
+     - on
+     - Whether the service looks, at start, for installed extension packs that
+       declare the ``pychestrate.extensions`` entry point and loads them.
+       ``0``, ``false``, ``no`` or ``off`` loads none. A pack runs code inside
+       the service, so install only packs you trust; see
+       :ref:`11-00-extensions`.
+   * - ``PYCHESTRATE_EXTENSIONS_STRICT``
+     - off
+     - ``1``, ``true``, ``yes`` or ``on`` makes a pack that fails to load stop
+       the service from starting. Unset, the failure is logged with the
+       pack's name and the other packs still load.
    * - ``PYCHESTRATE_EMBED_ENABLED``
      - off
      - Registers the embeddable-views routes (``/api/v1/embed/views`` and

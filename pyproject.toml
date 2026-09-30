@@ -21,6 +21,7 @@ packages = [
 
 [tool.poetry.scripts]
 pyc = "ccai.pychestrate.cli.entry:console_main"
+pychestrate-admin = "ccai.pychestrate.admin.__main__:console_main"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"

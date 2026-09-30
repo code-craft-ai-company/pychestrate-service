@@ -131,7 +131,10 @@ def _render_destination_relative(*, relative_path: str, normalized_name: str) ->
 
         :returns: Destination relative path string.
     """
-    rtnval = relative_path.replace(NAME_PLACEHOLDER, normalized_name)
+    # A directory in the package path must be importable, and a Python module
+    # name has no hyphen: the distribution keeps the hyphenated name
+    # (``pychestrate-ext-demo-notes``), the packages use ``demo_notes``.
+    rtnval = relative_path.replace(NAME_PLACEHOLDER, normalized_name.replace("-", "_"))
     return rtnval
 
 

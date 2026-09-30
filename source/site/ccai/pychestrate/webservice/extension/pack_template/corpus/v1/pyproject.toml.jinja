@@ -12,6 +12,10 @@ packages = [
 ]
 include = ["pychestrate_ext.yaml"]
 
+# The service loads this pack by calling this function at start.
+[tool.poetry.plugins."pychestrate.extensions"]
+{{ name }} = "ccai.extensions.pychestrate.{{ name | replace("-", "_") }}.register:register"
+
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 

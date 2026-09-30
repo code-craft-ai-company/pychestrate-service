@@ -29,6 +29,41 @@ preview tag.
 
 ### Added
 
+- Extension packs load without forking the service (DOC-11). The guide said teams
+  could add extensions "without forking", then told them to edit the service's
+  bootstrap code to call their pack's `register()`. The service now looks, at start
+  and after its own extensions are registered, for installed packages that declare
+  the entry point group `pychestrate.extensions` (in `pyproject.toml`:
+  `[tool.poetry.plugins."pychestrate.extensions"]`, pointing at a `register`
+  function) and calls each once, in name order. A pack that fails to load is logged
+  with its name (`pychestrate.extensions.load_failed`) and reported; the others still
+  load and the service starts. `PYCHESTRATE_EXTENSIONS_STRICT=1` makes a failure stop
+  the service; `PYCHESTRATE_LOAD_EXTENSIONS=0` loads none. A pack runs code inside
+  the service, as any installed package does, so install only packs you trust. The
+  pack generator (`pychestrate-admin pack-template new`, also
+  `python -m ccai.pychestrate.admin pack-template new`) now writes a working pack:
+  its package directories use underscores (a directory named `demo-notes` cannot be
+  imported; the manifest already used `demo_notes`), its manifest is valid YAML (the
+  protocol list was mis-indented), it includes a `register.py` that registers nothing
+  yet (the sample factory raises, so a placeholder must not win its slot) and the
+  `pyproject.toml` entry point. `pychestrate-admin`, which the generator, the backup
+  commands and the guides already named, is now a console script
+  (`ccai.pychestrate.admin.__main__:console_main`; `poetry install` creates it).
+  The extension guide is corrected to match: loading is by entry point (the "edit the
+  bootstrap" step is gone), the generator is documented, the table of extension
+  points lists the 15 protocols in the published Plugin Catalog (the guide listed
+  eight, five of them not in it, and says the internal protocols, including the
+  `password_hasher` of the worked example, carry no stability promise), and
+  references to a test-only helper, milestones and spec identifiers are gone.
+  `phase10/test_p32f_extension_packs_load_without_forking_m1.py` covers the loader
+  (order, failures including `BaseException` errors, strict mode, the switches, a real
+  dist-info entry point, the service's own registration in a child process) and the
+  generated pack. Not done: packs are not sandboxed or verified (no signature or
+  allow-list; any installed package that declares the entry point runs), the
+  generated pack's sample factory is not registered for you, extension load results
+  are in the log but not in an API or the readiness check, and the worked example
+  was not run against a real Argon2id install.
+
 - A contract between the service and the pod, checked by both repositories (E2E-14).
   A valid REST test run was once refused by the pod because the service sent `root`
   where the pod wanted `test_root`, and the pod's progress tag differed from the

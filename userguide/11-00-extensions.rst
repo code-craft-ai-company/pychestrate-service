@@ -5,8 +5,9 @@ Extensions
 ==========
 
 Pychestrate exposes well-defined extension points so teams can add drivers,
-strategies, event subscribers, resource kinds, and UI contributions without
-forking the service. This document covers:
+strategies, event subscribers, and resource kinds without forking the service:
+an extension is a Python package you install next to it, and the service loads
+it at start. This document covers:
 
 * The two kinds of extension points — **factory protocols** and **resource
   extensions** — and when to use each.
@@ -25,7 +26,7 @@ Concepts
 Factory protocols vs resource extensions
 ----------------------------------------
 
-Pychestrate has two Layer E extension patterns. They look similar but solve
+Pychestrate has two extension patterns. They look similar but solve
 different problems; mixing them up is the first mistake to avoid.
 
 **Factory protocols** — *override or provide a named behavior.* A
@@ -78,10 +79,39 @@ matching the convention ``pychestrate-ext-<name>``. A minimal layout:
             argon2id_hasher.py
             register.py
 
-The package does not need to live under ``ccai/factories/...`` — the
-in-process registry is explicit, not filesystem-scanning. The on-disk scanner
-mentioned in the ``E-extension-host`` spec arrives in a later milestone; today
-operators call ``register.register()`` explicitly during service bootstrap.
+The package does not need to live under ``ccai/factories/...``. What makes the
+service load it is an *entry point* in the group ``pychestrate.extensions``,
+declared in the pack's ``pyproject.toml`` and pointing at its ``register``
+function:
+
+.. code-block:: toml
+
+    [tool.poetry.plugins."pychestrate.extensions"]
+    auth-argon2id = "pychestrate_ext_auth_argon2id:register"
+
+When the pack is installed in the service's environment, the service imports that
+function at start (after its own extensions are registered) and calls it once.
+Nothing in the service is edited. A pack that fails to load is logged with its
+name (``pychestrate.extensions.load_failed``) and the others still load; set
+``PYCHESTRATE_EXTENSIONS_STRICT=1`` to stop the service instead, or
+``PYCHESTRATE_LOAD_EXTENSIONS=0`` to load none (see the
+:ref:`environment reference <21-00-environment-reference>`). A pack runs code
+inside the service, exactly as any installed package does, so install only packs
+you trust.
+
+The fastest way to start is the generator, which writes a pack that is already
+wired this way:
+
+.. code-block:: bash
+
+    python -m ccai.pychestrate.admin pack-template new \
+        --name my-pack --author "Your Team" --license MIT \
+        --protocol notification_channel
+
+It creates ``pychestrate-ext-my-pack/`` with the manifest, a ``register.py`` whose
+``register()`` registers nothing yet (the sample factory raises until you
+implement it), the ``pyproject.toml`` entry point, and a unit test. Replace the
+sample with a real implementation and register it in ``register()``.
 
 
 Implementing an extension
@@ -120,8 +150,8 @@ To add a new kind of thing:
 Registering multiple extensions at once
 ---------------------------------------
 
-The convention is a single ``register()`` function exported from the pack's
-``__init__.py`` that the service bootstrap imports and calls.
+The convention is a single ``register()`` function that the service calls at
+start through the pack's entry point (see the pack layout above).
 
 .. code-block:: python
 
@@ -150,13 +180,22 @@ Worked example: adding an Argon2id password hasher
 ==================================================
 
 The in-tree ``StdlibScryptPasswordHasher`` is good enough for a development
-boot, but production deployments should satisfy NFR-2 of the ``1-authentication``
-spec: Argon2id with ``memory_cost >= 65536`` KiB, ``time_cost >= 3``, and
-``parallelism >= 1``. This section shows the complete extension pack.
+boot, but production deployments should use Argon2id with ``memory_cost >= 65536``
+KiB, ``time_cost >= 3``, and ``parallelism >= 1``. This section shows the
+complete extension pack.
+
+.. note::
+
+   ``password_hasher`` is not one of the protocols in the
+   :doc:`Plugin Catalog <extensions/index>` (the catalog lists the externally
+   stable protocols; see the table below). It is an internal protocol whose
+   contract may change between releases. This example shows the mechanics of a
+   pack, and it works, but prefer a catalog protocol for anything you plan to
+   maintain across upgrades.
 
 The service never imports ``argon2``. The extension pack adds the dependency,
-the hasher class, and the registration call. Installing the pack and calling
-its ``register()`` function during service bootstrap is all that's needed.
+the hasher class, and the registration call. Installing the pack is all that's
+needed: its entry point makes the service call ``register()`` at start.
 
 Step 1 — Scaffold the package
 -----------------------------
@@ -180,6 +219,9 @@ Create a new Python package ``pychestrate-ext-auth-argon2id`` with this layout:
     version = "0.1.0"
     description = "Argon2id password hasher extension for Pychestrate"
     authors = []
+
+    [tool.poetry.plugins."pychestrate.extensions"]
+    auth-argon2id = "pychestrate_ext_auth_argon2id:register"
 
     [tool.poetry.dependencies]
     python = ">=3.10,<4.0"
@@ -222,7 +264,7 @@ Step 2 — Implement the hasher
         """
             Construct the configured argon2-cffi PasswordHasher.
 
-            :returns: PasswordHasher instance with NFR-2 parameters.
+            :returns: PasswordHasher instance with the parameters above.
         """
         rtnval = PasswordHasher(
             time_cost=ARGON2ID_TIME_COST,
@@ -236,7 +278,7 @@ Step 2 — Implement the hasher
 
     class Argon2idPasswordHasher(PasswordHasherProtocol):
         """
-            NFR-2 Argon2id reference implementation.
+            Argon2id reference implementation.
 
             Registered at PRECEDENCE=1000 so it resolves ahead of the in-tree
             stdlib scrypt hasher (PRECEDENCE=2000) for new hashes. Old rows
@@ -300,8 +342,8 @@ Notes on the implementation:
 * ``PRECEDENCE = 1000`` wins against the in-tree ``2000``. If a site wants
   an even stronger hasher later, it can ship another extension at
   ``PRECEDENCE = 500`` without removing this one.
-* The password is concatenated with the pepper loaded from
-  ``1-secrets-vault`` under ``system:auth.local.password_pepper``. The
+* The password is concatenated with the pepper the service keeps in its secrets
+  store under ``system:auth.local.password_pepper``. The
   extension never generates or reads the pepper itself — it receives it
   through the protocol argument.
 * Verification returns ``False`` on mismatch rather than raising. The
@@ -349,36 +391,17 @@ In the consuming service (pychestrate-service):
     # or, during local development:
     poetry add ../pychestrate-ext-auth-argon2id --editable
 
-Step 5 — Wire it into service bootstrap
----------------------------------------
+Step 5 — Restart the service
+----------------------------
 
-Call the extension's ``register()`` function after the Phase-1 built-ins
-register and before the first request. If the service uses
-``bootstrap_phase1_runtime``, do this:
+There is nothing to wire. The pack's entry point (Step 1) makes the service call
+``register()`` at start. Restart it and look for the line
+``pychestrate.extensions.loaded: name=auth-argon2id`` in the log; a pack that could
+not load is reported as ``pychestrate.extensions.load_failed`` with the error.
 
-.. code-block:: python
-
-    from ccai.pychestrate.webservice.extensions.bootstrap import (
-        Phase1BootstrapConfig,
-        bootstrap_phase1_runtime,
-    )
-    from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
-
-    import pychestrate_ext_auth_argon2id
-
-    # Phase-1 built-ins first — this registers StdlibScryptPasswordHasher
-    # at PRECEDENCE=2000 so it remains available for verifying legacy rows.
-    bootstrap_phase1_runtime(config=Phase1BootstrapConfig(
-        kek_source="file",
-        kek_file_path="/var/secrets/pychestrate/kek.bin",
-        kek_env_var=None,
-        kek_id="kek-2026-04",
-        password_pepper=SecretBytes(load_pepper_bytes()),
-        session_factory=open_session,
-    ))
-
-    # Then extension packs, at the priority the operator chose.
-    pychestrate_ext_auth_argon2id.register()
+If you run the service from your own start-up code instead (or in a test), call
+``pychestrate_ext_auth_argon2id.register()`` yourself after the service's own
+extensions are registered and before the first request.
 
 Step 6 — Confirm the resolution order
 -------------------------------------
@@ -426,10 +449,8 @@ and any legacy scrypt rows continue to verify correctly.
 Rehashing legacy rows on successful login (optional)
 ====================================================
 
-The Phase-1 M1 verifier does not automatically rehash legacy rows to the
-newly-installed hasher — that enhancement lands in the M2 hardening work for
-``1-authentication``. Until then, operators wanting to cycle every user to
-Argon2id have two options:
+The verifier does not automatically rehash legacy rows to the newly-installed
+hasher. Operators wanting to cycle every user to Argon2id have two options:
 
 * **Passive migration.** Next time a user changes their password, the new
   hash goes through the top-priority hasher automatically. No operator
@@ -442,38 +463,50 @@ Argon2id have two options:
 Extending other factory protocols
 =================================
 
-The same pattern applies to every factory protocol Pychestrate declares.
-Common extension points:
+The same pattern applies to every factory protocol in the
+:doc:`Plugin Catalog <extensions/index>`, which is the externally stable surface:
+its pages give each protocol's schema version, support status and reference
+implementation.
 
-===========================  ============================================  ========================================================
-Protocol                     Owning feature                                What operators commonly customize
-===========================  ============================================  ========================================================
-``secrets_backend``          ``1-secrets-vault``                           Delegate secrets to HashiCorp Vault, AWS SM, Azure KV.
-``audit_sink``               ``1-audit-log``                               Fan-out to Splunk HEC, SIEM syslog, S3 archive.
-``auth_provider``            ``1-authentication``                          Add an OIDC or SAML provider with site-specific claims.
-``feature_flag_backend``     ``1-feature-flags``                           Delegate specific flag patterns to LaunchDarkly-style.
-``user_directory_source``    ``1-user-management``                         Sync users from LDAP / SCIM / HR system.
-``password_hasher``          ``1-authentication``                          This guide's example — swap hashing algorithm.
-``notification_channel``     ``2-notification-hub``                        Add Slack / Teams / PagerDuty / SMS routing.
-``resource_health_probe``    ``4-resource-health``                         Per-device-kind health probes.
-===========================  ============================================  ========================================================
+=============================  ====================================================================
+Protocol                       What it is for (the reference implementation shipped in the service)
+=============================  ====================================================================
+``secrets_backend``            Where secrets are stored (local encrypted store).
+``auth_provider``              How people sign in (local credentials); add OIDC or SAML here.
+``notification_channel``       Where notifications go (SMTP email); add Slack, Teams or PagerDuty.
+``backup_storage_backend``     Where backup archives are kept (local filesystem).
+``scm_provider``               A source-hosting service (GitHub).
+``inbound_webhook_parser``     How an incoming webhook is verified and read (generic HMAC).
+``build_runner_kind``          How a build is run (a Makefile).
+``test_runner_kind``           How a test run is started (testbase).
+``infra_tool_driver``          How infrastructure is provisioned (Terraform).
+``progress_parser``            How a pod's progress reports are read (testbase).
+``result_tree_parser``         How a pod's uploaded results are read (testbase).
+``resource_kind``              A kind of lab resource (a device).
+``rpa_job_type``               A type of RPA job (a process).
+``rpa_execution_mode``         How an RPA job's process is executed (a subprocess).
+``timeseries_driver``          Where metric samples are stored (native PostgreSQL).
+=============================  ====================================================================
 
-The Phase 1 exit criterion in `specs/implementation-plan.md <../specs/implementation-plan.md>`_ calls
-out ``notification_channel`` specifically: "an out-of-tree extension
-can register a new ``notification_channel`` and receive traffic." The
-mechanism is identical to the Argon2id walk-through above -- the
-in-tree ``notifications/extensions/run_failed_template.py`` registers
-through the same registry that an out-of-tree
-``pychestrate-ext-notif-slack`` would use; the registry does not
-distinguish between the two.
+The service also has internal protocols that are not in the catalog, among them
+``password_hasher`` (this guide's example), ``audit_sink``,
+``feature_flag_backend``, ``user_directory_source`` and ``resource_health_probe``.
+They work the same way but carry no stability promise: their contracts can
+change between releases.
+
+The mechanism is identical to the Argon2id walk-through above -- the in-tree
+``notifications/extensions/run_failed_template.py`` registers through the same
+registry that an out-of-tree ``pychestrate-ext-notif-slack`` would use; the
+registry does not distinguish between the two.
 
 For every protocol the same six steps apply:
 
 1. Scaffold a ``pychestrate-ext-<name>`` package.
 2. Subclass the protocol base; implement every classmethod.
 3. Set ``PRECEDENCE`` below the in-tree reference.
-4. Export a ``register()`` function.
-5. Install the package and call ``register()`` during bootstrap.
+4. Export a ``register()`` function and declare it as an entry point in the group
+   ``pychestrate.extensions``.
+5. Install the package and restart the service.
 6. Confirm registration with ``list_factory_implementations``.
 
 
@@ -591,17 +624,19 @@ extension that declared it is no longer registered. Solutions:
   extension installed (it can be registered at a higher ``PRECEDENCE`` so the
   new hasher still wins for new hashes while old rows verify).
 
-**Extension pack imports at service startup but ``register()`` is never
-called.**
+**My pack is installed but the service does not seem to load it.**
 
-Extensions today require an explicit ``register()`` call. The filesystem
-scanner that will run every extension's ``on_load`` hook automatically lands
-with the ``E-extension-host`` hardening milestone. Until then, each extension
-pack must be registered explicitly in the service bootstrap code.
+Check, in this order: that the pack is installed in the *same environment* the
+service runs in; that its ``pyproject.toml`` declares the entry point in the group
+``pychestrate.extensions`` (``[tool.poetry.plugins."pychestrate.extensions"]``) and
+that it points at a callable (``module:register``); that ``PYCHESTRATE_LOAD_EXTENSIONS``
+is not ``0``; and the service log, which names every pack it loaded
+(``pychestrate.extensions.loaded``) or could not load
+(``pychestrate.extensions.load_failed``, with the error). After changing an entry
+point, reinstall the pack: entry points are read from the installed metadata.
 
 **Tests interact with each other through global registry state.**
 
 Use ``ccai.pychestrate.webservice.extensions.registry.reset_registry_for_testing``
 at the top of each test, then call the specific extension's ``register()``
-within the test. Most Phase-1 testbase fixtures already do this through the
-``reset_phase1_runtime()`` helper.
+within the test.
