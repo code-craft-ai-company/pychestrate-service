@@ -35,7 +35,9 @@ Routes are either *shell* routes or *chromeless* routes:
   into the ``<main>`` slot.
 - **Chromeless routes** render their own minimal document without
   the shell bundle: ``/login``, ``/logout``, the setup wizard under
-  ``/setup/*``, and signed embeddable views under ``/embed/*``. The
+  ``/setup/*``, and (when ``PYCHESTRATE_EMBED_ENABLED`` is set; it is off
+  by default because the feature is unfinished) signed embeddable views under
+  ``/embed/*``. The
   prefixes ``/__health`` and ``/errors`` are reserved as chromeless
   too, but no pages are served there today; requests for them get the
   ordinary 404.

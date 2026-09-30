@@ -67,6 +67,7 @@ from ccai.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
 from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
+    embed_views_enabled,
     register_embed_routes,
 )
 from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
@@ -492,7 +493,9 @@ def register_service_extensions() -> None:
     # MCP server endpoint for agents (fixed path /mcp/1/service, not
     # under the versioned REST prefix).
     register_mcp_service_routes(app=app)
-    register_embed_routes(app=app, version_prefix="/api/v1")
+    # Embeddable views are unfinished (ORC-07): not served unless asked for.
+    if embed_views_enabled() is True:
+        register_embed_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_me_routes(app=app, version_prefix="/api/v1")

@@ -116,7 +116,9 @@ tags:
     description: >-
       Embeddable-views catalog and signed-URL issuance. The signed
       embed-serving route (`GET /embed/{view_key}`) is token-authed
-      and outside the `/api/v1` surface.
+      and outside the `/api/v1` surface. Not served yet: the feature is
+      unfinished, so every operation here is `planned` and the service
+      registers the routes only when `PYCHESTRATE_EMBED_ENABLED` is set.
   - name: runs
     description: Run-state reads (`GET /runs/...`).
   - name: test_runs
@@ -2863,6 +2865,7 @@ paths:
         Returns the fixed catalog of embeddable view kinds. RBAC-gated
         on `system:embed.read`.
       operationId: embed_list_views
+      x-pychestrate-status: planned
       responses:
         '200':
           description: Embeddable-views catalog.
@@ -2894,6 +2897,7 @@ paths:
         signature; that serving route is token-authed, not
         session-authed.
       operationId: embed_sign_view
+      x-pychestrate-status: planned
       requestBody:
         required: false
         content:

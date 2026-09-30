@@ -201,6 +201,24 @@ preview tag.
 
 ### Changed
 
+- Embeddable views are not served until they work (ORC-07). The surface answered
+  200 for a catalog of five view kinds that could not be embedded: signing a view's
+  URL answered 405 (the router does not treat a path segment such as
+  `{view_key}:sign` as a parameter), the embed page loaded no script, four of the
+  five component tags (`pyc-log-stream`, `pyc-artifact-preview`, `pyc-pipeline-dag`,
+  `pyc-metric-tile`) are defined by no bundle, and the scopes the catalog declares
+  (`system:run.read` and others) are not in the permission catalog. The
+  application now registers `/api/v1/embed/views`, the sign route and
+  `/embed/{view_key}` only when `PYCHESTRATE_EMBED_ENABLED` is `1`, `true`, `yes` or
+  `on`; unset, they answer 404 like any unknown path. The OpenAPI document marks
+  the operations `planned`, and the environment reference documents the switch.
+  Not done, and what it takes to switch the feature back on: route signing as
+  `/embed/views/{view_key}/sign` (the backup routes use the same workaround; the
+  agent-rollout `:start` route has the same 405), ship an embed bundle that loads
+  the components, write the four missing components and a way for a signed token
+  (not a session) to read their data, add the scopes to the permission catalog,
+  and add a "Share / Embed" action.
+
 - Server-rendered pages follow the UI glossary, and a test keeps them there (ADM-27).
   An absent value is an em dash: "N/A" (six pages) and a hyphen or "None set" (28
   templates, including the lab resource, allocation, reservation and pool pages, the

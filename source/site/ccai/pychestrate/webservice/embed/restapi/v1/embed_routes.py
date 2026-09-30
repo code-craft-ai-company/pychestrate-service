@@ -30,6 +30,18 @@ documents via :mod:`api.problem_json_webworks`. The serving route
 returns minimal HTML on every path because its consumers are
 ``<iframe>`` hosts that cannot parse a JSON problem document.
 
+**Not served by default (ORC-07).** The surface does not work end to end yet:
+``POST .../views/{view_key}:sign`` is unreachable (the router does not treat a
+path segment such as ``{view_key}:sign`` as a parameter, so it answers 405), the
+serving page loads no script, four of the five component tags
+(``pyc-log-stream``, ``pyc-artifact-preview``, ``pyc-pipeline-dag``,
+``pyc-metric-tile``) are not defined by any bundle, and the scopes the catalog
+declares (``system:run.read`` and others) are not in the permission catalog. A
+list endpoint that answers 200 for views that cannot be embedded is worse than
+no endpoint, so the application registers these routes only when
+``PYCHESTRATE_EMBED_ENABLED`` is set (see :func:`embed_views_enabled`). The
+OpenAPI document marks the operations ``planned``.
+
 The signing key store lives in ``1-secrets-vault`` in the final
 design; until that wiring lands, :mod:`embed.key_provider` supplies
 a process-stable HMAC key so issuance and verification agree within
@@ -43,6 +55,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import os
 
 from datetime import datetime, timezone
 from html import escape as html_escape
@@ -73,6 +86,9 @@ from ccai.pychestrate.webservice.embed.view_catalog import (
 )
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
+
+#: The variable that turns the embeddable-views routes on (they are off by default).
+EMBED_ENABLED_VARIABLE = "PYCHESTRATE_EMBED_ENABLED"
 
 EMBED_API_PATH = "/embed/views"
 EMBED_SERVE_PATH = "/embed"
@@ -301,6 +317,21 @@ def _webcomponent_snippet(*, url: str, component_tag: str) -> str:
 # ---------------------------------------------------------------------------
 # GET /api/v1/embed/views
 # ---------------------------------------------------------------------------
+
+
+def embed_views_enabled() -> bool:
+    """
+        Whether the application should register the embeddable-views routes.
+
+        They are off unless ``PYCHESTRATE_EMBED_ENABLED`` is ``1``, ``true``,
+        ``yes`` or ``on`` (any case): the surface is unfinished (see the module
+        note).
+
+        :returns: ``True`` when the routes should be registered.
+    """
+    value = os.environ.get(EMBED_ENABLED_VARIABLE, "")
+    rtnval = value.strip().lower() in ("1", "true", "yes", "on")
+    return rtnval
 
 
 def handle_list_views(request: Request) -> Response:
@@ -757,6 +788,8 @@ def register_embed_routes(*, app: Any, version_prefix: str) -> None:
 
 
 __all__ = [
+    "EMBED_ENABLED_VARIABLE",
+    "embed_views_enabled",
     "EMBED_API_PATH",
     "EMBED_SERVE_PATH",
     "EMBED_READ_PERMISSION_KEY",

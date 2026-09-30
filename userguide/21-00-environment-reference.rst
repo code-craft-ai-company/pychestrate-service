@@ -223,6 +223,13 @@ Two more secrets are single values:
        invent its own and an upload fails whenever a different worker
        receives it, so set one shared value. The readiness check reports
        it.
+   * - ``PYCHESTRATE_EMBED_ENABLED``
+     - off
+     - Registers the embeddable-views routes (``/api/v1/embed/views`` and
+       ``/embed/{view_key}``). They are off because the feature is
+       unfinished: signing a view's URL cannot be reached, the embed page
+       loads no script, and four of the five view components do not exist
+       yet. Set ``1`` only to work on the feature.
    * - ``PYCHESTRATE_EMBED_SIGNING_SECRET``
      - a random value per process
      - The secret that signs the URLs of embeddable views. Unset, a URL
