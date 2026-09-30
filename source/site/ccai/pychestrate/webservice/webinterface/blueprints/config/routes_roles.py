@@ -9,7 +9,8 @@
 The role-management routes served under the config blueprint:
 
 * ``GET  /admin/roles``                    -- list roles.
-* ``GET  /admin/roles/create``             -- new-role form.
+* ``GET  /admin/roles/create``             -- new-role form; ``?copy_from={role_id}``
+                                            starts it from an existing role.
 * ``POST /admin/roles/create``             -- create role.
 * ``GET  /admin/roles/{role_id}``          -- detail page.
 * ``GET  /admin/roles/{role_id}/edit``     -- edit form.
@@ -64,6 +65,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     MultiFormView,
     _attach_session_to_response,
     _build_default_template_context,
+    _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
     _not_found_redirect,
@@ -215,6 +217,25 @@ def _svc_delete_role(
     return rtnval
 
 
+def _svc_list_role_holders(*, db_session: Any, role_id: str) -> List[Any]:
+    """
+        List who holds a role (users by name, project bindings with the
+        project's name).
+
+        :param db_session: Open SQLAlchemy session.
+        :param role_id: Role UUID string.
+
+        :returns: List of ``AdminRoleHolderView``.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.list_role_holders(
+        db_session=db_session, role_id=role_id
+    )
+    return rtnval
+
+
 def _svc_list_catalog_permissions() -> List[Any]:
     """
         List the valid (catalog-registered) system permission keys
@@ -283,6 +304,61 @@ def _clean_permission_keys(*, raw_values: List[str]) -> List[str]:
     return rtnval
 
 
+#: Longest role name the store accepts.
+ROLE_NAME_MAX_LENGTH: int = 128
+
+#: The key that lets a person change roles (create, copy, edit, delete); the buttons
+#: for those are not offered to anyone else.
+ROLES_CHANGE_PERMISSION: str = "system:rbac.admin"
+
+#: Who may see the people who hold a role (a role page is readable with the RBAC
+#: key alone; the names of the holders are user data).
+HOLDERS_VISIBLE_PERMISSION: str = "system:users.read"
+
+
+def suggest_copy_name(*, name: str, existing_names: List[str]) -> str:
+    """
+        The name to offer for a copy of a role: ``<name> copy``, or
+        ``<name> copy 2``, ``<name> copy 3`` ... when that is taken; the
+        original's name is shortened when needed to stay within the limit.
+
+        :param name: The role being copied.
+        :param existing_names: Every role name in use.
+
+        :returns: A name no role has yet.
+    """
+    taken = {str(existing).lower() for existing in existing_names}
+    number = 1
+    while True:
+        suffix = " copy" if number == 1 else " copy {}".format(number)
+        candidate = name[: ROLE_NAME_MAX_LENGTH - len(suffix)] + suffix
+        if candidate.lower() not in taken:
+            return candidate
+        number += 1
+
+
+def _copy_form_for(*, db_session: Any, copy_from: str) -> Optional[Any]:
+    """
+        The pre-filled create form for a copy of ``copy_from``.
+
+        :param db_session: Open SQLAlchemy session.
+        :param copy_from: The role id to copy (from the query string).
+
+        :returns: ``(role, MultiFormView)`` for the role and the form, or ``None``
+                  when there is no such role.
+    """
+    role = _svc_get_role(db_session=db_session, role_id=copy_from)
+    if role is None:
+        return None
+    names = [entry.name for entry in _svc_list_roles(db_session=db_session)]
+    form = MultiFormView(data={
+        "name": [suggest_copy_name(name=role.name, existing_names=names)],
+        "description": [role.description],
+        "permission_keys": [entry.id for entry in role.permissions],
+    })
+    return role, form
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -307,6 +383,7 @@ def handle_role_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["roles"] = roles
+        context["may_change_roles"] = _has_permission(auth=auth, permission=ROLES_CHANGE_PERMISSION)
         response = _render(
             template_name="config/roles/list.html",
             context=context,
@@ -337,6 +414,16 @@ def handle_role_create(request: Request) -> Response:
 
         if method == "GET":
             permissions = _svc_list_catalog_permissions()
+            copied = None
+            copy_from = str(request.query_params.get("copy_from", "") or "").strip()
+            if len(copy_from) > 0:
+                copied = _copy_form_for(db_session=db_session, copy_from=copy_from)
+                if copied is None:
+                    flash.add_flash(
+                        session=auth.session,
+                        message="The role to copy was not found. Starting with an empty form.",
+                        category=flash.CATEGORY_WARNING,
+                    )
             flashes = flash.consume_flashes(session=auth.session)
             context = _build_default_template_context(
                 session=auth.session,
@@ -345,7 +432,9 @@ def handle_role_create(request: Request) -> Response:
                 csrf_token=auth.csrf_token,
             )
             context["permissions"] = permissions
-            context["form_data"] = None
+            context["copy_of"] = copied[0] if copied is not None else None
+            context["form_data"] = copied[1] if copied is not None else None
+            context["start_from_roles"] = _svc_list_roles(db_session=db_session)
             response = _render(
                 template_name="config/roles/create.html",
                 context=context,
@@ -422,6 +511,8 @@ def handle_role_create(request: Request) -> Response:
         )
         context["permissions"] = permissions
         context["form_data"] = form_view
+        context["copy_of"] = None
+        context["start_from_roles"] = []
         context["errors"] = errors
         context["error_labels"] = ROLE_FIELD_LABELS
         response = _render(
@@ -469,6 +560,13 @@ def handle_role_detail(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["role"] = role
+        context["may_change_roles"] = _has_permission(auth=auth, permission=ROLES_CHANGE_PERMISSION)
+        may_see_holders = _has_permission(auth=auth, permission=HOLDERS_VISIBLE_PERMISSION)
+        context["may_see_holders"] = may_see_holders
+        context["role_holders"] = (
+            _svc_list_role_holders(db_session=db_session, role_id=role_id)
+            if may_see_holders is True else []
+        )
         response = _render(
             template_name="config/roles/detail.html",
             context=context,
@@ -806,6 +904,7 @@ def register_roles_routes(*, app: Any) -> None:
 
 
 __all__ = [
+    "suggest_copy_name",
     "register_roles_routes",
     "handle_role_list",
     "handle_role_create",

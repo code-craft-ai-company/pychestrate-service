@@ -59,21 +59,67 @@
     {% endif %}
 </div>
 
+<div class="card mt" data-role="role-holders">
+    <h2 class="card-header">Who has this role ({{ role.binding_count }})</h2>
+    {% if not may_see_holders %}
+    <p class="muted">Naming the people who have a role needs permission to view users.</p>
+    {% elif role_holders %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Username</th>
+                <th scope="col">Applies to</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for holder in role_holders %}
+            <tr>
+                <td>
+                    {% if holder.kind == 'user' and holder.login_name %}
+                    <a href="{{ url_for('config.user_detail', user_id=holder.principal_id) }}">{{ holder.label }}</a>
+                    {% else %}
+                    {{ holder.label }}
+                    {% endif %}
+                    {% if not holder.is_active %}<span class="badge badge-warning">Deactivated</span>{% endif %}
+                </td>
+                <td>{{ holder.login_name or '—' }}</td>
+                <td>{{ holder.scope_label }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% if role.binding_count > role_holders | length %}
+    <p class="muted">Showing the first {{ role_holders | length }} of {{ role.binding_count }}.</p>
+    {% endif %}
+    {% else %}
+    <p class="muted">Nobody has this role yet. Give it to a person from their user page.</p>
+    {% endif %}
+</div>
+
 <div class="actions-row mt">
+    {% if may_change_roles %}
     {% if not role.is_system %}
     <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-primary">
         {{ ui.icon("edit") }} Edit Role
     </a>
+    {% endif %}
+    <a href="{{ url_for('config.role_create') }}?copy_from={{ role.id }}" class="btn {{ 'btn-primary' if role.is_system else 'btn-secondary' }}" data-role="copy-role">
+        {{ ui.icon("add") }} Copy Role
+    </a>
+    {% if not role.is_system %}
     <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">
             {{ ui.icon("delete") }} Delete Role
         </button>
     </form>
-    {% else %}
+    {% endif %}
+    {% endif %}
+    {% if role.is_system %}
     <p class="form-text" style="align-self: center; margin: 0;">
-        Built-in role -- its permissions are defined by the system and
-        cannot be edited or deleted.
+        Built-in role: its permissions are defined by the system and
+        cannot be edited or deleted. Copy it to make a version you can change.
     </p>
     {% endif %}
     <a href="{{ url_for('config.role_list') }}" class="btn btn-secondary">Back to List</a>

@@ -124,6 +124,7 @@ from ccai.pychestrate.webservice.orchestration.rpa.service import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.identity_admin import (
     AdminPermissionView,
+    AdminRoleHolderView,
     AdminRoleView,
     AdminUserView,
 )
@@ -168,6 +169,12 @@ def _by_mode(populated: Any, sparse: Any) -> Builder:
         rtnval = populated if mode == MODE_POPULATED else sparse
         return rtnval
     return _build
+
+
+def _copy_of(mode: str) -> Any:
+    """The role a create-role form was started from: one in the populated mode, none otherwise."""
+    rtnval = build_fixture(AdminRoleView, mode=mode) if mode == MODE_POPULATED else None
+    return rtnval
 
 
 _DASHBOARD_RUN_ROW: Dict[str, Any] = {
@@ -657,6 +664,11 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "user": _one(AdminUserView),
     "roles": _many(AdminRoleView),
     "role": _one(AdminRoleView),
+    "role_holders": _many(AdminRoleHolderView),
+    "may_see_holders": _by_mode(True, False),
+    "may_change_roles": _by_mode(True, False),
+    "copy_of": _copy_of,
+    "start_from_roles": _many(AdminRoleView),
     "permissions": _many(AdminPermissionView),
     "current_permission_keys": _by_mode(["id-7"], []),
     "sessions": _many(_SessionRow),

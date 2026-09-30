@@ -9,7 +9,28 @@
     <p>Add a new role with specific permissions</p>
 </div>
 
+{% if start_from_roles %}
+<div class="card mb" data-role="start-from">
+    <form method="get" action="{{ url_for('config.role_create') }}">
+        <div class="form-group">
+            <label for="copy_from">Start from an existing role</label>
+            <select id="copy_from" name="copy_from" class="form-control">
+                <option value="">An empty role</option>
+                {% for candidate in start_from_roles %}
+                <option value="{{ candidate.id }}"{% if copy_of and copy_of.id == candidate.id %} selected{% endif %}>{{ candidate.name }} ({{ candidate.permissions | length }} permission{{ '' if candidate.permissions | length == 1 else 's' }}{% if candidate.is_system %}, built-in{% endif %})</option>
+                {% endfor %}
+            </select>
+            <p class="form-text">Puts that role's permissions in the form below so you can adjust them. Nothing is saved until you choose Create Role.</p>
+        </div>
+        <button type="submit" class="btn btn-secondary">Use This Role</button>
+    </form>
+</div>
+{% endif %}
+
 <div class="card">
+    {% if copy_of %}
+    <p class="form-text" data-role="copy-note">Copy of {{ copy_of.name }}: its {{ copy_of.permissions | length }} permission{{ '' if copy_of.permissions | length == 1 else 's' }} are ticked below. Give the copy a name and adjust what it allows, then choose Create Role.</p>
+    {% endif %}
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {{ ui.error_summary(errors, error_labels) }}

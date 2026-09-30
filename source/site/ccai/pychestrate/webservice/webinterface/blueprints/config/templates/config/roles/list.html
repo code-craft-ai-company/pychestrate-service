@@ -9,11 +9,13 @@
     <p>Configure roles and their permissions</p>
 </div>
 
+{% if may_change_roles %}
 <div class="toolbar toolbar--end">
     <a href="{{ url_for('config.role_create') }}" class="btn btn-primary">
         {{ ui.icon("add") }} Create Role
     </a>
 </div>
+{% endif %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
@@ -42,13 +44,18 @@
             <td>{{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }}</td>
             <td>
                 <div class="row-actions">
+                    {% if may_change_roles %}
                     {% if not role.is_system %}
                     <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                    {% endif %}
+                    <a href="{{ url_for('config.role_create') }}?copy_from={{ role.id }}" class="btn btn-sm btn-secondary" data-role="copy-role">Copy</a>
+                    {% if not role.is_system %}
                     <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-sm btn-quiet-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">Delete</button>
                     </form>
-                    {% else %}
+                    {% endif %}
+                    {% elif role.is_system %}
                     <span class="muted">Built-in role</span>
                     {% endif %}
                 </div>

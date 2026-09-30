@@ -29,6 +29,18 @@ preview tag.
 
 ### Added
 
+- Roles can be copied, and a role's page says who has it (ADM-06). Building a role
+  meant ticking permissions from an empty form, and the role page showed only a
+  count. The create form now starts from any role: **Copy Role** on a role's page or
+  row, or *Start from an existing role* on the form (`GET /admin/roles/create?copy_from=<role id>`),
+  ticks that role's permissions, suggests a free name ("Auditor copy", "Auditor copy 2")
+  and saves nothing until **Create Role**; a built-in role's page now says that copying it
+  is how to get a version that can be changed. The role page lists who has the role
+  (name linked to the user, username, "Everywhere" or the project's name, a Deactivated mark;
+  the first 200 of any more) for anyone allowed to view users; other readers see the
+  count only. The create, copy, edit and delete buttons are shown only to people allowed
+  to administer roles (the server already refused everyone else).
+
 - A form that expires no longer throws away what was typed (XC-11). A form submitted
   after the sign-in cookie expired, or with a stale anti-forgery token, answered with
   a redirect to the sign-in page (a `GET`, so the text was gone) or to an empty form

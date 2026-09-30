@@ -201,6 +201,32 @@ class AdminRoleView:
 
 
 @dataclass
+class AdminRoleHolderView:
+    """
+        One binding of a role, as the role page lists it (ADM-06).
+
+        :param kind: ``"user"`` or ``"group"``.
+        :param principal_id: The bound user's (or group's) UUID as a string.
+        :param label: What to call the holder: a user's display name (login name
+                      when there is none), or ``Group <first 8 characters>``.
+        :param login_name: The user's login name ("" for a group or a missing user).
+        :param scope_label: Where the role applies: ``"Everywhere"`` for a system
+                            or organisation binding, the project's name for a
+                            project binding.
+        :param project_id: The project's UUID string for a project binding, else "".
+        :param is_active: ``False`` for a deactivated user (the role is held but
+                          the person cannot sign in).
+    """
+    kind: str
+    principal_id: str
+    label: str
+    login_name: str = ""
+    scope_label: str = "Everywhere"
+    project_id: str = ""
+    is_active: bool = True
+
+
+@dataclass
 class AdminUserView:
     """
         User row for the Users pages.
@@ -2001,6 +2027,89 @@ def count_role_bindings(*, db_session: Any, role_id: str) -> int:
     return rtnval
 
 
+#: The most holders one role page lists; the page says how many more there are.
+ROLE_HOLDERS_LIMIT: int = 200
+
+
+def list_role_holders(
+        *,
+        db_session: Any,
+        role_id: str,
+        limit: int = ROLE_HOLDERS_LIMIT
+    ) -> List[AdminRoleHolderView]:
+    """
+        Return who holds a role: one entry per binding, users by name and
+        project bindings with the project's name, ordered by holder label and
+        then scope. At most ``limit`` entries (the role's ``binding_count``
+        says how many there are in all).
+
+        :param db_session: The active SQLAlchemy session.
+        :param role_id: Role UUID string.
+        :param limit: The most entries to return.
+
+        :returns: The holders (empty for an unknown role or one nobody holds).
+    """
+    from ccai.pychestrate.webservice.identity.users.models import IdentityUser, UserStatus
+    from ccai.pychestrate.webservice.projects.models import Project
+    from ccai.pychestrate.webservice.security.rbac.models import (
+        BindingScope,
+        PrincipalKind,
+        RbacRoleBinding,
+    )
+
+    role_uuid = _parse_user_uuid(user_id=role_id)
+    if role_uuid is None:
+        return []
+
+    bindings = (
+        db_session.query(RbacRoleBinding)
+        .filter(RbacRoleBinding.role_id == role_uuid)
+        .order_by(RbacRoleBinding.created_at.asc(), RbacRoleBinding.binding_id.asc())
+        .limit(int(limit))
+        .all()
+    )
+
+    user_ids = {row.principal_id for row in bindings if row.principal_kind == PrincipalKind.USER}
+    project_ids = {row.scope_id for row in bindings if row.scope_kind == BindingScope.PROJECT and row.scope_id is not None}
+    users: Dict[Any, Any] = {}
+    if len(user_ids) > 0:
+        for user in db_session.query(IdentityUser).filter(IdentityUser.user_id.in_(user_ids)).all():
+            users[user.user_id] = user
+    projects: Dict[Any, Any] = {}
+    if len(project_ids) > 0:
+        for project in db_session.query(Project).filter(Project.project_id.in_(project_ids)).all():
+            projects[project.project_id] = project
+
+    rtnval: List[AdminRoleHolderView] = []
+    for row in bindings:
+        if row.scope_kind == BindingScope.PROJECT and row.scope_id is not None:
+            project = projects.get(row.scope_id, None)
+            scope_label = project.display_name or project.slug if project is not None else "A project that no longer exists"
+            project_text = str(row.scope_id)
+        else:
+            scope_label = "Everywhere"
+            project_text = ""
+
+        if row.principal_kind == PrincipalKind.USER:
+            user = users.get(row.principal_id, None)
+            if user is None:
+                entry = AdminRoleHolderView(kind="user", principal_id=str(row.principal_id), label="A user that no longer exists", is_active=False)
+            else:
+                entry = AdminRoleHolderView(
+                    kind="user", principal_id=str(row.principal_id),
+                    label=user.display_name or user.login_name, login_name=user.login_name,
+                    is_active=user.status == UserStatus.ACTIVE,
+                )
+        else:
+            entry = AdminRoleHolderView(kind="group", principal_id=str(row.principal_id), label="Group {}".format(str(row.principal_id)[:8]))
+        entry.scope_label = scope_label
+        entry.project_id = project_text
+        rtnval.append(entry)
+
+    rtnval.sort(key=lambda item: (item.label.lower(), item.scope_label.lower()))
+    return rtnval
+
+
 def list_catalog_permissions() -> List[AdminPermissionView]:
     """
         Return every system-namespace permission key registered in
@@ -2399,6 +2508,7 @@ __all__ = [
     "AdminDuplicateError",
     "AdminNotFoundError",
     "AdminPermissionView",
+    "AdminRoleHolderView",
     "AdminRoleView",
     "AdminUserListResult",
     "AdminUserView",
@@ -2408,6 +2518,8 @@ __all__ = [
     "LastAdminRoleError",
     "SelfLockoutError",
     "count_role_bindings",
+    "list_role_holders",
+    "ROLE_HOLDERS_LIMIT",
     "InvitedUser",
     "USER_STATUS_ACTIVE",
     "USER_STATUS_INACTIVE",

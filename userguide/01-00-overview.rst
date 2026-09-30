@@ -129,7 +129,14 @@ Users, roles, and permissions
     are grouped by product area (*Builds*, *Resource pools*, ...) with a
     filter box; under each area, *View*, *Start*, *Change* and *Administer*
     are the keys ending ``.read``, ``.create``, ``.write`` and ``.admin``, and
-    hovering a row shows the key itself.
+    hovering a row shows the key itself. To make a role that is close to an
+    existing one, choose **Copy Role** on that role's page (or on its row in
+    the list), or pick it under *Start from an existing role* on the create
+    form: its permissions come ticked, the copy is named "<name> copy", and
+    nothing is saved until you choose **Create Role**. A built-in role cannot
+    be edited, so copying it is how to get a version you can change. A role's
+    page lists who has it (name, username, and whether it applies everywhere or in
+    one project) for anyone who may view users; others see only the count.
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.
