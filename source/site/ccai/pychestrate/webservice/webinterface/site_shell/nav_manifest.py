@@ -182,10 +182,21 @@ NAV_GROUPS: List[NavGroup] = [
 # what that surface actually enforces.
 NAV_ENTRIES: List[NavEntry] = [
     # ---- Projects ------------------------------------------------
-    # Labeled "All Projects" so the entry reads distinctly from
-    # its owning group (both were previously "Projects").
+    # Two pages, two names, the same in the sidebar and on the project pages'
+    # own navigation (PRJ-27): the dashboard says what needs attention, "All
+    # Projects" lists every project. "All Projects" owns the bare ``/projects``
+    # prefix, so a project's own pages keep it highlighted; the dashboard
+    # is one segment longer and wins on its own address. Labeled apart from
+    # the group ("Projects") and from Insights' "Dashboards".
     NavEntry(
         entry_id="projects.dashboard",
+        label="Projects Dashboard",
+        route="/projects/dashboard",
+        group_id=GROUP_PROJECTS,
+        required_permissions=["system:projects.access"],
+    ),
+    NavEntry(
+        entry_id="projects.list",
         label="All Projects",
         route="/projects",
         group_id=GROUP_PROJECTS,

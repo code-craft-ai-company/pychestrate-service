@@ -99,23 +99,23 @@ def _title(response) -> str:
 
 def test_the_projects_dashboard_and_list_and_a_project_page_read_differently_in_the_tab():
     """
-    **Feature: tab titles (PRJ-39)**
-    **Property: through the application, /projects is "Project Dashboard ·
-    Pychestrate", /projects/list is "All Projects · Pychestrate", and a
-    project's members page is "Members · <project> · Pychestrate", with no
-    " - " left in any of them.**
+    **Feature: tab titles (PRJ-39, PRJ-27)**
+    **Property: through the application, /projects and /projects/list are "All
+    Projects · Pychestrate", /projects/dashboard is "Projects Dashboard ·
+    Pychestrate", and a project's members page is "Members · <project> ·
+    Pychestrate", with no " - " left in any of them.**
     """
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
     project_id = create_project_via_ui(wsgi_app=handle.wsgi_app, cookies=cookies, prefix="ttl" + uuid.uuid4().hex[:4])
     titles = {}
-    for path in ("/projects", "/projects/list", "/projects/{}/members".format(project_id)):
+    for path in ("/projects", "/projects/list", "/projects/dashboard", "/projects/{}/members".format(project_id)):
         titles[path] = _title(drive_request(wsgi_app=handle.wsgi_app, method="GET", path=path, cookies=cookies))
     members = titles["/projects/{}/members".format(project_id)]
 
     testbase.assert_equal(
-        (titles["/projects"], titles["/projects/list"], members.startswith("Members · ttl"), members.endswith(" · Pychestrate"),
+        (titles["/projects"], titles["/projects/list"], titles["/projects/dashboard"], members.startswith("Members · ttl"), members.endswith(" · Pychestrate"),
          any(" - " in title for title in titles.values())),
-        ("Project Dashboard · Pychestrate", "All Projects · Pychestrate", True, True, False),
+        ("All Projects · Pychestrate", "All Projects · Pychestrate", "Projects Dashboard · Pychestrate", True, True, False),
     )
     return

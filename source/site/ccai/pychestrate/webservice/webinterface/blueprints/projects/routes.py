@@ -109,7 +109,7 @@ MEMBER_PICKER_LIMIT = 200
 
 
 _ROUTE_TABLE = (
-    ("projects.dashboard_root", "/", ("GET",)),
+    ("projects.list_root", "/", ("GET",)),
     ("projects.dashboard", "/dashboard", ("GET",)),
     ("projects.project_list", "/list", ("GET",)),
     ("projects.project_create", "/create", ("GET", "POST")),
@@ -688,7 +688,9 @@ def _collect_recent_activity(
 
 def handle_dashboard(request: Request) -> Response:
     """
-        ``GET /projects/`` and ``/projects/dashboard``.
+        ``GET /projects/dashboard`` -- what needs attention first. ``/projects``
+        itself is the list of projects (PRJ-27: the sidebar's "All Projects" and
+        the project pages' "All Projects" opened different pages).
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -782,7 +784,7 @@ def _editable_project_ids(*, project_manager: Any, user_id: Any, projects: Any) 
 
 def handle_project_list(request: Request) -> Response:
     """
-        ``GET /projects/list``.
+        ``GET /projects`` and ``GET /projects/list`` -- the list of projects.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -2338,7 +2340,7 @@ class _ShellWrappingApp:
 
 
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
-    "projects.dashboard_root": handle_dashboard,
+    "projects.list_root": handle_project_list,
     "projects.dashboard": handle_dashboard,
     "projects.project_list": handle_project_list,
     "projects.project_create": handle_project_create,

@@ -49,10 +49,11 @@
         {% if project is defined and project %}
         <nav class="pyc-subnav" aria-label="Project navigation">
             <ul>
+                {#- The same two names and addresses as the sidebar's Projects group (PRJ-27). #}
                 <li><a href="{{ url_for('projects.dashboard') }}" {% if request_endpoint == 'projects.dashboard' %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("dashboard") }} Dashboard
+                    {{ ui.icon("dashboard") }} Projects Dashboard
                 </a></li>
-                <li><a href="{{ url_for('projects.project_list') }}" {% if request_endpoint in ('projects.project_list', 'projects.project_create') %}class="active" aria-current="page"{% endif %}>
+                <li><a href="{{ url_for('projects.list_root') }}" {% if request_endpoint in ('projects.project_list', 'projects.project_create') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("folder") }} All Projects
                 </a></li>
 

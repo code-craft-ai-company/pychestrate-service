@@ -201,6 +201,19 @@ preview tag.
 
 ### Changed
 
+- The two projects pages have one name and one address each, in the sidebar and
+  on the project pages (PRJ-27). The sidebar's "All Projects" opened the
+  dashboard, while a project page's "All Projects" opened the list. The Projects
+  group now has "Projects Dashboard" (`/projects/dashboard`) and "All Projects"
+  (`/projects`, the list; `/projects/list` still works), and a project page's own
+  navigation uses the same two names and addresses. `/projects` used to be the
+  dashboard, so a bookmark of it now opens the list; the dashboard is one click
+  away in the same group. "All Projects" stays highlighted on every page of a
+  project and the dashboard on its own page. The list's heading and the
+  dashboard's tab title now match their navigation names, and a test checks that no
+  two sidebar entries share a label. Not done: a project switcher, and one merged
+  "Projects" destination with a dashboard tab (the two pages stay separate).
+
 - Administration has one landing page (XC-18). `/admin` ("Administration") and
   `/admin/dashboard` ("Dashboard", six cards) did the same job with different
   content and styling, and `/admin/overview` was a third address for the first.

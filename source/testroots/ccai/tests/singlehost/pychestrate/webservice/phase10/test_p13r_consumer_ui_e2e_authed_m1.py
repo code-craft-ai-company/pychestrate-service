@@ -353,41 +353,45 @@ def test_crud_roundtrip_create_and_list_global_variable():
 def test_authenticated_projects_dashboard_renders_inside_site_shell():
     """
     **Feature: consumer UI e2e tier-2 (projects shell wrap)**
-    **Property: GET /projects with a logged-in session renders
-    the site-shell document (single doctype, <pyc-site-shell>
-    host, shell-resolved <title>) with the projects page embedded
-    as a fragment -- and none of the retired standalone chrome
-    (own app header, Vue script stack).**
+    **Property: GET /projects (the list) and GET /projects/dashboard with a
+    logged-in session render the site-shell document (single doctype,
+    <pyc-site-shell> host, shell-resolved <title>) with the page embedded as a
+    fragment -- and none of the retired standalone chrome (own app header,
+    Vue script stack).**
     """
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
 
-    response = drive_request(
-        wsgi_app=handle.wsgi_app,
-        method="GET",
-        path="/projects",
-        cookies=cookies,
-    )
-    testbase.assert_equal(response.status_code, 200)
-    body = response.text
+    for path, title, heading in (
+        ("/projects", "All Projects", "All Projects"),
+        ("/projects/dashboard", "Projects Dashboard", "Projects Dashboard"),
+    ):
+        response = drive_request(
+            wsgi_app=handle.wsgi_app,
+            method="GET",
+            path=path,
+            cookies=cookies,
+        )
+        testbase.assert_equal(response.status_code, 200)
+        body = response.text
 
-    # Exactly one document: the shell's.
-    testbase.assert_equal(body.count("<!DOCTYPE html>"), 1)
-    testbase.assert_equal("<pyc-site-shell" in body, True)
-    testbase.assert_equal(
-        "<title>Project Dashboard · Pychestrate</title>" in body, True
-    )
+        # Exactly one document: the shell's.
+        testbase.assert_equal(body.count("<!DOCTYPE html>"), 1)
+        testbase.assert_equal("<pyc-site-shell" in body, True)
+        testbase.assert_equal(
+            "<title>{} · Pychestrate</title>".format(title) in body, True
+        )
 
-    # The projects page rides inside as a fragment.
-    # The fragment now also carries the shared pyc-admin-page-fragment
-    # class (Phase 3 shared stylesheet), so match the class token.
-    testbase.assert_equal(
-        'projects-fragment' in body, True
-    )
-    testbase.assert_equal("Projects Dashboard" in body, True)
+        # The projects page rides inside as a fragment.
+        # The fragment now also carries the shared pyc-admin-page-fragment
+        # class (Phase 3 shared stylesheet), so match the class token.
+        testbase.assert_equal(
+            'projects-fragment' in body, True
+        )
+        testbase.assert_equal("<h1>{}</h1>".format(heading) in body, True)
 
-    # The retired standalone chrome is gone.
-    testbase.assert_equal('class="app-header"' in body, False)
-    testbase.assert_equal("vue.js" in body, False)
-    testbase.assert_equal("bootstrap-vue" in body, False)
+        # The retired standalone chrome is gone.
+        testbase.assert_equal('class="app-header"' in body, False)
+        testbase.assert_equal("vue.js" in body, False)
+        testbase.assert_equal("bootstrap-vue" in body, False)
     return
