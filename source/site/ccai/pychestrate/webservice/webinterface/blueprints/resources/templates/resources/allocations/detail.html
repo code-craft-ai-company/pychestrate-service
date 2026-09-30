@@ -28,22 +28,22 @@
                 </tr>
                 <tr>
                     <th scope="row">User</th>
-                    <td>{{ allocation.username or '-' }}</td>
+                    <td>{{ allocation.username or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Job ID</th>
-                    <td>{{ allocation.job_id or '-' }}</td>
+                    <td>{{ allocation.job_id or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Reason</th>
-                    <td data-role="allocation-reason">{{ allocation.reason or '-' }}</td>
+                    <td data-role="allocation-reason">{{ allocation.reason or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Mode</th>
                     <td>
                         {% set mode = allocation.mode %}
                         {% if mode == 'exclusive' %}
-                        <span class="badge badge-danger">Exclusive</span>
+                        <span class="badge badge-info">Exclusive</span>
                         {% else %}
                         <span class="badge badge-info">Shared</span>
                         {% endif %}
@@ -69,24 +69,24 @@
                 {% if allocation.forced_by or allocation.force_reason %}
                 <tr>
                     <th scope="row">Forced by</th>
-                    <td data-role="forced-by">{{ allocation.forced_by or '-' }}</td>
+                    <td data-role="forced-by">{{ allocation.forced_by or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Reason given</th>
-                    <td data-role="force-reason">{{ allocation.force_reason or '-' }}</td>
+                    <td data-role="force-reason">{{ allocation.force_reason or '—' }}</td>
                 </tr>
                 {% endif %}
                 <tr>
-                    <th scope="row">Checkout Time</th>
-                    <td>{{ allocation.checkout_time | local_datetime(true, '-') }}</td>
+                    <th scope="row">Check Out Time</th>
+                    <td>{{ allocation.checkout_time | local_datetime(true, '—') }}</td>
                 </tr>
                 <tr>
-                    <th scope="row">Expected Checkin</th>
-                    <td>{{ allocation.expected_checkin | local_datetime(true, '-') }}</td>
+                    <th scope="row">Expected Check In</th>
+                    <td>{{ allocation.expected_checkin | local_datetime(true, '—') }}</td>
                 </tr>
                 <tr>
-                    <th scope="row">Actual Checkin</th>
-                    <td>{{ allocation.actual_checkin | local_datetime(true, '-') }}</td>
+                    <th scope="row">Actual Check In</th>
+                    <td>{{ allocation.actual_checkin | local_datetime(true, '—') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Duration</th>
@@ -97,7 +97,7 @@
         
         {% if allocation.metadata %}
         <div class="card">
-            <h2 class="card-header">Resource Metadata (at checkout)</h2>
+            <h2 class="card-header">Resource Metadata (at check out)</h2>
             <pre class="pre-block">{{ allocation.metadata | tojson(indent=2) }}</pre>
         </div>
         {% endif %}
@@ -113,18 +113,18 @@
                 <form action="{{ url_for('resources.allocation_checkin', allocation_id=allocation.id) }}" method="post" data-confirm="Check in this resource?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-warning btn-block">
-                        {{ ui.icon("assignment_return") }} Checkin
+                        {{ ui.icon("assignment_return") }} Check In
                     </button>
                 </form>
                 {% elif can_manage %}
                 <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=allocation.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="form-group">
-                        <label for="reason">Reason for force checkin</label>
-                        <input type="text" id="reason" name="reason" class="form-control" required placeholder="Reason for force checkin">
+                        <label for="reason">Reason for force check in</label>
+                        <input type="text" id="reason" name="reason" class="form-control" required placeholder="Reason for force check in">
                     </div>
                     <button type="submit" class="btn btn-danger btn-block" data-confirm="Force check in this resource?">
-                        {{ ui.icon("warning") }} Force Checkin
+                        {{ ui.icon("warning") }} Force Check In
                     </button>
                 </form>
                 {% endif %}

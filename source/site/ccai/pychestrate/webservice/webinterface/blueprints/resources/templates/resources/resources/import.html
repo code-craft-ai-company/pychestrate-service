@@ -69,7 +69,7 @@
             {% for row in import_preview.rows %}
             <tr class="{{ 'import-row-ok' if not row.problems else 'import-row-bad' }}" data-row="{{ row.number }}">
                 <td>{{ row.number }}</td>
-                <td>{{ row.name or '-' }}</td>
+                <td>{{ row.name or '—' }}</td>
                 <td>{{ row.resource_type }}</td>
                 <td>{{ row.pool_name or 'default' }}</td>
                 <td>{{ row.capacity }}</td>

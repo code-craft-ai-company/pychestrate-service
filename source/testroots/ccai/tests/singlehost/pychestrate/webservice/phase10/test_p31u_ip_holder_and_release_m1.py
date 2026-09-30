@@ -208,7 +208,7 @@ def test_the_manager_is_offered_release_and_the_holder_check_in():
     """
     **Feature: IP holders (RES-14)**
     **Property: on the viewer's row the administrator has a Release that
-    asks for a reason and the viewer has a plain Checkin; on the
+    asks for a reason and the viewer has a plain Check In; on the
     administrator's row the viewer has no form at all.**
     """
     pool_id, viewer_address, admin, viewer_cookies, _login, _viewer_id = _pool_with_a_viewer_address()
@@ -218,8 +218,8 @@ def test_the_manager_is_offered_release_and_the_holder_check_in():
 
     testbase.assert_equal(
         ('name="reason"' in _row(admin_page, viewer_address) and "Release" in _row(admin_page, viewer_address),
-         'name="reason"' not in _row(admin_page, admin_address) and "Checkin" in _row(admin_page, admin_address),
-         "Checkin" in _row(viewer_page, viewer_address) and 'name="reason"' not in _row(viewer_page, viewer_address),
+         'name="reason"' not in _row(admin_page, admin_address) and "Check In" in _row(admin_page, admin_address),
+         "Check In" in _row(viewer_page, viewer_address) and 'name="reason"' not in _row(viewer_page, viewer_address),
          "<form" in _row(viewer_page, admin_address)),
         (True, True, True, False),
     )

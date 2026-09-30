@@ -72,14 +72,14 @@
         <tr>
             <td><a href="{{ url_for('resources.reservation_detail', reservation_id=res.id) }}">{{ res.id }}</a></td>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=res.resource_id) }}">{{ res.resource_name }}</a></td>
-            <td>{{ res.username or '-' }}</td>
-            <td>{{ res.job_id or '-' }}</td>
+            <td>{{ res.username or '—' }}</td>
+            <td>{{ res.job_id or '—' }}</td>
             <td>{{ res.start_time | local_datetime }}</td>
             <td>{{ res.end_time | local_datetime }}</td>
             <td>
                 {% set mode = res.mode %}
                 {% if mode == 'exclusive' %}
-                <span class="badge badge-danger">Exclusive</span>
+                <span class="badge badge-info">Exclusive</span>
                 {% else %}
                 <span class="badge badge-info">Shared</span>
                 {% endif %}

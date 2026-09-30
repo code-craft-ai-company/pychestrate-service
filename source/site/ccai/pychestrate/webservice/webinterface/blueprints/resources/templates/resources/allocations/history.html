@@ -52,8 +52,8 @@
             <th scope="col">Job ID</th>
             <th scope="col">Mode</th>
             <th scope="col">Status</th>
-            <th scope="col">Checkout</th>
-            <th scope="col">Checkin</th>
+            <th scope="col">Check Out</th>
+            <th scope="col">Check In</th>
             <th scope="col">Duration</th>
         </tr>
     </thead>
@@ -62,12 +62,12 @@
         <tr>
             <td><a href="{{ url_for('resources.allocation_detail', allocation_id=alloc.id) }}">{{ alloc.id }}</a></td>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=alloc.resource_id) }}">{{ alloc.resource_name }}</a></td>
-            <td>{{ alloc.username or '-' }}{% if alloc.reason %}<div class="muted" data-role="allocation-reason">{{ alloc.reason }}</div>{% endif %}</td>
-            <td>{{ alloc.job_id or '-' }}</td>
+            <td>{{ alloc.username or '—' }}{% if alloc.reason %}<div class="muted" data-role="allocation-reason">{{ alloc.reason }}</div>{% endif %}</td>
+            <td>{{ alloc.job_id or '—' }}</td>
             <td>
                 {% set mode = alloc.mode %}
                 {% if mode == 'exclusive' %}
-                <span class="badge badge-danger">Exclusive</span>
+                <span class="badge badge-info">Exclusive</span>
                 {% else %}
                 <span class="badge badge-info">Shared</span>
                 {% endif %}
@@ -87,8 +87,8 @@
                 <span class="badge badge-secondary">{{ status }}</span>
                 {% endif %}
             </td>
-            <td>{{ alloc.checkout_time | local_datetime(false, '-') }}</td>
-            <td>{{ alloc.actual_checkin | local_datetime(false, '-') }}</td>
+            <td>{{ alloc.checkout_time | local_datetime(false, '—') }}</td>
+            <td>{{ alloc.actual_checkin | local_datetime(false, '—') }}</td>
             <td>{% if alloc.duration_minutes is not none %}{{ alloc.duration_minutes }} min{% else %}-{% endif %}</td>
         </tr>
         {% else %}

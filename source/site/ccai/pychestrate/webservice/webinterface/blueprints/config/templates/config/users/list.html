@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>User Management</h1>
+    <h1>Users</h1>
     <p>Manage user accounts and their access</p>
 </div>
 
@@ -78,5 +78,5 @@
 
 {{ ui.pagination('config.user_list', page, total_pages, {'search': search}) }}
 
-<p class="muted mt">Total: {{ total }} users</p>
+<p class="muted mt">Total: {{ total }} user{{ '' if total == 1 else 's' }}</p>
 {% endblock %}

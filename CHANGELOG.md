@@ -201,6 +201,26 @@ preview tag.
 
 ### Changed
 
+- Server-rendered pages follow the UI glossary, and a test keeps them there (ADM-27).
+  An absent value is an em dash: "N/A" (six pages) and a hyphen or "None set" (28
+  templates, including the lab resource, allocation, reservation and pool pages, the
+  variables, roles and scopes lists and the releases list) now read "—". The
+  verbs are two words: "Checkin" and "Checkout" (buttons, headings and column
+  headers on the IP pool, allocation and resource pages) read "Check In" and "Check
+  Out", and prose that used "check-out" as a noun says "allocation". Four admin page
+  headings that the sidebar had renamed now match it: "User Management" is "Users",
+  "Role Management" is "Roles", "Global Variables" is "Variables" and "Active
+  Sessions" is "Sessions". Counts read "1 user", not "Total: 1 users" (users, roles,
+  variables, secrets, scopes, job types, enrollment tokens, API tokens and service
+  accounts). "Exclusive" is a blue information badge, not the red reserved for
+  errors. `phase10/test_p31zzzz_ui_glossary_lint_m1.py` reads every server-rendered
+  template (visible prose only, so a URL or a build step type called `checkout` is
+  not a finding) and fails on any of these coming back. Not done: the glossary's
+  `status_badge` and `truncate_id` helpers are still not used everywhere, raw
+  enum values and `TYPE_ID:` suffixes on some pages, "New"/"Add" buttons where the
+  glossary says "Create", dates that do not go through `format_datetime`, and the
+  bundle (web component) views, which the lint does not read.
+
 - Two project forms stop asking for what the person cannot see (PRJ-16). The
   release template form asked for "Default Repository IDs" as comma-separated
   numbers that appear nowhere else in the interface; the create and edit forms

@@ -33,7 +33,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Gateway</th>
-                    <td>{{ pool.gateway or '-' }}</td>
+                    <td>{{ pool.gateway or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">DNS Servers</th>
@@ -56,7 +56,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Description</th>
-                    <td>{{ pool.description or '-' }}</td>
+                    <td>{{ pool.description or '—' }}</td>
                 </tr>
             </table></div>
         </div>
@@ -93,7 +93,7 @@
                         <th scope="col">Held by</th>
                         <th scope="col">Job ID</th>
                         <th scope="col">Reason</th>
-                        <th scope="col">Checkout Time</th>
+                        <th scope="col">Check Out Time</th>
                         <th scope="col">Actions</th>
                     </tr>
                 </thead>
@@ -102,15 +102,15 @@
                     <tr>
                         <td><code>{{ alloc.ip_address }}</code></td>
                         <td>{{ alloc.username or 'Unknown' }}{% if (alloc.user_id | string) == (current_user_id | string) %} <span class="muted">(you)</span>{% endif %}</td>
-                        <td>{{ alloc.job_id or '-' }}</td>
-                        <td>{{ alloc.reason or '-' }}</td>
-                        <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+                        <td>{{ alloc.job_id or '—' }}</td>
+                        <td>{{ alloc.reason or '—' }}</td>
+                        <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '—') }}</td>
                         <td>
                             {% if (alloc.user_id | string) == (current_user_id | string) %}
                             <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
-                                <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Checkin</button>
+                                <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Check In</button>
                             </form>
                             {% elif can_manage %}
                             <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post" style="display:inline; white-space: nowrap;">
@@ -167,7 +167,7 @@
         
         {% if pool.available_count > 0 %}
         <div class="card">
-            <h2 class="card-header">Checkout IP</h2>
+            <h2 class="card-header">Check Out IP</h2>
             {{ ui.error_summary(errors, error_labels) }}
             <form method="post" action="{{ url_for('resources.ip_pool_checkout', pool_id=pool.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -201,20 +201,20 @@
                 </div>
                 
                 <button type="submit" class="btn btn-success btn-block">
-                    {{ ui.icon("assignment_turned_in") }} Checkout
+                    {{ ui.icon("assignment_turned_in") }} Check Out
                 </button>
             </form>
         </div>
         {% else %}
         <div class="card">
-            <h2 class="card-header">Checkout IP</h2>
+            <h2 class="card-header">Check Out IP</h2>
             <p class="muted">This pool is at capacity: every usable address is reserved or checked out. Check an address back in{% if can_manage %}, or <a href="{{ url_for('resources.ip_pool_create') }}">create another pool</a>{% else %}, or ask a lab manager to add another pool{% endif %}, to make room. A pool's range cannot be changed once it is made.</p>
         </div>
         {% endif %}
         
         {% if allocations %}
         <div class="card">
-            <h2 class="card-header">Bulk Checkin by Job</h2>
+            <h2 class="card-header">Bulk Check In by Job</h2>
             <form method="post" action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
@@ -224,7 +224,7 @@
                 </div>
                 
                 <button type="submit" class="btn btn-warning btn-block">
-                    {{ ui.icon("assignment_return") }} Checkin All Job IPs
+                    {{ ui.icon("assignment_return") }} Check In All Job IPs
                 </button>
             </form>
         </div>

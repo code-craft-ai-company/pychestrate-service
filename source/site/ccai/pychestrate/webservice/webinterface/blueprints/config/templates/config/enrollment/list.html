@@ -128,11 +128,11 @@
             <td>
                 <span class="badge badge-{{ token.status | status_tone }}">{{ token.status.value | capitalize }}</span>
                 {% if token.redeemed_by_client_id %}
-                <div class="muted small" data-role="redeemed-by">by client <a href="/clients">{{ ui.truncate_id(token.redeemed_by_client_id, 8) }}</a>{% if token.redeemed_at %} on {{ token.redeemed_at | local_datetime(false, '-') }}{% endif %}</div>
+                <div class="muted small" data-role="redeemed-by">by client <a href="/clients">{{ ui.truncate_id(token.redeemed_by_client_id, 8) }}</a>{% if token.redeemed_at %} on {{ token.redeemed_at | local_datetime(false, '—') }}{% endif %}</div>
                 {% endif %}
             </td>
-            <td>{{ token.issued_at | local_datetime(false, '-') }}</td>
-            <td>{{ token.expires_at | local_datetime(false, '-') }}</td>
+            <td>{{ token.issued_at | local_datetime(false, '—') }}</td>
+            <td>{{ token.expires_at | local_datetime(false, '—') }}</td>
             <td>
                 {% if token.status.value == 'PENDING' %}
                 <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"
@@ -154,7 +154,7 @@
 </table></div>
 
 <p class="muted mt">
-    Total: {{ tokens | length }} tokens
+    {% set token_count = tokens | length %}Total: {{ token_count }} token{{ '' if token_count == 1 else 's' }}
 </p>
 {% include "site_shell/_local_times.html" %}
 {% include "site_shell/_copy_buttons.html" %}

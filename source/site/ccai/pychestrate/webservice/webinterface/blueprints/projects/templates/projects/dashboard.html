@@ -62,7 +62,7 @@
                 </td>
                 <td>{{ project.description[:50] }}{% if project.description|length > 50 %}...{% endif %}</td>
                 <td class="nowrap">{{ project.owner_username }}</td>
-                <td class="nowrap">{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', 'N/A') }}</td>
+                <td class="nowrap">{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', '—') }}</td>
                 <td>
                     {% set last = dashboard_last_runs.get(project.id) %}
                     {% if last %}

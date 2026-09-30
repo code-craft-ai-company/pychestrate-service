@@ -183,7 +183,7 @@
                 </td>
                 <td class="mono">{{ repo.url[:40] }}{% if repo.url|length > 40 %}...{% endif %}</td>
                 <td>{{ repo.default_branch }}</td>
-                <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else 'N/A' }}</td>
+                <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else '—' }}</td>
             </tr>
             {% endfor %}
         </tbody>

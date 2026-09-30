@@ -30,7 +30,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Description</th>
-                    <td>{{ pool.description or '-' }}</td>
+                    <td>{{ pool.description or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Resource Count</th>
@@ -38,7 +38,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Created</th>
-                    <td>{{ pool.created_at | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ pool.created_at | format_datetime('%Y-%m-%d %H:%M:%S', '—') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Created By</th>
@@ -107,7 +107,7 @@
                         <option value="{{ item.id }}">{{ item.name }} ({{ item.pool_name or 'no pool' }})</option>
                         {% endfor %}
                     </select>
-                    <p class="form-text">Hold Ctrl or Cmd to choose several. A resource keeps its history and its check-outs; one whose name is already in this pool stays where it is.</p>
+                    <p class="form-text">Hold Ctrl or Cmd to choose several. A resource keeps its history and its allocations; one whose name is already in this pool stays where it is.</p>
                 </div>
                 <button type="submit" class="btn btn-secondary btn-block">{{ ui.icon("add") }} Add to this pool</button>
             </form>

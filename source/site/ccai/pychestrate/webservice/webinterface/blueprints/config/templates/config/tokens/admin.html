@@ -34,7 +34,7 @@
                    pattern="[a-z0-9][a-z0-9._\-]{1,62}" title="2 to 63 lower-case letters, digits, dots, underscores or hyphens." placeholder="e.g. ci-nightly"
                    value="{{ form.get('login_name', '') if not issue_for else '' }}"{{ ui.invalid_attrs(errors, "login_name", "login_name-help") }}>
             {{ ui.field_error(errors, "login_name") }}
-            <p class="form-text" id="login_name-help">2-63 lower-case letters, digits, '.', '_' or '-'.</p>
+            <p class="form-text" id="login_name-help">2-63 lower-case letters, digits, '.', '_' or '—'.</p>
         </div>
         <div class="form-group">
             <label for="display_name">Display name</label>
@@ -156,5 +156,5 @@
     </tbody>
 </table></div>
 
-<p class="muted mt">Total: {{ tokens | length }} tokens, {{ service_accounts | length }} service accounts</p>
+<p class="muted mt">{% set token_count = tokens | length %}{% set account_count = service_accounts | length %}Total: {{ token_count }} token{{ '' if token_count == 1 else 's' }}, {{ account_count }} service account{{ '' if account_count == 1 else 's' }}</p>
 {% endblock %}

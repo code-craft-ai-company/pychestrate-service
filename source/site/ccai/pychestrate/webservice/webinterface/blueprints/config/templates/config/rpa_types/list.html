@@ -55,5 +55,5 @@
     </tbody>
 </table></div>
 
-<p class="muted mt">Total: {{ total }} job types</p>
+<p class="muted mt">Total: {{ total }} job type{{ '' if total == 1 else 's' }}</p>
 {% endblock %}

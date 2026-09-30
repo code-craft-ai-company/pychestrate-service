@@ -80,15 +80,15 @@
         </tr>
         <tr>
             <th scope="row">Message</th>
-            <td>{{ repository.last_commit_message or 'N/A' }}</td>
+            <td>{{ repository.last_commit_message or '—' }}</td>
         </tr>
         <tr>
             <th scope="row">Author</th>
-            <td>{{ repository.last_commit_author or 'N/A' }}</td>
+            <td>{{ repository.last_commit_author or '—' }}</td>
         </tr>
         <tr>
             <th scope="row">Time</th>
-            <td>{{ repository.last_commit_time | format_datetime('%Y-%m-%d %H:%M:%S', 'N/A') }}</td>
+            <td>{{ repository.last_commit_time | format_datetime('%Y-%m-%d %H:%M:%S', '—') }}</td>
         </tr>
         <tr>
             <th scope="row">Last Fetch</th>

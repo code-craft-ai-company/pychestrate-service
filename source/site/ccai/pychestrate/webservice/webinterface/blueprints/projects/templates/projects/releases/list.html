@@ -68,7 +68,7 @@
                 {{ ui.status_badge(release.status) }}
             </td>
             <td>{{ release.artifact_count or 0 }}</td>
-            <td>{{ release.published_by_username or '-' }}</td>
+            <td>{{ release.published_by_username or '—' }}</td>
             <td>{{ release.created_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
             <td>
                 <a href="{{ url_for('projects.release_detail', project_id=project.id, release_id=release.id) }}" class="btn btn-sm btn-secondary">View</a>

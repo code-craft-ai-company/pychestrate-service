@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Global Variables</h1>
+    <h1>Variables</h1>
     <p>Manage system-wide configuration variables</p>
 </div>
 
@@ -47,7 +47,7 @@
                 <span data-role="variable-value" hidden style="display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">{{ format_value(value=variable.value, var_type=variable.var_type) }}</span>
                 <button type="button" class="btn btn-sm btn-secondary" data-role="variable-reveal" aria-pressed="false" aria-label="Show value for {{ variable.name }}">Show</button>
             </td>
-            <td>{{ variable.description or '-' }}</td>
+            <td>{{ variable.description or '—' }}</td>
             <td>{% if variable.updated_at %}{{ variable.updated_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>
                 <div class="row-actions">
@@ -68,7 +68,7 @@
 
 {{ ui.pagination('config.variable_list', page, total_pages, {'search': search, 'per_page': per_page}, total=total) }}
 
-<p class="muted mt">Total: {{ total }} variables</p>
+<p class="muted mt">Total: {{ total }} variable{{ '' if total == 1 else 's' }}</p>
 {% endblock %}
 
 {% block extra_js %}

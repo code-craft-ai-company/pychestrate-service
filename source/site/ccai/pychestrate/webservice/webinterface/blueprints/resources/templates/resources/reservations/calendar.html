@@ -210,7 +210,7 @@
         {% for booking in bookings %}
         <tr>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=booking.resource_id) }}">{{ booking.resource_name }}</a></td>
-            <td>{{ booking.who or '-' }}</td>
+            <td>{{ booking.who or '—' }}</td>
             <td>{{ booking.kind }}{% if booking.job_id %} <span class="muted">(job {{ booking.job_id }})</span>{% endif %}</td>
             <td>{{ booking.start_text }}</td>
             <td>{{ booking.end_text }}</td>

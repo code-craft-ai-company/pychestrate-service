@@ -48,7 +48,7 @@
             <td class="mono">{{ repo.url[:35] }}{% if repo.url|length > 35 %}...{% endif %}</td>
             <td><span class="badge badge-secondary">{{ {"none": "Public", "https_token": "HTTPS access token", "ssh_key": "SSH private key"}.get(repo.auth_type.value, repo.auth_type.value) }}</span></td>
             <td>{{ repo.default_branch }}</td>
-            <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else 'N/A' }}</td>
+            <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else '—' }}</td>
             <td>{{ repo.last_fetch_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</td>
             <td>
                 <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repo.id) }}" class="btn btn-sm btn-secondary">View</a>

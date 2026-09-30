@@ -24,26 +24,26 @@
                 </tr>
                 <tr>
                     <th scope="row">User</th>
-                    <td>{{ reservation.username or '-' }}</td>
+                    <td>{{ reservation.username or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Job ID</th>
-                    <td>{{ reservation.job_id or '-' }}</td>
+                    <td>{{ reservation.job_id or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Start Time</th>
-                    <td>{{ reservation.start_time | local_datetime(true, '-') }}</td>
+                    <td>{{ reservation.start_time | local_datetime(true, '—') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">End Time</th>
-                    <td>{{ reservation.end_time | local_datetime(true, '-') }}</td>
+                    <td>{{ reservation.end_time | local_datetime(true, '—') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Mode</th>
                     <td>
                         {% set mode = reservation.mode %}
                         {% if mode == 'exclusive' %}
-                        <span class="badge badge-danger">Exclusive</span>
+                        <span class="badge badge-info">Exclusive</span>
                         {% else %}
                         <span class="badge badge-info">Shared</span>
                         {% endif %}
@@ -67,11 +67,11 @@
                 </tr>
                 <tr>
                     <th scope="row">Reason</th>
-                    <td data-role="reservation-reason">{{ reservation.reason or '-' }}</td>
+                    <td data-role="reservation-reason">{{ reservation.reason or '—' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Created</th>
-                    <td>{{ reservation.created_at | local_datetime(true, '-') }}</td>
+                    <td>{{ reservation.created_at | local_datetime(true, '—') }}</td>
                 </tr>
             </table></div>
         </div>

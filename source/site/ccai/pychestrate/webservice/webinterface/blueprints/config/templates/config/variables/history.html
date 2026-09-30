@@ -41,7 +41,7 @@
         {% for entry in history %}
         <tr>
             <td>{{ entry.changed_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
-            <td>{{ entry.changed_by or '-' }}</td>
+            <td>{{ entry.changed_by or '—' }}</td>
             <td data-role="change">
                 {% if entry.old_value is none %}<span class="badge badge-success">Created</span>
                 {% elif entry.new_value is none %}<span class="badge badge-danger">Deleted</span>
