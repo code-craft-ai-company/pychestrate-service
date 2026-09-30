@@ -2258,7 +2258,7 @@ var PycPipelineDetail = class extends HTMLElement {
     const heading = document.createElement("h2");
     heading.classList.add("pyc-pipeline-detail__section-heading");
     const state = this._runs;
-    heading.textContent = state.status === "ok" ? "Runs (" + String(state.items.length) + ")" : "Runs";
+    heading.textContent = state.status === "ok" && state.items.length > 0 ? "Runs (" + String(state.items.length) + ")" : "Runs";
     section.appendChild(heading);
     const note = (text, role, error) => {
       const p = document.createElement("p");

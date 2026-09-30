@@ -180,6 +180,7 @@ def test_a_pipeline_never_run_a_refusal_and_a_failed_request_each_say_so(browser
                 page.locator('[data-role="{}"]'.format(role)).inner_text(),
                 page.locator('[data-role="pipeline-name"]').inner_text(),
                 "pyc-pipeline-detail__status--error" in (page.locator('[data-role="{}"]'.format(role)).get_attribute("class") or ""),
+                page.locator('[data-role="runs-section"] h2').inner_text(),
             )
         finally:
             page.context.close()
@@ -187,9 +188,9 @@ def test_a_pipeline_never_run_a_refusal_and_a_failed_request_each_say_so(browser
     testbase.assert_equal(
         said,
         {
-            "never": ("This pipeline has not been run yet.", "release", False),
-            "refused": ("You don't have access to pipeline runs.", "release", False),
-            "broken": ("Couldn't load this pipeline's runs.", "release", True),
+            "never": ("This pipeline has not been run yet.", "release", False, "Runs"),
+            "refused": ("You don't have access to pipeline runs.", "release", False, "Runs"),
+            "broken": ("Couldn't load this pipeline's runs.", "release", True, "Runs"),
         },
     )
     return
