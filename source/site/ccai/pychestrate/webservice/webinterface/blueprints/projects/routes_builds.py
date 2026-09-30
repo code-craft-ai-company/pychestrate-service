@@ -626,6 +626,15 @@ def handle_build_spec_list(request: Request) -> Response:
             pass
 
 
+def _build_step_types() -> List[str]:
+    """The build step types the validator accepts, sorted, for the forms' help."""
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        VALID_STEP_TYPES,
+    )
+    rtnval = sorted(VALID_STEP_TYPES)
+    return rtnval
+
+
 def _render_build_spec_create_form(
         *,
         auth: _AuthResolution,
@@ -646,6 +655,7 @@ def _render_build_spec_create_form(
     context["repositories"] = repositories
     context["form_data"] = form_data
     context["errors"] = errors if errors is not None else {}
+    context["build_step_types"] = _build_step_types()
     response = _render(
         template_name="projects/builds/spec_create.html",
         context=context,
@@ -1087,6 +1097,7 @@ def handle_build_spec_edit(request: Request) -> Response:
         context["repositories"] = repositories
         context["form_values"] = form_values
         context["errors"] = errors
+        context["build_step_types"] = _build_step_types()
         response = _render(
             template_name="projects/builds/spec_edit.html",
             context=context,

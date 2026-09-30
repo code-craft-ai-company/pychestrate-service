@@ -369,7 +369,7 @@ def validate_build_steps(steps: List[Dict[str, Any]]) -> List[str]:
         if 'type' not in step:
             errors.append(f"Step {i}: missing required field 'type'")
         elif step['type'] not in VALID_STEP_TYPES:
-            errors.append(f"Step {i}: invalid type '{step['type']}'. Must be one of: {', '.join(VALID_STEP_TYPES)}")
+            errors.append(f"Step {i}: invalid type '{step['type']}'. Must be one of: {', '.join(sorted(VALID_STEP_TYPES))}")
         
         # Check config field
         if 'config' in step and not isinstance(step.get('config'), dict):

@@ -46,12 +46,19 @@
         {{ ui.field_error(errors, 'version_pattern') }}
     </div>
 
-    <div class="form-group">
-        <label for="default_repo_ids">Default Repository IDs</label>
-        <input type="text" id="default_repo_ids" name="default_repo_ids" class="form-control"
-               value="{{ form_data.get('default_repo_ids') if form_data else default_repo_ids_csv }}" placeholder="comma-separated"{{ ui.invalid_attrs(errors, 'default_repo_ids') }}>
-        {{ ui.field_error(errors, 'default_repo_ids') }}
-    </div>
+    <fieldset class="form-group pyc-choice-group" data-role="default-repositories"{% if errors and 'default_repo_ids' in errors %} aria-describedby="default_repo_ids-error"{% endif %}>
+        <legend>Default Repositories</legend>
+        {% for repo in repository_choices %}
+        <div class="pyc-choice">
+            <input type="checkbox" id="default_repo_{{ repo.id }}" name="default_repo_ids" value="{{ repo.id }}"{% if repo.checked %} checked{% endif %}>
+            <label for="default_repo_{{ repo.id }}"><span class="strong">{{ repo.name }}</span></label>
+        </div>
+        {% else %}
+        <p class="muted" data-role="no-repositories">This project has no repositories yet. <a href="{{ url_for('projects.repository_list', project_id=project.id) }}">Add one</a> to preselect it for releases.</p>
+        {% endfor %}
+    </fieldset>
+    {{ ui.field_error(errors, 'default_repo_ids') }}
+    <p class="form-text">Releases made from this template start with these repositories.</p>
 
     <div class="form-group">
         <label for="default_pipeline">Default Pipeline (JSON object)</label>

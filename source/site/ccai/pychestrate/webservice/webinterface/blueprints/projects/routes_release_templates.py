@@ -372,6 +372,71 @@ def _repository_name_map(*, db_session: Any, project_id: int) -> Dict[int, str]:
     return rtnval
 
 
+def _repo_ids_from_values(*, values: List[str]) -> List[int]:
+    """
+        The repository ids in the submitted values of ``default_repo_ids``: one
+        value per ticked box, or (an older form, a script) one comma-separated
+        list. Each id once, in the order given.
+
+        :param values: Every submitted value of the field.
+
+        :returns: The ids.
+
+        :raises ProjectsFormError: If a value is not a whole number.
+    """
+    rtnval: List[int] = []
+    for value in values:
+        for repo_id in _parse_repo_id_csv(raw=value):
+            if repo_id not in rtnval:
+                rtnval.append(repo_id)
+    return rtnval
+
+
+def _lenient_repo_ids(*, values: List[str]) -> List[int]:
+    """
+        The ids among ``values`` that are whole numbers, for showing a
+        rejected submission's choices again (what is wrong with the rest is
+        reported elsewhere).
+    """
+    try:
+        return _repo_ids_from_values(values=values)
+    except ProjectsFormError:
+        rtnval: List[int] = []
+        for value in values:
+            for token in str(value).split(","):
+                if token.strip().isdigit() and int(token.strip()) not in rtnval:
+                    rtnval.append(int(token.strip()))
+        return rtnval
+
+
+def _repository_choices(*, db_session: Any, project_id: int, selected: List[int]) -> List[Dict[str, Any]]:
+    """
+        The repositories a release template can name, for tick boxes (PRJ-16:
+        the form asked for repository ids the UI never shows).
+
+        :param db_session: Active session.
+        :param project_id: The project.
+        :param selected: The ids to show ticked.
+
+        :returns: ``{"id", "name", "checked", "missing"}`` for each of the
+                  project's repositories by name, then for each selected id the
+                  project no longer has (ticked, so saving does not drop it
+                  unseen).
+    """
+    names = _repository_name_map(db_session=db_session, project_id=project_id)
+    rtnval: List[Dict[str, Any]] = [
+        {"id": repo_id, "name": name, "checked": repo_id in selected, "missing": False}
+        for repo_id, name in sorted(names.items(), key=lambda item: (item[1].lower(), item[0]))
+    ]
+    for repo_id in selected:
+        if repo_id not in names:
+            rtnval.append({
+                "id": repo_id, "name": "Repository {} (no longer in this project)".format(repo_id),
+                "checked": True, "missing": True,
+            })
+    return rtnval
+
+
 def handle_release_template_list(request: Request) -> Response:
     """
         ``GET /projects/{project_id}/release-templates``.
@@ -497,6 +562,11 @@ def _render_template_create_form(
     context["project"] = project
     context["form_data"] = form_data
     context["errors"] = errors if errors is not None else {}
+    context["repository_choices"] = _repository_choices(
+        db_session=auth.db_session,
+        project_id=project.id,
+        selected=_lenient_repo_ids(values=form_data.getlist("default_repo_ids")) if form_data is not None else [],
+    )
     response = _render(
         template_name="projects/release_templates/create.html",
         context=context,
@@ -584,13 +654,12 @@ def handle_release_template_create(request: Request) -> Response:
         version_pattern = str(
             single_form.get("version_pattern", "")
         ).strip()
-        repo_ids_raw = str(single_form.get("default_repo_ids", ""))
         pipeline_raw = str(single_form.get("default_pipeline", ""))
         schedule_raw = str(single_form.get("default_schedule", ""))
 
         template_manager = _build_template_manager(db_session=db_session)
         try:
-            repo_ids = _parse_repo_id_csv(raw=repo_ids_raw)
+            repo_ids = _repo_ids_from_values(values=form_view.getlist("default_repo_ids"))
             pipeline_blob = _parse_json_object_or_none(
                 raw=pipeline_raw, field_label="default_pipeline"
             )
@@ -1082,12 +1151,11 @@ def handle_release_template_edit(request: Request) -> Response:
             version_pattern = str(
                 single_form.get("version_pattern", "")
             ).strip()
-            repo_ids_raw = str(single_form.get("default_repo_ids", ""))
             pipeline_raw = str(single_form.get("default_pipeline", ""))
             schedule_raw = str(single_form.get("default_schedule", ""))
 
             try:
-                repo_ids = _parse_repo_id_csv(raw=repo_ids_raw)
+                repo_ids = _repo_ids_from_values(values=form_view.getlist("default_repo_ids"))
                 pipeline_blob = _parse_json_object_or_none(
                     raw=pipeline_raw, field_label="default_pipeline"
                 )
@@ -1159,8 +1227,13 @@ def handle_release_template_edit(request: Request) -> Response:
             json.dumps(template.default_schedule, indent=2)
             if template.default_schedule is not None else ""
         )
-        context["default_repo_ids_csv"] = ", ".join(
-            str(value) for value in template.default_repo_ids
+        context["repository_choices"] = _repository_choices(
+            db_session=db_session,
+            project_id=project_id,
+            selected=(
+                _lenient_repo_ids(values=form_view.getlist("default_repo_ids"))
+                if form_view is not None else [int(value) for value in template.default_repo_ids]
+            ),
         )
 
         response = _render(

@@ -626,7 +626,15 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "default_ttl_seconds": _const(3600),
     "default_pipeline_json": _const("{\n  \"stages\": []\n}"),
     "default_schedule_json": _const("{}"),
-    "default_repo_ids_csv": _by_mode("1, 2", ""),
+    "build_step_types": _const(["artifact", "checkout", "notification", "script"]),
+    "repository_choices": _by_mode(
+        [
+            {"id": 1, "name": "app", "checked": True, "missing": False},
+            {"id": 2, "name": "docs", "checked": False, "missing": False},
+            {"id": 3, "name": "Repository 3 (no longer in this project)", "checked": True, "missing": True},
+        ],
+        [],
+    ),
     "action_types": _const(["trigger_build", "trigger_pipeline", "notify"]),
     "event_types": _const(["push", "pull_request", "tag"]),
     "all_event_types": _const(["release", "merge", "pull"]),

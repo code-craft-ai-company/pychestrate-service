@@ -201,6 +201,25 @@ preview tag.
 
 ### Changed
 
+- Two project forms stop asking for what the person cannot see (PRJ-16). The
+  release template form asked for "Default Repository IDs" as comma-separated
+  numbers that appear nowhere else in the interface; the create and edit forms
+  now list the project's repositories by name as tick boxes (a script that still
+  sends the comma-separated text is accepted; a repository the project no longer
+  has stays ticked and is named as gone, so saving does not drop it unseen; a
+  rejected submission comes back with the same boxes ticked; a project with none
+  says so and links to where one is added). The build specification form's Build
+  Steps box now has a "Step format and example" section naming the fields and the
+  four step types (read from the validator's own list) beside an example, where
+  before the types appeared only in the error a wrong one produced, and that
+  error now lists them in alphabetical order (it printed a set, so the order
+  changed from run to run). Not done: a step builder or key/value rows (steps and
+  environment stay JSON boxes), a version picker for RPA specifications (the
+  Version box is still text, with help), the release template's default pipeline
+  and schedule JSON, and project metadata JSON. Checked by grep, not re-verified:
+  the watch and RPA forms already use selects for repositories, build
+  specifications and pods.
+
 - The two projects pages have one name and one address each, in the sidebar and
   on the project pages (PRJ-27). The sidebar's "All Projects" opened the
   dashboard, while a project page's "All Projects" opened the list. The Projects

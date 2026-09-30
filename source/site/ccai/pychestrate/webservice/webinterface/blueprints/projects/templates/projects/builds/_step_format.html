@@ -1,0 +1,11 @@
+{#- What a build step looks like, beside the Build Steps box (PRJ-16: the step
+    types were revealed only by the error a wrong one produced). ``build_step_types``
+    is the list the validator checks against, so this cannot drift from it. -#}
+<details class="pyc-step-format" data-role="step-format">
+    <summary>Step format and example</summary>
+    <p>Each step is an object with a <code>name</code> and a <code>type</code> (one of {% for step_type in build_step_types %}<code>{{ step_type }}</code>{% if not loop.last %}, {% endif %}{% endfor %}), and optionally a <code>config</code> object and <code>continue_on_failure</code> (<code>true</code> or <code>false</code>).</p>
+    <pre class="mono" data-role="step-example">{% raw %}[
+  {"name": "checkout", "type": "checkout", "config": {}},
+  {"name": "build", "type": "script", "config": {"script": "make build"}}
+]{% endraw %}</pre>
+</details>
