@@ -6,6 +6,18 @@ import { reveal } from "../shared/reveal.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 const UPDATES_HEADING = "Pychestrate Updates";
 const UPDATES_INTRO = "Releases of the Pychestrate service and its pod client, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
+// What a release is for: the API accepts exactly these two components, so the form offers
+// them (it took free text, and the example it showed was itself refused). ``value`` is the
+// API's identifier, sent as it is; ``label`` is what the person reads (the product calls the
+// second one the pod client).
+const RELEASE_COMPONENTS = [
+  { value: "service", label: "Pychestrate service" },
+  { value: "agent", label: "Pod client" }, // api-value
+];
+function component_label(value) {
+  const found = RELEASE_COMPONENTS.find((component) => component.value === value);
+  return found === void 0 ? String(value) : found.label;
+}
 const RELEASE_CHANNEL_VALUES = [
   "canary",
   "beta",
@@ -365,7 +377,7 @@ class PycReleaseChannels extends HTMLElement {
     table.setAttribute("resizable", "");
     table.rowAttrs = (entry) => ({ "data-channel-id": entry.channel_id });
     table.columns = [
-      { key: "component", label: "Component", width: "12rem" },
+      { key: "component", label: "Component", width: "12rem", render: (entry) => component_label(entry.component) },
       {
         key: "channel",
         label: "Channel",
@@ -484,7 +496,7 @@ class PycReleaseChannels extends HTMLElement {
     }
     const heading = document.createElement("h2");
     heading.classList.add("pyc-ops__subheading");
-    heading.textContent = "Published Release \u2014 " + entry.component + " " + entry.version;
+    heading.textContent = "Published Release \u2014 " + component_label(entry.component) + " " + entry.version;
     const list = document.createElement("dl");
     list.classList.add("pyc-ops__detail-list");
     list.setAttribute("data-role", "release-detail");
@@ -546,12 +558,21 @@ class PycReleaseChannels extends HTMLElement {
     const form = document.createElement("form");
     form.classList.add("pyc-ops__form");
     form.setAttribute("data-role", "publish-form");
-    const component_input = this._build_field(
-      form,
-      "Component",
-      "publish-component",
-      "agent-runtime"
-    );
+    const component_label = document.createElement("label");
+    component_label.classList.add("pyc-ops__field");
+    component_label.textContent = "Component";
+    const component_input = document.createElement("mj-select");
+    component_input.classList.add("pyc-ops__select");
+    component_input.setAttribute("data-role", "publish-component");
+    for (const component of RELEASE_COMPONENTS) {
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", component.value);
+      option.textContent = component.label;
+      component_input.appendChild(option);
+    }
+    component_input.value = RELEASE_COMPONENTS[0].value;
+    component_label.appendChild(component_input);
+    form.appendChild(component_label);
     const channel_label = document.createElement("label");
     channel_label.classList.add("pyc-ops__field");
     channel_label.textContent = "Channel";

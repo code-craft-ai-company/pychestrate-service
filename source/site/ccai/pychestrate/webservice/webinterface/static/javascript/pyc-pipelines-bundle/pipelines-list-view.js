@@ -363,7 +363,8 @@ class PycPipelinesList extends HTMLElement {
     document_area.setAttribute("data-role", "upsert-document");
     document_area.setAttribute(
       "placeholder",
-      "name: example\nschema_version: 1\nstages: []"
+      // A document the service accepts (an empty stage list is refused).
+      "name: example\nschema_version: 1\nstages:\n  - id: build\n    steps:\n      - id: build-image\n        kind: build\n        inputs:\n          image: registry.example.com/app\n          commands:\n            - make build"
     );
     document_area.rows = 8;
     document_label.appendChild(document_area);

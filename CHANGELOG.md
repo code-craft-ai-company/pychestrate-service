@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- Two forms showed examples the service refused (ORC-17). The release form took the component as free
+  text and showed `agent-runtime`, but the API accepts `service` and `agent`; it now offers exactly those two
+  (a choice, `service` first). The Define a pipeline form's example document had `stages: []`, which the
+  service refuses; it is now a small document the service loads. Both are read from the shipped bundle
+  and checked against the service in a test, so an example cannot drift into being wrong again.
+  The Pychestrate Updates table and detail now name the components "Pychestrate service" and "Pod client"
+  (the API's values are still what is sent); the glossary test skips a line marked `// api-value`.
+
 - A test run is listed under its test's name, not a UUID (ORC-11). The dispatch envelope named a
   test run after its catalog entry's id (the orchestrator read the display name from the entry's
   `raw_metadata`, where it is not stored), so every test run in the Runs list, the run page and the

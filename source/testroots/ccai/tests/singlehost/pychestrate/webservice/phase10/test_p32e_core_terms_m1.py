@@ -74,7 +74,9 @@ def test_the_interface_never_calls_the_pod_client_an_agent():
     **Feature: one meaning per core term (ORG-F21)**
     **Property: no bundle view or server-rendered template says "agent" or
     "agents" (the API resource names agent-rollouts and the release component
-    agent-runtime, which are identifiers, are not prose and are not matched).**
+    agent-runtime, which are identifiers, are not prose and are not matched; a line
+    carrying the marker ``// api-value`` is an API identifier sent as it is, and is
+    skipped).**
     """
     root = os.path.dirname(os.path.abspath(webinterface_package.__file__))
     paths: List[str] = []
@@ -87,7 +89,7 @@ def test_the_interface_never_calls_the_pod_client_an_agent():
     for path in paths:
         with open(path, encoding="utf-8") as handle:
             for number, line in enumerate(handle, start=1):
-                if re.search(r"\b[Aa]gents?\b(?![-_])", line) and "user-agent" not in line.lower():
+                if re.search(r"\b[Aa]gents?\b(?![-_])", line) and "user-agent" not in line.lower() and "// api-value" not in line:
                     found.setdefault(os.path.relpath(path, root), []).append(number)
 
     testbase.assert_equal((len(paths) > 100, found), (True, {}))

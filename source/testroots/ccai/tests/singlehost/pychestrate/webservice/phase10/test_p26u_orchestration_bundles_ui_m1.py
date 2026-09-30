@@ -1289,7 +1289,6 @@ def test_updates_publish_failure_shows_the_server_reason(bundle_browser: Threade
         try:
             page.click('[data-role="publish-toggle"]')
             page.wait_for_selector('[data-role="publish-form"]')
-            page.fill('[data-role="publish-component"] input', "service")
             page.fill('[data-role="publish-version"] input', "1.4.0")
             page.fill('[data-role="publish-uri"] input', "oci://registry/pychestrate:1.4.0")
             page.fill('[data-role="publish-sha"] input', "a" * 64)
