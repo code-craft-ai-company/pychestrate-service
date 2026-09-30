@@ -10,11 +10,16 @@
 //     <form method="post" action="..." data-confirm="Delete the project
 //     &quot;alpha&quot;? This cannot be undone.">
 //
+// A deed that cannot be reversed and takes a lot with it (deleting a project)
+// also carries data-confirm-type="<the name>": the dialog then asks the person
+// to type that text and keeps its confirming button off until they have (XC-15).
+//
 // The handler prefers an <mj-dialog> when the component library
 // exposes a confirm() helper; otherwise it uses window.confirm so the
 // behaviour never silently degrades to "no confirmation".
 
 const CONFIRM_ATTRIBUTE = "data-confirm";
+const CONFIRM_TYPE_ATTRIBUTE = "data-confirm-type";
 const INSTALLED_FLAG = "__pycConfirmDelegateInstalled";
 
 function resolve_confirm_message(form, submitter) {
@@ -38,6 +43,21 @@ function resolve_confirm_message(form, submitter) {
 }
 
 /*
+ * The text the person must type to confirm, or "" when none is asked for. Read
+ * from the submit button first, then the form, like the message.
+ */
+function resolve_confirm_type(form, submitter) {
+    let raw = null;
+    if (submitter !== null && submitter !== undefined && typeof submitter.getAttribute === "function") {
+        raw = submitter.getAttribute(CONFIRM_TYPE_ATTRIBUTE);
+    }
+    if (raw === null) {
+        raw = form.getAttribute(CONFIRM_TYPE_ATTRIBUTE);
+    }
+    return raw === null ? "" : raw.trim();
+}
+
+/*
  * The confirmation as a modal <dialog> in the site's own styling: the
  * message in full, Cancel focused (so a stray Enter does not delete
  * anything), the acting button named for what it does ("Delete",
@@ -45,7 +65,7 @@ function resolve_confirm_message(form, submitter) {
  * marks the rest of the page inert, which the browser's own confirm() box
  * does not let a page style or word (XC-15).
  */
-function ask_with_dialog(message, confirm_label) {
+function ask_with_dialog(message, confirm_label, required_text) {
     return new Promise((resolve) => {
         const dialog = document.createElement("dialog");
         dialog.classList.add("pyc-confirm");
@@ -74,6 +94,31 @@ function ask_with_dialog(message, confirm_label) {
         }
         form.appendChild(body);
 
+        // Type-to-confirm: the confirming button stays off until the text is typed exactly.
+        let typed = null;
+        if (required_text.length > 0) {
+            const typed_label = document.createElement("label");
+            typed_label.classList.add("pyc-confirm__typed");
+            typed_label.setAttribute("for", "pyc-confirm-typed");
+            typed_label.appendChild(document.createTextNode("Type "));
+            const expected = document.createElement("strong");
+            expected.classList.add("pyc-confirm__typed-text");
+            expected.textContent = required_text;
+            typed_label.appendChild(expected);
+            typed_label.appendChild(document.createTextNode(" to confirm"));
+            typed = document.createElement("input");
+            typed.type = "text";
+            typed.id = "pyc-confirm-typed";
+            typed.classList.add("pyc-confirm__input");
+            typed.setAttribute("data-role", "confirm-typed");
+            typed.setAttribute("autocomplete", "off");
+            typed.setAttribute("autocapitalize", "none");
+            typed.setAttribute("spellcheck", "false");
+            typed.setAttribute("aria-describedby", "pyc-confirm-message");
+            form.appendChild(typed_label);
+            form.appendChild(typed);
+        }
+
         const actions = document.createElement("div");
         actions.classList.add("pyc-confirm__actions");
         const cancel = document.createElement("button");
@@ -93,6 +138,26 @@ function ask_with_dialog(message, confirm_label) {
         actions.appendChild(accept);
         form.appendChild(actions);
         dialog.appendChild(form);
+        if (typed !== null) {
+            const matches = () => typed.value.trim() === required_text;
+            accept.disabled = true;
+            typed.addEventListener("input", () => {
+                accept.disabled = !matches();
+            });
+            // Enter in the field would press the form's first button (Cancel): make it
+            // confirm when the text is right and do nothing when it is not.
+            typed.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (matches()) {
+                        accept.click();
+                    }
+                }
+            });
+            // The person starts typing at once; Cancel is still the first button after it.
+            cancel.autofocus = false;
+            typed.autofocus = true;
+        }
 
         dialog.addEventListener("close", () => {
             const accepted = dialog.returnValue === "confirm";
@@ -104,7 +169,12 @@ function ask_with_dialog(message, confirm_label) {
     });
 }
 
-async function ask_confirmation(message, confirm_label) {
+async function ask_confirmation(message, confirm_label, required_text) {
+    const typed_text = typeof required_text === "string" ? required_text : "";
+    if (typed_text.length > 0 && typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
+        // mj-dialog.confirm has no field to type in: this one must be the page's own dialog.
+        return ask_with_dialog(message, confirm_label, typed_text);
+    }
     const dialog_ctor = typeof customElements !== "undefined"
         ? customElements.get("mj-dialog")
         : undefined;
@@ -117,7 +187,7 @@ async function ask_confirmation(message, confirm_label) {
         }
     }
     if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
-        return ask_with_dialog(message, confirm_label);
+        return ask_with_dialog(message, confirm_label, "");
     }
     return window.confirm(message);
 }
@@ -155,7 +225,7 @@ function install_confirm_delegate(root) {
         }
         event.preventDefault();
         const message = resolve_confirm_message(form, submitter);
-        ask_confirmation(message, resolve_confirm_label(submitter)).then((accepted) => {
+        ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter)).then((accepted) => {
             if (accepted !== true) {
                 return;
             }
@@ -193,5 +263,6 @@ function install_confirm_delegate(root) {
 
 export {
     CONFIRM_ATTRIBUTE,
+    CONFIRM_TYPE_ATTRIBUTE,
     install_confirm_delegate
 };

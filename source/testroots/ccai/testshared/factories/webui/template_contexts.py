@@ -668,6 +668,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "may_see_holders": _by_mode(True, False),
     "may_change_roles": _by_mode(True, False),
     "copy_of": _copy_of,
+    "delete_warning": _const("Delete the project \"Sample\"? This permanently deletes its 2 repositories. This cannot be undone."),
     "start_from_roles": _many(AdminRoleView),
     "permissions": _many(AdminPermissionView),
     "current_permission_keys": _by_mode(["id-7"], []),

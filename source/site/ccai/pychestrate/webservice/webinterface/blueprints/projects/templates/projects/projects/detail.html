@@ -23,7 +23,7 @@
         </a>
         {% endif %}
         {% if can_delete %}
-        <form action="{{ url_for('projects.project_delete', project_id=project.id) }}" method="post" data-confirm="Delete the project &quot;{{ project.name | e }}&quot; and everything in it: members, repositories, build, test and infrastructure history, releases, watches and RPA specifications and jobs? This cannot be undone.">
+        <form action="{{ url_for('projects.project_delete', project_id=project.id) }}" method="post" data-confirm="{{ delete_warning }}" data-confirm-type="{{ project.name }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-danger">
                 {{ ui.icon("delete") }} Delete

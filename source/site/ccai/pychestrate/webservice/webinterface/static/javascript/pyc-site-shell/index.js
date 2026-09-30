@@ -450,6 +450,7 @@ function build_palette_hint(shortcut_label, on_activate) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/confirm-delegate.js
 var CONFIRM_ATTRIBUTE = "data-confirm";
+var CONFIRM_TYPE_ATTRIBUTE = "data-confirm-type";
 var INSTALLED_FLAG = "__pycConfirmDelegateInstalled";
 function resolve_confirm_message(form, submitter) {
   let raw = null;
@@ -468,7 +469,17 @@ function resolve_confirm_message(form, submitter) {
   }
   return trimmed;
 }
-function ask_with_dialog(message, confirm_label) {
+function resolve_confirm_type(form, submitter) {
+  let raw = null;
+  if (submitter !== null && submitter !== void 0 && typeof submitter.getAttribute === "function") {
+    raw = submitter.getAttribute(CONFIRM_TYPE_ATTRIBUTE);
+  }
+  if (raw === null) {
+    raw = form.getAttribute(CONFIRM_TYPE_ATTRIBUTE);
+  }
+  return raw === null ? "" : raw.trim();
+}
+function ask_with_dialog(message, confirm_label, required_text) {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
     dialog.classList.add("pyc-confirm");
@@ -493,6 +504,29 @@ function ask_with_dialog(message, confirm_label) {
       body.appendChild(paragraph);
     }
     form.appendChild(body);
+    let typed = null;
+    if (required_text.length > 0) {
+      const typed_label = document.createElement("label");
+      typed_label.classList.add("pyc-confirm__typed");
+      typed_label.setAttribute("for", "pyc-confirm-typed");
+      typed_label.appendChild(document.createTextNode("Type "));
+      const expected = document.createElement("strong");
+      expected.classList.add("pyc-confirm__typed-text");
+      expected.textContent = required_text;
+      typed_label.appendChild(expected);
+      typed_label.appendChild(document.createTextNode(" to confirm"));
+      typed = document.createElement("input");
+      typed.type = "text";
+      typed.id = "pyc-confirm-typed";
+      typed.classList.add("pyc-confirm__input");
+      typed.setAttribute("data-role", "confirm-typed");
+      typed.setAttribute("autocomplete", "off");
+      typed.setAttribute("autocapitalize", "none");
+      typed.setAttribute("spellcheck", "false");
+      typed.setAttribute("aria-describedby", "pyc-confirm-message");
+      form.appendChild(typed_label);
+      form.appendChild(typed);
+    }
     const actions = document.createElement("div");
     actions.classList.add("pyc-confirm__actions");
     const cancel = document.createElement("button");
@@ -512,6 +546,23 @@ function ask_with_dialog(message, confirm_label) {
     actions.appendChild(accept);
     form.appendChild(actions);
     dialog.appendChild(form);
+    if (typed !== null) {
+      const matches = () => typed.value.trim() === required_text;
+      accept.disabled = true;
+      typed.addEventListener("input", () => {
+        accept.disabled = !matches();
+      });
+      typed.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (matches()) {
+            accept.click();
+          }
+        }
+      });
+      cancel.autofocus = false;
+      typed.autofocus = true;
+    }
     dialog.addEventListener("close", () => {
       const accepted = dialog.returnValue === "confirm";
       dialog.remove();
@@ -521,7 +572,11 @@ function ask_with_dialog(message, confirm_label) {
     dialog.showModal();
   });
 }
-async function ask_confirmation(message, confirm_label) {
+async function ask_confirmation(message, confirm_label, required_text) {
+  const typed_text = typeof required_text === "string" ? required_text : "";
+  if (typed_text.length > 0 && typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
+    return ask_with_dialog(message, confirm_label, typed_text);
+  }
   const dialog_ctor = typeof customElements !== "undefined" ? customElements.get("mj-dialog") : void 0;
   if (dialog_ctor !== void 0 && typeof dialog_ctor.confirm === "function") {
     try {
@@ -531,7 +586,7 @@ async function ask_confirmation(message, confirm_label) {
     }
   }
   if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
-    return ask_with_dialog(message, confirm_label);
+    return ask_with_dialog(message, confirm_label, "");
   }
   return window.confirm(message);
 }
@@ -566,7 +621,7 @@ function install_confirm_delegate(root) {
     }
     event.preventDefault();
     const message = resolve_confirm_message(form, submitter);
-    ask_confirmation(message, resolve_confirm_label(submitter)).then((accepted) => {
+    ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter)).then((accepted) => {
       if (accepted !== true) {
         return;
       }

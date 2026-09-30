@@ -29,6 +29,15 @@ preview tag.
 
 ### Added
 
+- Deleting a project says what goes with it, in numbers, and asks for its name (XC-15). The
+  warning named kinds of thing ("members, repositories, build, test and infrastructure history
+  ...") and one click confirmed it. The project page now counts what it knows (its repositories,
+  builds, test jobs and members) and its Delete form asks for the project's name to be typed:
+  the dialog names the text, focuses the field, and keeps its confirming button off until it is
+  typed exactly (spaces around it are ignored, case is not; Enter with the wrong text does
+  nothing). The mechanism is general: any `data-confirm` form can also carry
+  `data-confirm-type="<text>"`. Cancel and Escape still submit nothing.
+
 - Pipeline stage dependencies have arrowheads, and a pipeline saved again is one row (ORC-37).
   The pipeline page drew the stage graph's edges as bare lines; each edge now ends in an
   arrowhead at the stage that needs the other, in the edge's own colour. The pipelines list

@@ -1063,6 +1063,60 @@ def handle_project_workspace_link(request: Request) -> Response:
             pass
 
 
+def _count_or_none(value: Any) -> Optional[int]:
+    """A count as an int, or ``None`` when it is not a number."""
+    rtnval = value if isinstance(value, int) and not isinstance(value, bool) else None
+    return rtnval
+
+
+def _count_phrase(*, count: int, singular: str, plural: str) -> str:
+    """``"1 repository"`` / ``"3 repositories"``."""
+    rtnval = "{} {}".format(count, singular if count == 1 else plural)
+    return rtnval
+
+
+def describe_project_deletion(
+        *,
+        name: str,
+        members: Optional[int],
+        repositories: Optional[int],
+        builds: Optional[int],
+        tests: Optional[int]
+    ) -> str:
+    """
+        The warning shown before a project is deleted: what goes with it, with the
+        numbers the page knows (XC-15). A count that is not known or is zero is left out.
+
+        :param name: The project's name.
+        :param members: Members whose access goes.
+        :param repositories: Repositories deleted with it.
+        :param builds: Builds (and their artifacts) deleted with it.
+        :param tests: Test jobs deleted with it.
+
+        :returns: The message.
+    """
+    counted: List[str] = []
+    for count, singular, plural in (
+        (repositories, "repository", "repositories"),
+        (builds, "build", "builds"),
+        (tests, "test job", "test jobs"),
+    ):
+        if count is not None and count > 0:
+            counted.append(_count_phrase(count=count, singular=singular, plural=plural))
+    sentences = ['Delete the project "{}"?'.format(name)]
+    if len(counted) > 0:
+        sentences.append("This permanently deletes its {}.".format(", ".join(counted[:-1]) + (" and " if len(counted) > 1 else "") + counted[-1]))
+    if members is not None and members > 0:
+        sentences.append("{} lose{} access.".format(
+            _count_phrase(count=members, singular="member", plural="members"), "s" if members == 1 else "",
+        ))
+    sentences.append(
+        "Everything else in it goes too: infrastructure history, releases, watches and RPA specifications and jobs. This cannot be undone."
+    )
+    rtnval = " ".join(sentences)
+    return rtnval
+
+
 def handle_project_detail(request: Request) -> Response:
     """
         ``GET /projects/{project_id}`` -- detail with summary
@@ -1123,12 +1177,14 @@ def handle_project_detail(request: Request) -> Response:
         repositories = repository_manager.list_repositories(
             project_id, limit=5
         ).repositories
-        recent_builds = build_manager.list_builds(
+        builds_page = build_manager.list_builds(
             project_id=project_id, limit=5
-        ).builds
-        recent_tests = test_manager.list_jobs(
+        )
+        recent_builds = builds_page.builds
+        tests_page = test_manager.list_jobs(
             project_id=project_id, limit=5
-        ).jobs
+        )
+        recent_tests = tests_page.jobs
         members = project_manager.list_members(
             project_id, limit=10
         ).members
@@ -1163,6 +1219,13 @@ def handle_project_detail(request: Request) -> Response:
         context["members"] = members
         context["can_edit"] = can_edit
         context["can_delete"] = can_delete
+        context["delete_warning"] = describe_project_deletion(
+            name=project.name,
+            members=_count_or_none(getattr(project, "member_count", None)),
+            repositories=_count_or_none(getattr(project, "repository_count", None)),
+            builds=_count_or_none(getattr(builds_page, "total", None)),
+            tests=_count_or_none(getattr(tests_page, "total", None)),
+        )
         context["registry_project"] = _registry_project_for_legacy(
             db_session=db_session, legacy_proj_id=project_id,
         )
