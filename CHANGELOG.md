@@ -201,6 +201,23 @@ preview tag.
 
 ### Changed
 
+- Bundle views leave out the primary actions the viewer cannot use (ORC-33). The
+  views showed every write action to every viewer and the missing permission
+  surfaced only after a form was submitted. Start a build, attach a guard, create
+  an alert rule, import tests, register an environment, publish a release, create
+  or enable/disable a webhook (inbound and outbound), create or delete an SLO,
+  trigger provisioning and delete a pipeline are now left out for a viewer whose
+  permission list (`/api/v1/me/permissions`) lacks the `system:` key the API
+  enforces for that action, and shown when it holds it. When the list cannot be
+  read the actions stay, because the server still decides. Only `system:` keys are
+  used: the list is computed from those keys and the viewer's own grants, so it
+  matches the server's check; a project-scoped key (for example
+  `project:runs.cancel`) never appears in it and must not be used. Not done: the
+  rest of the write actions (per-row actions on clients and pods, run cancel,
+  secrets, flags, per-entry Run buttons in the test catalog, the pipeline save
+  form, and the older resource views, which already use the shell's own
+  permission check).
+
 - One toast service for the bundle views (ORC-41). Fourteen views built their own
   toast and the copies disagreed: some stacked up to a limit and some replaced,
   only two marked their region as a live region (so in the other twelve a failure

@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
@@ -577,6 +578,7 @@ class PycPipelineDetail extends HTMLElement {
     delete_button.classList.add("pyc-pipeline-detail__delete");
     delete_button.setAttribute("type", "button");
     delete_button.setAttribute("data-role", "delete-pipeline");
+    hide_unless_may(delete_button, "system:pipelines.write");
     delete_button.textContent = "Delete";
     if (this._delete_pending === true) {
       delete_button.toggleAttribute("disabled", true);

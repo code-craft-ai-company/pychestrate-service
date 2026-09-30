@@ -53,3 +53,16 @@ export async function may(permission_key) {
   const keys = await held_permissions();
   return keys === null ? true : keys.has(permission_key);
 }
+
+/*
+ * Leave ``element`` out when the viewer is known not to hold ``permission_key``.
+ * The element is shown until the answer arrives and stays shown when there is no
+ * answer, so a lookup that fails never hides an action.
+ */
+export function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}

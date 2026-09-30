@@ -1,3 +1,43 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
 var DEFAULT_AUTO_DISMISS_MS = 8e3;
 function show_toast(region, message, tone, options) {
@@ -602,6 +642,7 @@ var PycEnvironments = class extends HTMLElement {
     register_button.classList.add("pyc-infra__button");
     register_button.setAttribute("type", "button");
     register_button.setAttribute("data-role", "register-toggle");
+    hide_unless_may(register_button, "system:environments.write");
     register_button.textContent = "Register Environment";
     register_button.addEventListener("click", () => {
       this._toggle_register_form();
@@ -2316,6 +2357,7 @@ var PycProvisioningList = class extends HTMLElement {
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");
     trigger_button.setAttribute("data-role", "trigger-toggle");
+    hide_unless_may(trigger_button, "system:provisioning.create");
     trigger_button.textContent = "Trigger Provisioning";
     trigger_button.addEventListener("click", () => {
       this._toggle_trigger_form();
@@ -3828,6 +3870,7 @@ var PycGuards = class extends HTMLElement {
     attach_button.classList.add("pyc-infra__button");
     attach_button.setAttribute("type", "button");
     attach_button.setAttribute("data-role", "attach-toggle");
+    hide_unless_may(attach_button, "system:guards.write");
     attach_button.textContent = "Attach Guard";
     attach_button.addEventListener("click", () => {
       this._toggle_attach_form();

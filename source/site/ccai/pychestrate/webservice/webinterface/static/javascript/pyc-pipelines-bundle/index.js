@@ -1397,6 +1397,46 @@ var PycPipelinesList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
 function confirm_action(source, message, confirm_label) {
   return new Promise((resolve) => {
@@ -1999,6 +2039,7 @@ var PycPipelineDetail = class extends HTMLElement {
     delete_button.classList.add("pyc-pipeline-detail__delete");
     delete_button.setAttribute("type", "button");
     delete_button.setAttribute("data-role", "delete-pipeline");
+    hide_unless_may(delete_button, "system:pipelines.write");
     delete_button.textContent = "Delete";
     if (this._delete_pending === true) {
       delete_button.toggleAttribute("disabled", true);

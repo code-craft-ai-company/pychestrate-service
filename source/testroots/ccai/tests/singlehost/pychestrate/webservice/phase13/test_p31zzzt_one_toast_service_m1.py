@@ -188,7 +188,10 @@ def test_a_real_view_announces_a_failure_and_keeps_one_toast(browser: Browser):
     slo = {"slo_id": "0f6c2c1e-ffff-4000-8000-0000000000a1", "project_id": project, "name": "API", "kind": "availability_ratio", "target": 0.999, "window_seconds": 86400, "definition_config": {}}
     page = _stubbed(
         browser, "/slos?project_id=" + project, "pyc-metrics-bundle",
-        {"/api/v1/projects": {"items": [{"project_id": project, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}}, "/api/v1/projects/{}/slos".format(project): {"items": [slo], "meta": {"total": 1}}},
+        {
+            "/api/v1/projects": {"items": [{"project_id": project, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}}, "/api/v1/projects/{}/slos".format(project): {"items": [slo], "meta": {"total": 1}},
+            "/api/v1/me/permissions": {"permissions": ["system:slos.write"]},
+        },
         status_for_delete=403,
     )
     try:

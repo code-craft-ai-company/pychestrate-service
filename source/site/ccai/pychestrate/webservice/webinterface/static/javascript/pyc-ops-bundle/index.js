@@ -1,3 +1,43 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
 var DEFAULT_AUTO_DISMISS_MS = 8e3;
 function show_toast(region, message, tone, options) {
@@ -710,6 +750,7 @@ var PycWebhooks = class extends HTMLElement {
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "inbound-create-toggle");
+    hide_unless_may(create_button, "system:webhooks.write");
     create_button.textContent = "Create Integration";
     create_button.addEventListener("click", () => {
       this._toggle_inbound_form(panel);
@@ -969,6 +1010,7 @@ var PycWebhooks = class extends HTMLElement {
           );
           toggle_button.setAttribute("type", "button");
           toggle_button.setAttribute("data-role", "integration-toggle");
+          hide_unless_may(toggle_button, "system:webhooks.write");
           toggle_button.textContent = integration.enabled === true ? "Disable" : "Enable";
           toggle_button.addEventListener("click", () => {
             toggle_button.toggleAttribute("disabled", true);
@@ -1326,6 +1368,7 @@ var PycWebhooks = class extends HTMLElement {
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "outbound-create-toggle");
+    hide_unless_may(create_button, "system:webhooks.write");
     create_button.textContent = "Create Subscription";
     create_button.addEventListener("click", () => {
       this._toggle_outbound_form(panel);
@@ -1497,6 +1540,7 @@ var PycWebhooks = class extends HTMLElement {
           );
           toggle_button.setAttribute("type", "button");
           toggle_button.setAttribute("data-role", "subscription-toggle");
+          hide_unless_may(toggle_button, "system:webhooks.write");
           toggle_button.textContent = subscription.enabled === true ? "Disable" : "Enable";
           toggle_button.addEventListener("click", () => {
             toggle_button.toggleAttribute("disabled", true);
@@ -2269,6 +2313,7 @@ var PycReleaseChannels = class extends HTMLElement {
     publish_button.classList.add("pyc-ops__button");
     publish_button.setAttribute("type", "button");
     publish_button.setAttribute("data-role", "publish-toggle");
+    hide_unless_may(publish_button, "system:release_channels.write");
     publish_button.textContent = "Publish Release";
     publish_button.addEventListener("click", () => {
       this._toggle_publish_form();

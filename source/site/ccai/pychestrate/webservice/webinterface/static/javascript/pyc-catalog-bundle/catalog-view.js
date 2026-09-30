@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -345,6 +346,7 @@ class PycTestCatalog extends HTMLElement {
     import_button.classList.add("pyc-catalog__button");
     import_button.setAttribute("type", "button");
     import_button.setAttribute("data-role", "import-toggle");
+    hide_unless_may(import_button, "system:test_catalog.write");
     import_button.textContent = "Import from testbase";
     import_button.addEventListener("click", () => {
       this._toggle_import_form();

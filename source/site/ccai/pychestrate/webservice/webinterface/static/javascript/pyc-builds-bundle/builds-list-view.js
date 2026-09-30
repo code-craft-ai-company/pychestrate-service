@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_source_label, build_title } from "../shared/run-labels.js";
@@ -313,6 +314,7 @@ class PycBuildsList extends HTMLElement {
     trigger_button.classList.add("pyc-builds__button");
     trigger_button.setAttribute("type", "button");
     trigger_button.setAttribute("data-role", "trigger-toggle");
+    hide_unless_may(trigger_button, "system:builds.create");
     trigger_button.textContent = "Trigger Build";
     trigger_button.addEventListener("click", () => {
       this._toggle_trigger_form();

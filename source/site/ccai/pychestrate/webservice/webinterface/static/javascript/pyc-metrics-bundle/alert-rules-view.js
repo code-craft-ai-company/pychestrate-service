@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import {
   build_catalog_url,
@@ -349,6 +350,7 @@ class PycAlertRules extends HTMLElement {
     create_button.classList.add("pyc-metrics__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "create-toggle");
+    hide_unless_may(create_button, "system:metric_alerts.write");
     create_button.textContent = "Create Alert Rule";
     create_button.addEventListener("click", () => {
       this._toggle_create_form();

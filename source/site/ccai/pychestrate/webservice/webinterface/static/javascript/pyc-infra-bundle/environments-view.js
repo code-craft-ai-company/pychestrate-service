@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -439,6 +440,7 @@ class PycEnvironments extends HTMLElement {
     register_button.classList.add("pyc-infra__button");
     register_button.setAttribute("type", "button");
     register_button.setAttribute("data-role", "register-toggle");
+    hide_unless_may(register_button, "system:environments.write");
     register_button.textContent = "Register Environment";
     register_button.addEventListener("click", () => {
       this._toggle_register_form();

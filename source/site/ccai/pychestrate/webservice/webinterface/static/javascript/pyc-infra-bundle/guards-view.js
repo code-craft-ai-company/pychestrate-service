@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -307,6 +308,7 @@ class PycGuards extends HTMLElement {
     attach_button.classList.add("pyc-infra__button");
     attach_button.setAttribute("type", "button");
     attach_button.setAttribute("data-role", "attach-toggle");
+    hide_unless_may(attach_button, "system:guards.write");
     attach_button.textContent = "Attach Guard";
     attach_button.addEventListener("click", () => {
       this._toggle_attach_form();

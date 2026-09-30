@@ -70,7 +70,10 @@ def _open(browser: Browser, *, path: str, bundle: str, stubs: Dict[str, Any], de
     context = browser.new_context(**DESKTOP)
     install_site_routes(
         context, bundle_names=["pyc-site-shell", bundle],
-        api_stubs=dict({"/api/v1/projects": {"items": [{"project_id": PROJECT_ID, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}}}, **stubs),
+        api_stubs=dict({
+            "/api/v1/projects": {"items": [{"project_id": PROJECT_ID, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}},
+            "/api/v1/me/permissions": {"permissions": ["system:slos.write", "system:pipelines.write"]},
+        }, **stubs),
     )
 
     def delete(route: Any) -> None:

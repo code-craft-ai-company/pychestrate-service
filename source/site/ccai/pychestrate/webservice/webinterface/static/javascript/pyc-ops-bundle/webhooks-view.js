@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { clear_toasts, show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -567,6 +568,7 @@ class PycWebhooks extends HTMLElement {
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "inbound-create-toggle");
+    hide_unless_may(create_button, "system:webhooks.write");
     create_button.textContent = "Create Integration";
     create_button.addEventListener("click", () => {
       this._toggle_inbound_form(panel);
@@ -829,6 +831,7 @@ class PycWebhooks extends HTMLElement {
           );
           toggle_button.setAttribute("type", "button");
           toggle_button.setAttribute("data-role", "integration-toggle");
+          hide_unless_may(toggle_button, "system:webhooks.write");
           toggle_button.textContent = integration.enabled === true ? "Disable" : "Enable";
           toggle_button.addEventListener("click", () => {
             toggle_button.toggleAttribute("disabled", true);
@@ -1190,6 +1193,7 @@ class PycWebhooks extends HTMLElement {
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "outbound-create-toggle");
+    hide_unless_may(create_button, "system:webhooks.write");
     create_button.textContent = "Create Subscription";
     create_button.addEventListener("click", () => {
       this._toggle_outbound_form(panel);
@@ -1361,6 +1365,7 @@ class PycWebhooks extends HTMLElement {
           );
           toggle_button.setAttribute("type", "button");
           toggle_button.setAttribute("data-role", "subscription-toggle");
+          hide_unless_may(toggle_button, "system:webhooks.write");
           toggle_button.textContent = subscription.enabled === true ? "Disable" : "Enable";
           toggle_button.addEventListener("click", () => {
             toggle_button.toggleAttribute("disabled", true);

@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -243,6 +244,7 @@ class PycProvisioningList extends HTMLElement {
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");
     trigger_button.setAttribute("data-role", "trigger-toggle");
+    hide_unless_may(trigger_button, "system:provisioning.create");
     trigger_button.textContent = "Trigger Provisioning";
     trigger_button.addEventListener("click", () => {
       this._toggle_trigger_form();

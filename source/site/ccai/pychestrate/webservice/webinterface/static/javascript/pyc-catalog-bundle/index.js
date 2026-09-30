@@ -1,3 +1,43 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
 var DEFAULT_AUTO_DISMISS_MS = 8e3;
 function show_toast(region, message, tone, options) {
@@ -458,6 +498,7 @@ var PycTestCatalog = class extends HTMLElement {
     import_button.classList.add("pyc-catalog__button");
     import_button.setAttribute("type", "button");
     import_button.setAttribute("data-role", "import-toggle");
+    hide_unless_may(import_button, "system:test_catalog.write");
     import_button.textContent = "Import from testbase";
     import_button.addEventListener("click", () => {
       this._toggle_import_form();

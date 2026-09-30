@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
@@ -178,6 +179,7 @@ class PycReleaseChannels extends HTMLElement {
     publish_button.classList.add("pyc-ops__button");
     publish_button.setAttribute("type", "button");
     publish_button.setAttribute("data-role", "publish-toggle");
+    hide_unless_may(publish_button, "system:release_channels.write");
     publish_button.textContent = "Publish Release";
     publish_button.addEventListener("click", () => {
       this._toggle_publish_form();

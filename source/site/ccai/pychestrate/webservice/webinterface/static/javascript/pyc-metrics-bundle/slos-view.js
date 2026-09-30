@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import {
@@ -296,6 +297,7 @@ class PycSlos extends HTMLElement {
     create_button.classList.add("pyc-metrics__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "create-toggle");
+    hide_unless_may(create_button, "system:slos.write");
     create_button.textContent = "Create SLO";
     create_button.addEventListener("click", () => {
       this._toggle_create_form();
@@ -698,6 +700,7 @@ class PycSlos extends HTMLElement {
           delete_button.classList.add("pyc-metrics__button");
           delete_button.setAttribute("type", "button");
           delete_button.setAttribute("data-role", "delete-slo");
+          hide_unless_may(delete_button, "system:slos.write");
           delete_button.textContent = "Delete";
           delete_button.addEventListener("click", () => {
             void self._on_delete(slo, delete_button);
