@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- The not-found page says where to look next (DOC-20). A signed-in person who followed a stale link got "Page not found" and one
+  button, "Go to the home page". The page now also says: search with Ctrl+K, browse the projects, or read the user guide (linked
+  at `/docs/`). The 403 and 500 pages are unchanged.
+
 - Form hints are tied to their field with `aria-describedby` (DOC-20). Only four of about 138 hints were, so a screen reader read
   the label and the input and skipped the text that says what to type ("HTTPS or SSH URL", "3 to 64 characters ..."). Each hint
   (`class="form-text"`) now has an id that its control (or its fieldset) names, directly or through
