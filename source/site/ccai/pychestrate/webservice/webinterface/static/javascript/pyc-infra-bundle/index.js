@@ -38,6 +38,26 @@ function hide_unless_may(element, permission_key) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/admin-contact.js
+function with_access_request(message) {
+  if (typeof message !== "string" || message.startsWith("You do not have permission") === false) {
+    return message;
+  }
+  if (/administrator|contact/i.test(message) === true) {
+    return message;
+  }
+  const sentence = access_request_sentence();
+  return sentence.length > 0 ? message + " " + sentence : message;
+}
+function access_request_sentence() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const shell = document.querySelector("pyc-site-shell");
+  const contact = shell === null ? "" : (shell.getAttribute("admin-contact") || "").trim();
+  return contact.length > 0 ? "To ask for access, contact " + contact + "." : "";
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/toast.js
 var DEFAULT_AUTO_DISMISS_MS = 8e3;
 function show_toast(region, message, tone, options) {
@@ -59,7 +79,7 @@ function show_toast(region, message, tone, options) {
   toast.setAttribute("role", tone === "error" ? "alert" : "status");
   const text = document.createElement("span");
   text.classList.add(prefix + "__toast-message");
-  text.textContent = message;
+  text.textContent = with_access_request(message);
   toast.appendChild(text);
   const link = settings.link !== null && typeof settings.link === "object" ? settings.link : null;
   if (link !== null) {

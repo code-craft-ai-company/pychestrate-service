@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- A refused action says whom to ask for access (XC-21). About thirty bundle messages said "You do not have
+  permission to ..." and none said what to do next; only the dashboard editor named the access contact. Every toast
+  now adds "To ask for access, contact <contact>." to a permission message when the installation names a contact
+  (`PYCHESTRATE_ADMIN_CONTACT`), as do the page-level "you may not view this resource / pool / inventory" notices;
+  with no contact set nothing is added (no contact is invented), and a message that already says whom to ask is
+  left as it is.
+
 - The System Health page says what is healthy, in words (ADM-30). It showed a bare "ok" chip (and "degraded",
   "error") beside checks named by their identifiers (`envelope-signing-key`, `client-certificate-proxies`). The
   chips now read Healthy, Needs attention or Failing (on the health page and the admin overview), and each check

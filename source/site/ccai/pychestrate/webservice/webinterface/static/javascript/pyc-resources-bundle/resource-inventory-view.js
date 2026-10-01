@@ -1,4 +1,5 @@
 import { format_timestamp } from "../shared/datetime.js";
+import { with_access_request } from "../shared/admin-contact.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   RESOURCES_WRITE_PERMISSION,
@@ -78,7 +79,7 @@ function build_device_body(project_id, values) {
 /* What a refused registration says, in the person's terms. */
 function registration_failure_message(status, detail) {
   if (status === 403) {
-    return "You do not have permission to register resources.";
+    return with_access_request("You do not have permission to register resources.");
   }
   if (status === 409) {
     return "That device is already registered (same hostname and MAC address).";
@@ -215,7 +216,7 @@ class PycResourceInventory extends HTMLElement {
     }
     if (this._state === "error") {
       const text = this._error_status === 403
-        ? "You do not have permission to view resources."
+        ? with_access_request("You do not have permission to view resources.")
         : "Failed to load resources" + (this._error_status > 0 ? " (HTTP " + String(this._error_status) + ")." : ".");
       region.replaceChildren(this._note(text, "inventory-error", "error"));
       return;

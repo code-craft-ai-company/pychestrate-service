@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCE_POOLS_WRITE_PERMISSION,
@@ -497,7 +498,7 @@ class PycPoolDetail extends HTMLElement {
       } else if (status === 404) {
         error.textContent = "This resource pool was not found. It may have been deleted.";
       } else if (status === 403) {
-        error.textContent = "You do not have permission to view this resource pool.";
+        error.textContent = with_access_request("You do not have permission to view this resource pool.");
       } else if (status === 0) {
         error.textContent = "Network error while loading this resource pool. Try refreshing.";
       } else {

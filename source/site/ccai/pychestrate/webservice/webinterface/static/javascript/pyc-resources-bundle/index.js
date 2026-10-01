@@ -59,6 +59,26 @@ function format_timestamp(value) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/admin-contact.js
+function with_access_request(message) {
+  if (typeof message !== "string" || message.startsWith("You do not have permission") === false) {
+    return message;
+  }
+  if (/administrator|contact/i.test(message) === true) {
+    return message;
+  }
+  const sentence = access_request_sentence();
+  return sentence.length > 0 ? message + " " + sentence : message;
+}
+function access_request_sentence() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const shell = document.querySelector("pyc-site-shell");
+  const contact = shell === null ? "" : (shell.getAttribute("admin-contact") || "").trim();
+  return contact.length > 0 ? "To ask for access, contact " + contact + "." : "";
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
 function build_empty_state({ class_name, message, next_step, link, inline, role }) {
   const paragraph = document.createElement(inline === true ? "span" : "p");
@@ -912,7 +932,7 @@ var PycResourcePools = class extends HTMLElement {
       error.setAttribute("role", "status");
       const status = this._state.errorStatus;
       if (status === 403) {
-        error.textContent = "You do not have permission to view resource pools.";
+        error.textContent = with_access_request("You do not have permission to view resource pools.");
       } else if (status === 0) {
         error.textContent = "Network error while loading resource pools.";
       } else {
@@ -1122,7 +1142,7 @@ function build_device_body(project_id, values) {
 }
 function registration_failure_message(status, detail) {
   if (status === 403) {
-    return "You do not have permission to register resources.";
+    return with_access_request("You do not have permission to register resources.");
   }
   if (status === 409) {
     return "That device is already registered (same hostname and MAC address).";
@@ -1258,7 +1278,7 @@ var PycResourceInventory = class extends HTMLElement {
       return;
     }
     if (this._state === "error") {
-      const text = this._error_status === 403 ? "You do not have permission to view resources." : "Failed to load resources" + (this._error_status > 0 ? " (HTTP " + String(this._error_status) + ")." : ".");
+      const text = this._error_status === 403 ? with_access_request("You do not have permission to view resources.") : "Failed to load resources" + (this._error_status > 0 ? " (HTTP " + String(this._error_status) + ")." : ".");
       region.replaceChildren(this._note(text, "inventory-error", "error"));
       return;
     }
@@ -1969,7 +1989,7 @@ var PycPoolDetail = class extends HTMLElement {
       } else if (status === 404) {
         error.textContent = "This resource pool was not found. It may have been deleted.";
       } else if (status === 403) {
-        error.textContent = "You do not have permission to view this resource pool.";
+        error.textContent = with_access_request("You do not have permission to view this resource pool.");
       } else if (status === 0) {
         error.textContent = "Network error while loading this resource pool. Try refreshing.";
       } else {
@@ -3188,7 +3208,7 @@ var PycResourceDetail = class extends HTMLElement {
       } else if (status === 404) {
         error.textContent = "This resource was not found. It may have been deleted.";
       } else if (status === 403) {
-        error.textContent = "You do not have permission to view this resource.";
+        error.textContent = with_access_request("You do not have permission to view this resource.");
       } else if (status === 0) {
         error.textContent = "Network error while loading this resource. Try refreshing.";
       } else {

@@ -1,4 +1,5 @@
 import { format_timestamp } from "../shared/datetime.js";
+import { with_access_request } from "../shared/admin-contact.js";
 import { build_empty_state } from "../shared/empty-state.js";
 import { mirror_to_query } from "../shared/view-state.js";
 const DEFAULT_PER_PAGE = 50;
@@ -809,7 +810,7 @@ class PycResourcePools extends HTMLElement {
       error.setAttribute("role", "status");
       const status = this._state.errorStatus;
       if (status === 403) {
-        error.textContent = "You do not have permission to view resource pools.";
+        error.textContent = with_access_request("You do not have permission to view resource pools.");
       } else if (status === 0) {
         error.textContent = "Network error while loading resource pools.";
       } else {

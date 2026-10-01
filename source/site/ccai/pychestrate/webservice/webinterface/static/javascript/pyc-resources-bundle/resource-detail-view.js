@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCES_WRITE_PERMISSION,
@@ -443,7 +444,7 @@ class PycResourceDetail extends HTMLElement {
       } else if (status === 404) {
         error.textContent = "This resource was not found. It may have been deleted.";
       } else if (status === 403) {
-        error.textContent = "You do not have permission to view this resource.";
+        error.textContent = with_access_request("You do not have permission to view this resource.");
       } else if (status === 0) {
         error.textContent = "Network error while loading this resource. Try refreshing.";
       } else {

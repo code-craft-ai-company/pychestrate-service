@@ -21,6 +21,8 @@
  * This file is bundled into each bundle by esbuild.
  */
 
+import { with_access_request } from "./admin-contact.js";
+
 const DEFAULT_AUTO_DISMISS_MS = 8000;
 
 /*
@@ -49,7 +51,7 @@ export function show_toast(region, message, tone, options) {
   toast.setAttribute("role", tone === "error" ? "alert" : "status");
   const text = document.createElement("span");
   text.classList.add(prefix + "__toast-message");
-  text.textContent = message;
+  text.textContent = with_access_request(message);
   toast.appendChild(text);
   const link = settings.link !== null && typeof settings.link === "object" ? settings.link : null;
   if (link !== null) {
