@@ -1,5 +1,6 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import { confirm_action, label_from_button } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { set_entity_title } from "../shared/page-title.js";
@@ -651,6 +652,7 @@ class PycPodDetail extends HTMLElement {
     }
     back.setAttribute("href", back_href);
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/pods");
     back.textContent = "Back to pods";
     toolbar.appendChild(back);
     const refresh_button = document.createElement("mj-button");

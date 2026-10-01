@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- "Back to ..." on the pod, client, environment, pool and resource pages returns to the list as it was (ORC-27). The runs,
+  builds, provisioning, pipeline and dashboard pages already did; these five went to a bare list, and the client and
+  environment pages dropped the project, so a person working in the second project came back to the first. When the page
+  was opened from that list the link now goes back in history (the list's whole address returns with it); otherwise it
+  points at the list of the page's own project (a client page learns its project when it loads; an environment page reads
+  it from its address).
+
 - More write actions are left out for people who cannot use them (ORC-33). Seven controls were shown to everyone and refused
   only after the click: a pod's **Drain** and **Retire** (`system:pods.write`), a client's **Revoke** on its page and in the
   list (`system:clients.write`), a feature flag's **Enable/Disable** on the flags page and the admin overview

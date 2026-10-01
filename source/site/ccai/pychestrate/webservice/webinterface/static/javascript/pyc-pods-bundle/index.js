@@ -115,6 +115,18 @@ function mirror_to_query(values) {
     window.history.replaceState(window.history.state, "", next);
   }
 }
+function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+    }
+  });
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pods-bundle/pods-list-view.js
 var DEFAULT_PER_PAGE = 25;
@@ -1622,6 +1634,7 @@ var PycPodDetail = class extends HTMLElement {
     }
     back.setAttribute("href", back_href);
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/pods");
     back.textContent = "Back to pods";
     toolbar.appendChild(back);
     const refresh_button = document.createElement("mj-button");
@@ -3404,6 +3417,7 @@ var PycClientDetail = class extends HTMLElement {
       return;
     }
     this._client = envelope.body;
+    this._update_back_link();
     this._capabilities = await this._fetch_capabilities();
     if (this._project_names === null) {
       const projects_outcome = await load_projects();
@@ -3420,6 +3434,20 @@ var PycClientDetail = class extends HTMLElement {
     this._errored = false;
     this._render_stamp();
     this._render_body();
+    return;
+  }
+  /**
+   * Point "Back to clients" at the client's own project once it is known, so a page opened without
+   * coming from the list (a bookmark, a message) still returns to that project's clients.
+   */
+  _update_back_link() {
+    if (this._root === null || this._client === null || typeof this._client.project_id !== "string" || this._client.project_id.length === 0) {
+      return;
+    }
+    const back = this._root.querySelector('[data-role="back-link"]');
+    if (back !== null) {
+      back.setAttribute("href", "/clients?project_id=" + encodeURIComponent(this._client.project_id));
+    }
     return;
   }
   async _fetch_client() {
@@ -3546,6 +3574,7 @@ var PycClientDetail = class extends HTMLElement {
     back.classList.add("pyc-client-detail__back-link");
     back.setAttribute("href", "/clients");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/clients");
     back.textContent = "Back to clients";
     toolbar.appendChild(back);
     const refresh_button = document.createElement("mj-button");

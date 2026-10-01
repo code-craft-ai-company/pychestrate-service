@@ -1,5 +1,6 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
@@ -262,6 +263,7 @@ class PycClientDetail extends HTMLElement {
       return;
     }
     this._client = envelope.body;
+    this._update_back_link();
     this._capabilities = await this._fetch_capabilities();
     if (this._project_names === null) {
       const projects_outcome = await load_projects();
@@ -280,6 +282,20 @@ class PycClientDetail extends HTMLElement {
     this._errored = false;
     this._render_stamp();
     this._render_body();
+    return;
+  }
+  /**
+   * Point "Back to clients" at the client's own project once it is known, so a page opened without
+   * coming from the list (a bookmark, a message) still returns to that project's clients.
+   */
+  _update_back_link() {
+    if (this._root === null || this._client === null || typeof this._client.project_id !== "string" || this._client.project_id.length === 0) {
+      return;
+    }
+    const back = this._root.querySelector('[data-role="back-link"]');
+    if (back !== null) {
+      back.setAttribute("href", "/clients?project_id=" + encodeURIComponent(this._client.project_id));
+    }
     return;
   }
   async _fetch_client() {
@@ -406,6 +422,7 @@ class PycClientDetail extends HTMLElement {
     back.classList.add("pyc-client-detail__back-link");
     back.setAttribute("href", "/clients");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/clients");
     back.textContent = "Back to clients";
     toolbar.appendChild(back);
     const refresh_button = document.createElement("mj-button");

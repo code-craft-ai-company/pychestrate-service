@@ -127,6 +127,18 @@ function mirror_to_query(values) {
     window.history.replaceState(window.history.state, "", next);
   }
 }
+function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+    }
+  });
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-pools-view.js
 var DEFAULT_PER_PAGE = 50;
@@ -1942,6 +1954,7 @@ var PycPoolDetail = class extends HTMLElement {
     back.classList.add("pyc-resources__back-link");
     back.setAttribute("href", this._pools_list_href());
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/resource-pools");
     back.textContent = "Back to resource pools";
     root.appendChild(back);
     const status = document.createElement("p");
@@ -3253,6 +3266,7 @@ var PycResourceDetail = class extends HTMLElement {
     back.classList.add("pyc-resources__back-link");
     back.setAttribute("href", this._pools_list_href());
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/resource-pools");
     back.textContent = "Back to resource pools";
     root.appendChild(back);
     if (this._pool_id.length > 0) {

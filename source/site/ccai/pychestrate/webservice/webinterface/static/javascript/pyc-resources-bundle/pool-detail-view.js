@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
@@ -450,6 +451,7 @@ class PycPoolDetail extends HTMLElement {
     back.classList.add("pyc-resources__back-link");
     back.setAttribute("href", this._pools_list_href());
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/resource-pools");
     back.textContent = "Back to resource pools";
     root.appendChild(back);
     const status = document.createElement("p");

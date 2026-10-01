@@ -1,4 +1,5 @@
 import { show_toast } from "../shared/toast.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import { state_label } from "../shared/run-labels.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
@@ -206,8 +207,9 @@ class PycEnvironmentDetail extends HTMLElement {
     root.appendChild(heading);
     const back = document.createElement("a");
     back.classList.add("pyc-infra__back-link");
-    back.setAttribute("href", ENVIRONMENTS_ROUTE);
+    back.setAttribute("href", this._project_id.length > 0 ? ENVIRONMENTS_ROUTE + "?project_id=" + encodeURIComponent(this._project_id) : ENVIRONMENTS_ROUTE);
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, ENVIRONMENTS_ROUTE);
     back.textContent = "← All environments";
     root.appendChild(back);
     const toast_region = document.createElement("div");
