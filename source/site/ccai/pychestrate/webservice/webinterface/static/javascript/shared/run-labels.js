@@ -18,13 +18,16 @@ const JOB_TYPE_KINDS = [
 /*
  * A state or status as it reads on a chip: the stored spelling with its underscores and dashes
  * read as spaces ("dispatch_unconfirmed" -> "dispatch unconfirmed", "needs_investigation" ->
- * "needs investigation"). The stored value is still what the colour and the logic go by.
+ * "needs investigation"), and a state stored in capitals in lowercase ("IN_USE" -> "in use").
+ * The stored value is still what the colour and the logic go by.
  */
 export function state_label(state) {
   if (typeof state !== "string" || state.length === 0) {
     return "\u2014";
   }
-  return state.replace(/[_-]+/g, " ");
+  const words = state.replace(/[_-]+/g, " ");
+  // A state stored in capitals (a pod's IN_USE, a client's REVOKED) reads in the glossary's lowercase vocabulary.
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
 }
 
 /* "build-makefile" -> "Build · makefile", "testbase" -> "Test · testbase". */

@@ -89,7 +89,8 @@ function state_label(state) {
   if (typeof state !== "string" || state.length === 0) {
     return "\u2014";
   }
-  return state.replace(/[_-]+/g, " ");
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
 }
 function job_type_label(job_type) {
   const text = typeof job_type === "string" ? job_type.trim() : "";

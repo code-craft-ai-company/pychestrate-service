@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- Pod, client and provisioning states read as words, not as stored enum spellings (ORC-38). The clients list showed `ACTIVE`,
+  `SUSPENDED` and `REVOKED` with filters named `ALIVE`, `DEGRADED` and `LOST`; the pod page showed `IN_USE` and `DRAINING`, a
+  history of `READY → IN_USE` and sentences such as "only available while the pod is READY or IN_USE"; the provisioning State
+  filter offered `rejected_by_guard`. They now read in the glossary's lowercase status vocabulary ("active", "revoked",
+  "in use", "rejected by guard"), the Liveness filter uses the same words as the chips (Alive, Stale, Lost), and choosing a
+  filter still sends the stored value (`status=REVOKED`). The shared `state_label` lowercases a state stored in capitals.
+  (The provisioning filter had to drop a local variable that shadowed the import.)
+
 - The Extension Registry says whether the extensions' routes are served, in words (ADM-30). It printed the API's own word,
   "Registry status: mounted" or "deferred", and a person reading "deferred" could not tell whether anything was wrong. The line
   now reads "Extension routes:" with **Serving** (green), **Not attached yet** (amber) or **Unknown**, and the chip's hover text

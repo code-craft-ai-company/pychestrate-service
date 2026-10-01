@@ -1,5 +1,6 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
+import { state_label } from "../shared/run-labels.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import { confirm_action } from "../shared/confirm.js";
 import { set_entity_title } from "../shared/page-title.js";
@@ -543,7 +544,7 @@ class PycClientDetail extends HTMLElement {
     status_badge.classList.add("pyc-client-detail__badge");
     status_badge.setAttribute("data-role", "status-badge");
     status_badge.setAttribute("data-tone", status_tone(client.status));
-    status_badge.textContent = client.status;
+    status_badge.textContent = state_label(client.status);
     id_row.appendChild(status_badge);
     const liveness_badge = document.createElement("mj-chip");
     liveness_badge.classList.add("pyc-client-detail__badge");

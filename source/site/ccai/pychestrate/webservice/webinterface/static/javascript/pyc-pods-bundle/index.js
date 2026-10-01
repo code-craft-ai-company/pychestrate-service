@@ -933,6 +933,15 @@ function show_toast(region, message, tone, options) {
   return toast;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
 function confirm_action(source, message, confirm_label, options) {
   const tone = options !== null && options !== void 0 && options.tone === "neutral" ? "neutral" : "danger";
@@ -1169,7 +1178,7 @@ function runtime_section_message_for_status(status, what) {
 function transition_message_for_status(status, event_kind) {
   if (status === 200) {
     if (event_kind === "drain") {
-      const rtnval22 = "Drain started \u2014 the pod is now DRAINING.";
+      const rtnval22 = "Drain started \u2014 the pod is now draining.";
       return rtnval22;
     }
     const rtnval2 = "Pod retired \u2014 its registration is released.";
@@ -1791,7 +1800,7 @@ var PycPodDetail = class extends HTMLElement {
     const awaiting_client = this._state_row === null && this._runtime_status.state === 404;
     if (this._state_row !== null) {
       badge.setAttribute("data-tone", pod_state_tone(this._state_row.state));
-      badge.textContent = this._state_row.state;
+      badge.textContent = state_label(this._state_row.state);
     } else if (awaiting_client === true) {
       badge.setAttribute("data-tone", "neutral");
       badge.textContent = "Declared";
@@ -1890,11 +1899,11 @@ var PycPodDetail = class extends HTMLElement {
     const drain_allowed = DRAINABLE_POD_STATES.indexOf(current_state) >= 0;
     if (drain_allowed === false) {
       drain_button.toggleAttribute("disabled", true);
-      drain_button.title = state_known === true ? "Drain is only available while the pod is READY or IN_USE." : "The pod state is unavailable \u2014 actions are disabled.";
+      drain_button.title = state_known === true ? "Drain is only available while the pod is ready or in use." : "The pod state is unavailable \u2014 actions are disabled.";
     } else {
       drain_button.addEventListener("click", () => {
         drain_button.toggleAttribute("disabled", true);
-        const confirm_text = "Drain pod " + short_id(this._pod_id) + "? The pod stops accepting new work, finishes what is in flight, and moves to DRAINING.";
+        const confirm_text = "Drain pod " + short_id(this._pod_id) + "? The pod stops accepting new work, finishes what is in flight, and moves to draining.";
         void this._on_transition("drain", confirm_text, drain_button);
       });
     }
@@ -1908,11 +1917,11 @@ var PycPodDetail = class extends HTMLElement {
     const retire_allowed = RETIRABLE_POD_STATES.indexOf(current_state) >= 0;
     if (retire_allowed === false) {
       retire_button.toggleAttribute("disabled", true);
-      retire_button.title = state_known === true ? "Retire is only available while the pod is DRAINING or FAILED." : "The pod state is unavailable \u2014 actions are disabled.";
+      retire_button.title = state_known === true ? "Retire is only available while the pod is draining or failed." : "The pod state is unavailable \u2014 actions are disabled.";
     } else {
       retire_button.addEventListener("click", () => {
         retire_button.toggleAttribute("disabled", true);
-        const confirm_text = "Retire pod " + short_id(this._pod_id) + "? Its registration is released and the pod moves to RELEASED \u2014 it must be re-provisioned before it can serve work again.";
+        const confirm_text = "Retire pod " + short_id(this._pod_id) + "? Its registration is released and the pod moves to released \u2014 it must be re-provisioned before it can serve work again.";
         void this._on_transition("deregister", confirm_text, retire_button);
       });
     }
@@ -2056,7 +2065,7 @@ var PycPodDetail = class extends HTMLElement {
     } else {
       this._append_field(grid, "Client", "\u2014");
     }
-    this._append_field(grid, "Registration state", this._registration.state);
+    this._append_field(grid, "Registration state", state_label(this._registration.state));
     this._append_field(
       grid,
       "Definition version",
@@ -2103,7 +2112,7 @@ var PycPodDetail = class extends HTMLElement {
     for (const row of this._registration_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const summary = row.state + " \xB7 v" + String(row.pod_definition_version) + " \xB7 " + format_timestamp(row.registered_at);
+      const summary = state_label(row.state) + " \xB7 v" + String(row.pod_definition_version) + " \xB7 " + format_timestamp(row.registered_at);
       item.textContent = summary;
       if (row.deregister_reason !== null && row.deregister_reason !== void 0 && row.deregister_reason.length > 0) {
         const reason = document.createElement("span");
@@ -2149,8 +2158,8 @@ var PycPodDetail = class extends HTMLElement {
     for (const row of this._state_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const from_label = row.from_state !== null && row.from_state !== void 0 ? row.from_state : "\u2205";
-      const summary = from_label + " \u2192 " + row.to_state + " \xB7 " + format_timestamp(row.applied_at);
+      const from_label = row.from_state !== null && row.from_state !== void 0 ? state_label(row.from_state) : "\u2205";
+      const summary = from_label + " \u2192 " + state_label(row.to_state) + " \xB7 " + format_timestamp(row.applied_at);
       item.textContent = summary;
       if (row.event_kind !== null && row.event_kind !== void 0 && row.event_kind.length > 0) {
         const event = document.createElement("span");
@@ -2322,6 +2331,7 @@ function liveness_tone(liveness) {
   const rtnval = "neutral";
   return rtnval;
 }
+var LIVENESS_LABELS = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
 function client_liveness_display(client) {
   if (client === null || client === void 0) {
     const rtnval2 = { label: "\u2014", tone: "neutral" };
@@ -2336,8 +2346,7 @@ function client_liveness_display(client) {
     const rtnval2 = { label: "Never seen", tone: tone === "ok" ? "neutral" : tone };
     return rtnval2;
   }
-  const labels = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
-  const label = labels[client.liveness_state] || String(client.liveness_state || "\u2014");
+  const label = LIVENESS_LABELS[client.liveness_state] || String(client.liveness_state || "\u2014");
   const rtnval = { label, tone };
   return rtnval;
 }
@@ -2708,7 +2717,7 @@ var PycClientsList = class extends HTMLElement {
     for (const status of CLIENT_STATUSES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", status);
-      option.textContent = status;
+      option.textContent = state_label(status);
       status_select.appendChild(option);
     }
     status_select.value = this._state.statusFilter;
@@ -2732,7 +2741,7 @@ var PycClientsList = class extends HTMLElement {
     for (const liveness of LIVENESS_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", liveness);
-      option.textContent = liveness;
+      option.textContent = LIVENESS_LABELS[liveness] || state_label(liveness);
       liveness_select.appendChild(option);
     }
     liveness_select.value = this._state.livenessFilter;
@@ -3067,7 +3076,7 @@ var PycClientsList = class extends HTMLElement {
           const status_badge = document.createElement("mj-chip");
           status_badge.classList.add("pyc-clients-list__badge");
           status_badge.setAttribute("data-tone", status_tone(client.status));
-          status_badge.textContent = client.status;
+          status_badge.textContent = state_label(client.status);
           return status_badge;
         }
       },
@@ -3715,7 +3724,7 @@ var PycClientDetail = class extends HTMLElement {
     status_badge.classList.add("pyc-client-detail__badge");
     status_badge.setAttribute("data-role", "status-badge");
     status_badge.setAttribute("data-tone", status_tone(client.status));
-    status_badge.textContent = client.status;
+    status_badge.textContent = state_label(client.status);
     id_row.appendChild(status_badge);
     const liveness_badge = document.createElement("mj-chip");
     liveness_badge.classList.add("pyc-client-detail__badge");

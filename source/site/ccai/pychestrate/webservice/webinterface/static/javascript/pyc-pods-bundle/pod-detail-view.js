@@ -1,5 +1,6 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
+import { state_label } from "../shared/run-labels.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import { confirm_action, label_from_button } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -169,7 +170,7 @@ function runtime_section_message_for_status(status, what) {
 function transition_message_for_status(status, event_kind) {
   if (status === 200) {
     if (event_kind === "drain") {
-      const rtnval2 = "Drain started — the pod is now DRAINING.";
+      const rtnval2 = "Drain started — the pod is now draining.";
       return rtnval2;
     }
     const rtnval2 = "Pod retired — its registration is released.";
@@ -800,7 +801,7 @@ class PycPodDetail extends HTMLElement {
     const awaiting_client = this._state_row === null && this._runtime_status.state === 404;
     if (this._state_row !== null) {
       badge.setAttribute("data-tone", pod_state_tone(this._state_row.state));
-      badge.textContent = this._state_row.state;
+      badge.textContent = state_label(this._state_row.state);
     } else if (awaiting_client === true) {
       badge.setAttribute("data-tone", "neutral");
       badge.textContent = "Declared";
@@ -901,11 +902,11 @@ class PycPodDetail extends HTMLElement {
     const drain_allowed = DRAINABLE_POD_STATES.indexOf(current_state) >= 0;
     if (drain_allowed === false) {
       drain_button.toggleAttribute("disabled", true);
-      drain_button.title = state_known === true ? "Drain is only available while the pod is READY or IN_USE." : "The pod state is unavailable — actions are disabled.";
+      drain_button.title = state_known === true ? "Drain is only available while the pod is ready or in use." : "The pod state is unavailable — actions are disabled.";
     } else {
       drain_button.addEventListener("click", () => {
         drain_button.toggleAttribute("disabled", true);
-        const confirm_text = "Drain pod " + short_id(this._pod_id) + "? The pod stops accepting new work, finishes what is in flight, and moves to DRAINING.";
+        const confirm_text = "Drain pod " + short_id(this._pod_id) + "? The pod stops accepting new work, finishes what is in flight, and moves to draining.";
         void this._on_transition("drain", confirm_text, drain_button);
       });
     }
@@ -919,11 +920,11 @@ class PycPodDetail extends HTMLElement {
     const retire_allowed = RETIRABLE_POD_STATES.indexOf(current_state) >= 0;
     if (retire_allowed === false) {
       retire_button.toggleAttribute("disabled", true);
-      retire_button.title = state_known === true ? "Retire is only available while the pod is DRAINING or FAILED." : "The pod state is unavailable — actions are disabled.";
+      retire_button.title = state_known === true ? "Retire is only available while the pod is draining or failed." : "The pod state is unavailable — actions are disabled.";
     } else {
       retire_button.addEventListener("click", () => {
         retire_button.toggleAttribute("disabled", true);
-        const confirm_text = "Retire pod " + short_id(this._pod_id) + "? Its registration is released and the pod moves to RELEASED — it must be re-provisioned before it can serve work again.";
+        const confirm_text = "Retire pod " + short_id(this._pod_id) + "? Its registration is released and the pod moves to released — it must be re-provisioned before it can serve work again.";
         void this._on_transition("deregister", confirm_text, retire_button);
       });
     }
@@ -1069,7 +1070,7 @@ class PycPodDetail extends HTMLElement {
     } else {
       this._append_field(grid, "Client", "—");
     }
-    this._append_field(grid, "Registration state", this._registration.state);
+    this._append_field(grid, "Registration state", state_label(this._registration.state));
     this._append_field(
       grid,
       "Definition version",
@@ -1116,7 +1117,7 @@ class PycPodDetail extends HTMLElement {
     for (const row of this._registration_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const summary = row.state + " · v" + String(row.pod_definition_version) + " · " + format_timestamp(row.registered_at);
+      const summary = state_label(row.state) + " · v" + String(row.pod_definition_version) + " · " + format_timestamp(row.registered_at);
       item.textContent = summary;
       if (row.deregister_reason !== null && row.deregister_reason !== void 0 && row.deregister_reason.length > 0) {
         const reason = document.createElement("span");
@@ -1162,8 +1163,8 @@ class PycPodDetail extends HTMLElement {
     for (const row of this._state_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const from_label = row.from_state !== null && row.from_state !== void 0 ? row.from_state : "∅";
-      const summary = from_label + " → " + row.to_state + " · " + format_timestamp(row.applied_at);
+      const from_label = row.from_state !== null && row.from_state !== void 0 ? state_label(row.from_state) : "∅";
+      const summary = from_label + " → " + state_label(row.to_state) + " · " + format_timestamp(row.applied_at);
       item.textContent = summary;
       if (row.event_kind !== null && row.event_kind !== void 0 && row.event_kind.length > 0) {
         const event = document.createElement("span");

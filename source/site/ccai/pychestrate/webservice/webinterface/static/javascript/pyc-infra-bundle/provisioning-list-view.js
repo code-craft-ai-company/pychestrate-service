@@ -220,9 +220,9 @@ class PycProvisioningList extends HTMLElement {
       void this._on_project_changed();
     });
     controls.appendChild(project_input);
-    const state_label = document.createElement("label");
-    state_label.classList.add("pyc-infra__field");
-    state_label.textContent = "State";
+    const state_field = document.createElement("label");
+    state_field.classList.add("pyc-infra__field");
+    state_field.textContent = "State";
     const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
@@ -233,7 +233,7 @@ class PycProvisioningList extends HTMLElement {
     for (const run_state of PROVISIONING_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", run_state);
-      option.textContent = run_state;
+      option.textContent = state_label(run_state);
       state_select.appendChild(option);
     }
     state_select.value = this._state.stateFilter;
@@ -242,8 +242,8 @@ class PycProvisioningList extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
-    controls.appendChild(state_label);
+    state_field.appendChild(state_select);
+    controls.appendChild(state_field);
     const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");

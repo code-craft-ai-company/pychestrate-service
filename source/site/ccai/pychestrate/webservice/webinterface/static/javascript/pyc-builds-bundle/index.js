@@ -195,7 +195,8 @@ function state_label(state) {
   if (typeof state !== "string" || state.length === 0) {
     return "\u2014";
   }
-  return state.replace(/[_-]+/g, " ");
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
 }
 function build_title(build) {
   const kind = typeof build.runner_kind === "string" && build.runner_kind.length > 0 ? build.runner_kind : "build";

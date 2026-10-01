@@ -1,5 +1,6 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
+import { state_label } from "../shared/run-labels.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -118,6 +119,8 @@ function liveness_tone(liveness) {
 // after 5 min), and two cases read better than the raw state: a client
 // that never heartbeated, and a revoked client, which is not expected
 // to heartbeat at all.
+// What each liveness state is called on the page, in the filter and on the chip alike.
+const LIVENESS_LABELS = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
 function client_liveness_display(client) {
   if (client === null || client === void 0) {
     const rtnval2 = { label: "\u2014", tone: "neutral" };
@@ -132,8 +135,7 @@ function client_liveness_display(client) {
     const rtnval2 = { label: "Never seen", tone: tone === "ok" ? "neutral" : tone };
     return rtnval2;
   }
-  const labels = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
-  const label = labels[client.liveness_state] || String(client.liveness_state || "\u2014");
+  const label = LIVENESS_LABELS[client.liveness_state] || String(client.liveness_state || "\u2014");
   const rtnval = { label, tone };
   return rtnval;
 }
@@ -529,7 +531,7 @@ class PycClientsList extends HTMLElement {
     for (const status of CLIENT_STATUSES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", status);
-      option.textContent = status;
+      option.textContent = state_label(status);
       status_select.appendChild(option);
     }
     status_select.value = this._state.statusFilter;
@@ -553,7 +555,7 @@ class PycClientsList extends HTMLElement {
     for (const liveness of LIVENESS_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", liveness);
-      option.textContent = liveness;
+      option.textContent = LIVENESS_LABELS[liveness] || state_label(liveness);
       liveness_select.appendChild(option);
     }
     liveness_select.value = this._state.livenessFilter;
@@ -892,7 +894,7 @@ class PycClientsList extends HTMLElement {
           const status_badge = document.createElement("mj-chip");
           status_badge.classList.add("pyc-clients-list__badge");
           status_badge.setAttribute("data-tone", status_tone(client.status));
-          status_badge.textContent = client.status;
+          status_badge.textContent = state_label(client.status);
           return status_badge;
         }
       },

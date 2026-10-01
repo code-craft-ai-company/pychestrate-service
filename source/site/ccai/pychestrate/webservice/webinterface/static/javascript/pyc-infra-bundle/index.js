@@ -1770,7 +1770,8 @@ function state_label(state) {
   if (typeof state !== "string" || state.length === 0) {
     return "\u2014";
   }
-  return state.replace(/[_-]+/g, " ");
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
 }
 function provisioning_title(run) {
   const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
@@ -2458,9 +2459,9 @@ var PycProvisioningList = class extends HTMLElement {
       void this._on_project_changed();
     });
     controls.appendChild(project_input);
-    const state_label2 = document.createElement("label");
-    state_label2.classList.add("pyc-infra__field");
-    state_label2.textContent = "State";
+    const state_field = document.createElement("label");
+    state_field.classList.add("pyc-infra__field");
+    state_field.textContent = "State";
     const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
@@ -2471,7 +2472,7 @@ var PycProvisioningList = class extends HTMLElement {
     for (const run_state of PROVISIONING_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", run_state);
-      option.textContent = run_state;
+      option.textContent = state_label(run_state);
       state_select.appendChild(option);
     }
     state_select.value = this._state.stateFilter;
@@ -2480,8 +2481,8 @@ var PycProvisioningList = class extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label2.appendChild(state_select);
-    controls.appendChild(state_label2);
+    state_field.appendChild(state_select);
+    controls.appendChild(state_field);
     const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");
