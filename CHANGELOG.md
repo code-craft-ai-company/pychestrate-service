@@ -129,6 +129,14 @@ preview tag.
   stays open, **Cancel** closes it. The page's title now follows the display name (it read a field the API never sends,
   so it always showed "Resource" and the first eight characters of the id).
 
+- A dashboard can be renamed and re-described from the dashboards list (ORC-26). The only edit the UI offered was the tile
+  layout, so a mistyped name stayed although `PATCH /api/v1/projects/{id}/dashboards/{id}` could change it. Each row has
+  **Edit** (for people who may write dashboards): the create form filled in with the name and description; **Save
+  changes** sends only what changed together with the version the list showed, so an edit never overwrites someone else's
+  change; it says "Dashboard “x” saved." and lists the new name at the next version. Saving without a change says "Nothing to
+  change." and sends nothing. A refusal is said in words: a name another dashboard in the project has, and a dashboard that
+  someone else changed since the list was loaded ("Refresh and edit it again"), are told apart (both are a 409).
+
 - A deactivated user can be anonymised for a data-protection request (ADM-41; decisions recorded in
   `specs/1-user-management`, Requirement 5). The user's page has an **Anonymise** button for a deactivated
   account (`POST /admin/users/{id}/anonymise`, `system:users.write`); it asks for the login name to be typed

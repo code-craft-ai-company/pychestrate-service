@@ -1427,6 +1427,30 @@ function create_message_for_status(status) {
   const rtnval = "Failed to create dashboard (HTTP " + String(status) + ").";
   return rtnval;
 }
+function update_message_for_status(status, detail, name) {
+  if (status === 200) {
+    const rtnval2 = "Dashboard \u201C" + name + "\u201D saved.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = detail.toLowerCase().indexOf("version mismatch") >= 0 ? "Someone else changed this dashboard since the list was loaded. Refresh and edit it again." : "Another dashboard in this project already has that name.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "The change was rejected \u2014 the name cannot be empty.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to edit dashboards.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That dashboard no longer exists.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to save the dashboard (HTTP " + String(status) + ").";
+  return rtnval;
+}
 function tile_metric_name(tile) {
   if (tile === null || tile === void 0) {
     const rtnval2 = "";
@@ -1458,6 +1482,7 @@ var PycDashboardsList = class extends HTMLElement {
   _dashboards;
   _root;
   _form_region;
+  _editing;
   _table_region;
   _notice_region;
   constructor() {
@@ -1475,6 +1500,7 @@ var PycDashboardsList = class extends HTMLElement {
     this._dashboards = [];
     this._root = null;
     this._form_region = null;
+    this._editing = null;
     this._table_region = null;
     this._notice_region = null;
   }
@@ -1853,6 +1879,27 @@ var PycDashboardsList = class extends HTMLElement {
         label: "Version",
         width: "8rem",
         render: (dashboard) => String(dashboard.version)
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "8rem",
+        sortable: false,
+        render: (dashboard) => {
+          const edit_button = document.createElement("mj-button");
+          edit_button.classList.add("pyc-metrics__button");
+          edit_button.setAttribute("type", "button");
+          edit_button.setAttribute("data-role", "edit-dashboard");
+          edit_button.textContent = "Edit";
+          edit_button.hidden = true;
+          void may(DASHBOARDS_WRITE_PERMISSION).then((allowed) => {
+            edit_button.hidden = allowed === false;
+          });
+          edit_button.addEventListener("click", () => {
+            this._open_edit_form(dashboard);
+          });
+          return edit_button;
+        }
       }
     ];
     table.rows = this._dashboards;
@@ -1863,11 +1910,28 @@ var PycDashboardsList = class extends HTMLElement {
     if (this._form_region === null) {
       return;
     }
-    if (this._form_region.hidden === false) {
+    if (this._form_region.hidden === false && this._editing === null) {
       this._form_region.hidden = true;
       this._form_region.replaceChildren();
       return;
     }
+    this._editing = null;
+    this._form_region.hidden = false;
+    this._render_create_form();
+    reveal(this._form_region);
+    return;
+  }
+  /**
+   * Open the form on an existing dashboard to change its name or description. Its tiles are changed in
+   * the layout editor, not here.
+   *
+   * @param dashboard The dashboard row to edit.
+   */
+  _open_edit_form(dashboard) {
+    if (this._form_region === null) {
+      return;
+    }
+    this._editing = dashboard;
     this._form_region.hidden = false;
     this._render_create_form();
     reveal(this._form_region);
@@ -1877,18 +1941,27 @@ var PycDashboardsList = class extends HTMLElement {
     if (this._form_region === null) {
       return;
     }
+    const editing = this._editing;
+    const prefix = editing === null ? "create" : "edit";
     const region = this._form_region;
     region.replaceChildren();
     const form = document.createElement("form");
     form.classList.add("pyc-metrics__form");
-    form.setAttribute("data-role", "create-form");
+    form.setAttribute("data-role", prefix + "-form");
+    if (editing !== null) {
+      const heading = document.createElement("h3");
+      heading.classList.add("pyc-metrics__form-heading");
+      heading.setAttribute("data-role", "edit-heading");
+      heading.textContent = "Edit the dashboard \u201C" + editing.name + "\u201D";
+      form.appendChild(heading);
+    }
     const name_label = document.createElement("label");
     name_label.classList.add("pyc-metrics__field");
     name_label.textContent = "Name";
     const name_input = document.createElement("mj-text-field");
     name_input.classList.add("pyc-metrics__input");
     name_input.setAttribute("type", "text");
-    name_input.setAttribute("data-role", "name-input");
+    name_input.setAttribute("data-role", editing === null ? "name-input" : "edit-name-input");
     name_input.required = true;
     name_label.appendChild(name_input);
     form.appendChild(name_label);
@@ -1898,24 +1971,113 @@ var PycDashboardsList = class extends HTMLElement {
     const desc_input = document.createElement("mj-text-field");
     desc_input.classList.add("pyc-metrics__input");
     desc_input.setAttribute("type", "text");
-    desc_input.setAttribute("data-role", "description-input");
+    desc_input.setAttribute("data-role", editing === null ? "description-input" : "edit-description-input");
     desc_label.appendChild(desc_input);
     form.appendChild(desc_label);
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-metrics__button");
     submit.setAttribute("type", "submit");
-    submit.setAttribute("data-role", "create-submit");
-    submit.textContent = "Create";
+    submit.setAttribute("data-role", prefix + "-submit");
+    submit.textContent = editing === null ? "Create" : "Save changes";
     form.appendChild(submit);
+    if (editing !== null) {
+      const cancel = document.createElement("mj-button");
+      cancel.classList.add("pyc-metrics__button");
+      cancel.setAttribute("type", "button");
+      cancel.setAttribute("data-role", "edit-cancel");
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", () => {
+        this._editing = null;
+        region.hidden = true;
+        region.replaceChildren();
+      });
+      form.appendChild(cancel);
+    }
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this._submit_create(
-        name_input.value.trim(),
-        desc_input.value.trim()
-      );
+      if (editing === null) {
+        void this._submit_create(
+          name_input.value.trim(),
+          desc_input.value.trim()
+        );
+      } else {
+        void this._submit_edit(editing, name_input.value.trim(), desc_input.value.trim());
+      }
     });
     region.appendChild(form);
+    if (editing !== null) {
+      name_input.value = editing.name;
+      desc_input.value = typeof editing.description === "string" ? editing.description : "";
+    }
     return;
+  }
+  /**
+   * PATCH a dashboard's name and/or description (only what changed), guarded by the version the list showed
+   * so an edit never overwrites someone else's change. Exposed so unit tests can drive it without a form.
+   *
+   * @param dashboard The dashboard being edited (as listed).
+   * @param name The name the form holds.
+   * @param description The description the form holds.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async submitEdit(dashboard, name, description) {
+    const rtnval = await this._submit_edit(dashboard, name, description);
+    return rtnval;
+  }
+  async _submit_edit(dashboard, name, description) {
+    const current_description = typeof dashboard.description === "string" ? dashboard.description : "";
+    if (name.length === 0) {
+      const rtnval2 = { ok: false, status: 0, message: "A dashboard needs a name." };
+      this._render_notice(rtnval2.message, true);
+      return rtnval2;
+    }
+    const payload = { expected_version: dashboard.version };
+    if (name !== dashboard.name) {
+      payload.name = name;
+    }
+    if (description !== current_description) {
+      payload.description = description;
+    }
+    if (payload.name === void 0 && payload.description === void 0) {
+      const rtnval2 = { ok: true, status: 0, message: "Nothing to change." };
+      this._render_notice(rtnval2.message, false);
+      this._editing = null;
+      this._toggle_create_form();
+      return rtnval2;
+    }
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(build_dashboard_detail_url(this._state.projectId, dashboard.dashboard_id), {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+      detail = await read_problem_detail(response);
+      if (status === 401) {
+        announce_session_expired();
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.metrics.dashboard_update_failed", { reason: String(reason) });
+    }
+    const ok = status === 200;
+    const message = message_with_detail("Dashboard not saved", status === 409 ? "" : detail, update_message_for_status(status, detail, name));
+    this._render_notice(message, ok === false);
+    if (ok === true) {
+      this._editing = null;
+      if (this._form_region !== null) {
+        this._form_region.hidden = true;
+        this._form_region.replaceChildren();
+      }
+      await this._refresh();
+    }
+    return { ok, status, message };
   }
   /**
    * POST a ``DashboardCreateRequest`` for the current project.
