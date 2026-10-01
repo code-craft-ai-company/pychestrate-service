@@ -97,6 +97,14 @@ function query_value(name) {
   const value = new URLSearchParams(window.location.search).get(name);
   return value === null ? "" : value.trim();
 }
+function query_choice(name, allowed) {
+  const value = query_value(name);
+  return allowed.indexOf(value) >= 0 ? value : "";
+}
+function page_from_query() {
+  const parsed = Number.parseInt(query_value("page"), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
 function mirror_to_query(values) {
   if (typeof window === "undefined" || typeof window.history === "undefined") {
     return;
@@ -309,7 +317,7 @@ var PycPodsList = class extends HTMLElement {
     super();
     this._state = {
       projectFilter: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -468,6 +476,7 @@ var PycPodsList = class extends HTMLElement {
     pager.setAttribute("total-items", String(this._state.total));
     pager.addEventListener("mj-pagination-change", (event) => {
       this._state.page = event.detail.page;
+      mirror_to_query({ page: this._state.page > 1 ? String(this._state.page) : "" });
       this._render_table_region();
     });
     this._pager = pager;
@@ -615,7 +624,10 @@ var PycPodsList = class extends HTMLElement {
       this._render_table_region();
       return;
     }
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
@@ -2514,9 +2526,9 @@ var PycClientsList = class extends HTMLElement {
     super();
     this._state = {
       projectFilter: query_value("project_id"),
-      statusFilter: "",
-      livenessFilter: "",
-      page: 1,
+      statusFilter: query_choice("status", CLIENT_STATUSES),
+      livenessFilter: query_choice("liveness", LIVENESS_STATES),
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE2,
       total: 0,
       loading: false,
@@ -2699,6 +2711,7 @@ var PycClientsList = class extends HTMLElement {
       option.textContent = status;
       status_select.appendChild(option);
     }
+    status_select.value = this._state.statusFilter;
     status_select.addEventListener("change", () => {
       this._state.statusFilter = status_select.value;
       this._state.page = 1;
@@ -2722,6 +2735,7 @@ var PycClientsList = class extends HTMLElement {
       option.textContent = liveness;
       liveness_select.appendChild(option);
     }
+    liveness_select.value = this._state.livenessFilter;
     liveness_select.addEventListener("change", () => {
       this._state.livenessFilter = liveness_select.value;
       this._state.page = 1;
@@ -2768,6 +2782,7 @@ var PycClientsList = class extends HTMLElement {
     pager.setAttribute("total-items", String(this._state.total));
     pager.addEventListener("mj-pagination-change", (event) => {
       this._state.page = event.detail.page;
+      mirror_to_query({ page: this._state.page > 1 ? String(this._state.page) : "" });
       this._render_table_region();
     });
     this._pager = pager;
@@ -2892,7 +2907,12 @@ var PycClientsList = class extends HTMLElement {
     return;
   }
   async _refresh() {
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      status: this._state.statusFilter,
+      liveness: this._state.livenessFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

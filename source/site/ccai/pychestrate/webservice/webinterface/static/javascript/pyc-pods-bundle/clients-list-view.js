@@ -9,7 +9,7 @@ import {
   load_projects
 } from "./pods-list-view.js";
 import { build_empty_state } from "../shared/empty-state.js";
-import { mirror_to_query, query_value } from "../shared/view-state.js";
+import { mirror_to_query, page_from_query, query_choice, query_value } from "../shared/view-state.js";
 const CLIENT_STATUSES = [
   "ACTIVE",
   "SUSPENDED",
@@ -345,9 +345,9 @@ class PycClientsList extends HTMLElement {
     super();
     this._state = {
       projectFilter: query_value("project_id"),
-      statusFilter: "",
-      livenessFilter: "",
-      page: 1,
+      statusFilter: query_choice("status", CLIENT_STATUSES),
+      livenessFilter: query_choice("liveness", LIVENESS_STATES),
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -532,6 +532,7 @@ class PycClientsList extends HTMLElement {
       option.textContent = status;
       status_select.appendChild(option);
     }
+    status_select.value = this._state.statusFilter;
     status_select.addEventListener("change", () => {
       this._state.statusFilter = status_select.value;
       this._state.page = 1;
@@ -555,6 +556,7 @@ class PycClientsList extends HTMLElement {
       option.textContent = liveness;
       liveness_select.appendChild(option);
     }
+    liveness_select.value = this._state.livenessFilter;
     liveness_select.addEventListener("change", () => {
       this._state.livenessFilter = liveness_select.value;
       this._state.page = 1;
@@ -604,6 +606,7 @@ class PycClientsList extends HTMLElement {
       // client-side, so a page change only re-slices -- it must
       // not trigger a refetch (which used to reset to page 1).
       this._state.page = event.detail.page;
+      mirror_to_query({ page: this._state.page > 1 ? String(this._state.page) : "" });
       this._render_table_region();
     });
     this._pager = pager;
@@ -729,7 +732,12 @@ class PycClientsList extends HTMLElement {
   }
   async _refresh() {
     // The address describes what is on screen; "all projects" leaves it out (ORC-27).
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      status: this._state.statusFilter,
+      liveness: this._state.livenessFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

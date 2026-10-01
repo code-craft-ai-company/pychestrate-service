@@ -29,6 +29,15 @@ preview tag.
 
 ### Fixed
 
+- Five more lists keep their filters and page in the address (ORC-27). The environments, clients, pods, resource pools and
+  test catalog lists mirrored only the project, so a filtered or paged list could not be shared and a reload started again
+  from the first page. They now read their state from the address when they open and write it back as it changes (without
+  adding history entries): the environments' **state** and page (`?state=frozen&page=2`), the clients' **status**,
+  **liveness** and page (`?status=REVOKED&liveness=LOST&page=2`), the test catalog's **Include retired** and page
+  (`?include_retired=true&page=2`), and the page of the pods and resource pools lists. A value the list does not know
+  (`?status=bogus`, `?page=-3`) is ignored, not trusted. The pods and clients lists page client-side, so a page change now
+  writes the page itself instead of waiting for the next refresh.
+
 - "Back to ..." on the pod, client, environment, pool and resource pages returns to the list as it was (ORC-27). The runs,
   builds, provisioning, pipeline and dashboard pages already did; these five went to a bare list, and the client and
   environment pages dropped the project, so a person working in the second project came back to the first. When the page

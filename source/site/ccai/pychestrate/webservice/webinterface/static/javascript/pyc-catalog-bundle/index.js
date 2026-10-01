@@ -250,6 +250,37 @@ function format_instant(instant) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function page_from_query() {
+  const parsed = Number.parseInt(query_value("page"), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+function mirror_to_query(values) {
+  if (typeof window === "undefined" || typeof window.history === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  for (const name of Object.keys(values)) {
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(name, value);
+    } else {
+      url.searchParams.delete(name);
+    }
+  }
+  const next = url.pathname + url.search + url.hash;
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
 function build_empty_state({ class_name, message, next_step, link, inline, role }) {
   const paragraph = document.createElement(inline === true ? "span" : "p");
@@ -501,10 +532,10 @@ var PycTestCatalog = class extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
-      includeRetired: false,
+      includeRetired: query_value("include_retired") === "true",
       loading: false,
       errored: false,
       errorStatus: 0
@@ -590,6 +621,7 @@ var PycTestCatalog = class extends HTMLElement {
     const retired_input = document.createElement("input");
     retired_input.setAttribute("type", "checkbox");
     retired_input.setAttribute("data-role", "include-retired");
+    retired_input.checked = this._state.includeRetired;
     retired_input.addEventListener("change", () => {
       this._state.includeRetired = retired_input.checked;
       this._state.page = 1;
@@ -849,6 +881,11 @@ var PycTestCatalog = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    mirror_to_query({
+      project_id: this._state.projectId,
+      include_retired: this._state.includeRetired === true ? "true" : "",
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

@@ -109,6 +109,17 @@ function build_empty_state({ class_name, message, next_step, link, inline, role 
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/view-state.js
+function query_value(name) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value === null ? "" : value.trim();
+}
+function page_from_query() {
+  const parsed = Number.parseInt(query_value("page"), 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
 function mirror_to_query(values) {
   if (typeof window === "undefined" || typeof window.history === "undefined") {
     return;
@@ -343,7 +354,7 @@ var PycResourcePools = class extends HTMLElement {
     super();
     this._state = {
       projectFilter: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -845,7 +856,10 @@ var PycResourcePools = class extends HTMLElement {
       this._render_table_region();
       return;
     }
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;

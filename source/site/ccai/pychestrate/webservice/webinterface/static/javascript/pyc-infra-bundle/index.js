@@ -689,8 +689,8 @@ var PycEnvironments = class extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      stateFilter: "",
-      page: 1,
+      stateFilter: query_choice("state", ENVIRONMENT_STATES),
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -789,6 +789,7 @@ var PycEnvironments = class extends HTMLElement {
       option.textContent = environment_state;
       state_select.appendChild(option);
     }
+    state_select.value = this._state.stateFilter;
     state_select.addEventListener("change", () => {
       this._state.stateFilter = state_select.value;
       this._state.page = 1;
@@ -1036,7 +1037,11 @@ var PycEnvironments = class extends HTMLElement {
       this._render_table_region();
       return;
     }
-    mirror_to_query({ project_id: this._state.projectId });
+    mirror_to_query({
+      project_id: this._state.projectId,
+      state: this._state.stateFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

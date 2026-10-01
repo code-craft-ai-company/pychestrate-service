@@ -1,7 +1,7 @@
 import { format_timestamp } from "../shared/datetime.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { build_empty_state } from "../shared/empty-state.js";
-import { mirror_to_query } from "../shared/view-state.js";
+import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -206,7 +206,7 @@ class PycResourcePools extends HTMLElement {
     super();
     this._state = {
       projectFilter: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -711,7 +711,10 @@ class PycResourcePools extends HTMLElement {
       return;
     }
     // The address describes what is on screen (ORC-27).
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;

@@ -3,6 +3,7 @@ import { reveal } from "../shared/reveal.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
+import { mirror_to_query, page_from_query, query_value } from "../shared/view-state.js";
 import { show_no_projects } from "../shared/empty-state.js";
 import { build_empty_state } from "../shared/empty-state.js";
 const DEFAULT_PER_PAGE = 25;
@@ -246,10 +247,10 @@ class PycTestCatalog extends HTMLElement {
     super();
     this._state = {
       projectId: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
-      includeRetired: false,
+      includeRetired: query_value("include_retired") === "true",
       loading: false,
       errored: false,
       errorStatus: 0
@@ -335,6 +336,7 @@ class PycTestCatalog extends HTMLElement {
     const retired_input = document.createElement("input");
     retired_input.setAttribute("type", "checkbox");
     retired_input.setAttribute("data-role", "include-retired");
+    retired_input.checked = this._state.includeRetired;
     retired_input.addEventListener("change", () => {
       this._state.includeRetired = retired_input.checked;
       this._state.page = 1;
@@ -604,6 +606,12 @@ class PycTestCatalog extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The address describes what is on screen (ORC-27).
+    mirror_to_query({
+      project_id: this._state.projectId,
+      include_retired: this._state.includeRetired === true ? "true" : "",
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;

@@ -1,6 +1,6 @@
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
-import { mirror_to_query } from "../shared/view-state.js";
+import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
 // Project pickers need every project, not the API's default first page
@@ -208,7 +208,7 @@ class PycPodsList extends HTMLElement {
     super();
     this._state = {
       projectFilter: "",
-      page: 1,
+      page: page_from_query(),
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
@@ -370,6 +370,7 @@ class PycPodsList extends HTMLElement {
       // client-side, so a page change only re-slices -- it must
       // not trigger a refetch (which used to reset to page 1).
       this._state.page = event.detail.page;
+      mirror_to_query({ page: this._state.page > 1 ? String(this._state.page) : "" });
       this._render_table_region();
     });
     this._pager = pager;
@@ -518,7 +519,10 @@ class PycPodsList extends HTMLElement {
       return;
     }
     // The address describes what is on screen (ORC-27).
-    mirror_to_query({ project_id: this._state.projectFilter });
+    mirror_to_query({
+      project_id: this._state.projectFilter,
+      page: this._state.page > 1 ? String(this._state.page) : ""
+    });
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
