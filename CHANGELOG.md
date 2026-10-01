@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- The Secrets page keeps which project or user it is showing in the address (ORC-27). The tab was there (`?scope=project`)
+  but the owner chosen inside it was not, so a shared link opened the Project tab on its first project whatever the sender
+  was looking at. The address now carries the owner too (`?scope=project&owner=<project id>`): the page opens on that owner
+  when the list offers it, writes a new choice back, leaves it out for Org, and corrects the address to the first owner when
+  the one it names is not on offer. A link without `owner` keeps working.
+
 - Five more lists keep their filters and page in the address (ORC-27). The environments, clients, pods, resource pools and
   test catalog lists mirrored only the project, so a filtered or paged list could not be shared and a reload started again
   from the first page. They now read their state from the address when they open and write it back as it changes (without

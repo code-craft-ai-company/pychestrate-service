@@ -450,7 +450,7 @@ var PycSecrets = class extends HTMLElement {
     this._render_chrome();
     const wanted = query_choice("scope", ["project", "user"]).toUpperCase();
     if (wanted.length > 0) {
-      this._select_scope(wanted);
+      this._select_scope(wanted, query_value("owner"));
       return;
     }
     void this._refresh();
@@ -699,14 +699,15 @@ var PycSecrets = class extends HTMLElement {
    * re-fetch the listing.
    *
    * @param scope_kind The newly-selected scope kind.
+   * @param owner The owner (project or user id) to start on, when the address named one.
    */
-  _select_scope(scope_kind) {
+  _select_scope(scope_kind, owner) {
     if (scope_kind === this._state.scopeKind) {
       return;
     }
     this._state.scopeKind = scope_kind;
-    mirror_to_query({ scope: scope_kind === "ORG" ? "" : scope_kind.toLowerCase() });
-    this._state.scopeRef = "";
+    this._state.scopeRef = scope_kind !== "ORG" && typeof owner === "string" ? owner : "";
+    mirror_to_query({ scope: scope_kind === "ORG" ? "" : scope_kind.toLowerCase(), owner: this._state.scopeRef });
     this._state.page = 1;
     this._revealed.clear();
     this._reveal_errors.clear();
@@ -726,7 +727,7 @@ var PycSecrets = class extends HTMLElement {
       }
       const input = this._root.querySelector('[data-role="scope-ref-input"]');
       if (input instanceof HTMLElement) {
-        input.value = "";
+        input.value = this._state.scopeRef;
       }
     }
     this._sync_scope_ref_visibility();
@@ -846,6 +847,7 @@ var PycSecrets = class extends HTMLElement {
     return;
   }
   async _refresh() {
+    mirror_to_query({ owner: this._state.scopeKind === "ORG" ? "" : this._state.scopeRef });
     this._state.loading = true;
     this._state.errored = false;
     this._state.lastErrorStatus = 0;
