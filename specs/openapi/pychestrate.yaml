@@ -5532,6 +5532,34 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [slos]
+      summary: Replace an SLO definition.
+      operationId: slos_update
+      description: |
+        Replaces the editable definition (the create body: name, target, window, description, definition
+        config, notification route, auto-attach). The `kind` is required and must be the SLO's own: a
+        different kind is a different objective, so it is created anew (`422`). The same rules as create
+        apply (`409` for a name another SLO in the project has; `422` for a target outside 0..1, a
+        window that is not positive, or a config the kind refuses). A change that alters nothing records
+        nothing; otherwise the version goes up and `entity.slo.updated` names the fields that changed.
+        Needs `system:slos.write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SloCreate' }
+      responses:
+        '200':
+          description: The SLO after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
     delete:
       tags: [slos]
       summary: Delete an SLO definition.

@@ -147,6 +147,31 @@ function slo_create_message_for_status(status, detail) {
   const rtnval = "Failed to create SLO (HTTP " + String(status) + ").";
   return rtnval;
 }
+function slo_update_message_for_status(status, detail, name) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
+  if (status === 200) {
+    const rtnval2 = "SLO \u201C" + name + "\u201D saved.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "Another SLO already has that name.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = reason.length > 0 ? "The change was rejected: " + reason : "The change was rejected \u2014 check the fields.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That SLO no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to edit SLOs.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to save the SLO (HTTP " + String(status) + ").";
+  return rtnval;
+}
 function slo_delete_message_for_status(status, name) {
   if (status === 204 || status === 200) {
     const rtnval2 = "SLO \u201C" + name + "\u201D deleted.";
@@ -216,6 +241,7 @@ class PycSlos extends HTMLElement {
   _root;
   _table_region;
   _create_region;
+  _editing;
   _toast_region;
   constructor() {
     super();
@@ -235,6 +261,7 @@ class PycSlos extends HTMLElement {
     this._root = null;
     this._table_region = null;
     this._create_region = null;
+    this._editing = null;
     this._toast_region = null;
   }
   /**
@@ -667,7 +694,7 @@ class PycSlos extends HTMLElement {
       {
         key: "burn",
         label: "Achieved",
-        width: "11rem",
+        width: "10rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
           burn_badge.classList.add("pyc-metrics__badge");
@@ -684,7 +711,7 @@ class PycSlos extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
-        width: "18rem",
+        width: "21rem",
         sortable: false,
         render: (slo) => {
           // Table cells render inside the table's shadow root, out of reach of
@@ -704,6 +731,16 @@ class PycSlos extends HTMLElement {
             void self._on_load_status(slo, status_button);
           });
           actions.appendChild(status_button);
+          const edit_button = document.createElement("mj-button");
+          edit_button.classList.add("pyc-metrics__button");
+          edit_button.setAttribute("type", "button");
+          edit_button.setAttribute("data-role", "edit-slo");
+          hide_unless_may(edit_button, "system:slos.write");
+          edit_button.textContent = "Edit";
+          edit_button.addEventListener("click", () => {
+            self._open_edit_form(slo);
+          });
+          actions.appendChild(edit_button);
           const delete_button = document.createElement("mj-button");
           delete_button.classList.add("pyc-metrics__button");
           delete_button.setAttribute("type", "button");
@@ -913,7 +950,8 @@ class PycSlos extends HTMLElement {
       return;
     }
     const region = this._create_region;
-    if (region.hidden === true) {
+    if (region.hidden === true || this._editing !== null) {
+      this._editing = null;
       this._render_create_form();
       region.hidden = false;
       reveal(region);
@@ -923,42 +961,72 @@ class PycSlos extends HTMLElement {
     return;
   }
   /**
-   * Render the create-SLO form into the create region.
+   * Open the form on an existing SLO to change its name, target, window or
+   * definition. The kind is shown but cannot change (a different kind is a
+   * different objective: create a new SLO).
+   *
+   * @param slo The SLO row to edit.
+   */
+  _open_edit_form(slo) {
+    if (this._create_region === null) {
+      return;
+    }
+    this._editing = slo;
+    this._render_create_form();
+    this._create_region.hidden = false;
+    reveal(this._create_region);
+    return;
+  }
+  /**
+   * Render the create-SLO form into the create region, or -- when an SLO is
+   * being edited -- the same form filled in with that SLO's values.
    */
   _render_create_form() {
     if (this._create_region === null) {
       return;
     }
+    const editing = this._editing;
+    const prefix = editing === null ? "create" : "edit";
     const form = document.createElement("form");
     form.classList.add("pyc-metrics__form");
-    form.setAttribute("data-role", "create-form");
+    form.setAttribute("data-role", prefix + "-form");
+    if (editing !== null) {
+      const heading = document.createElement("h3");
+      heading.classList.add("pyc-metrics__form-heading");
+      heading.setAttribute("data-role", "edit-heading");
+      heading.textContent = "Edit the SLO \u201C" + editing.name + "\u201D";
+      form.appendChild(heading);
+    }
     const name_input = this._build_text_field(
       form,
       "Name",
-      "create-name",
+      prefix + "-name",
       "checkout availability"
     );
     const kind_input = this._build_text_field(
       form,
       "Kind",
-      "create-kind",
+      prefix + "-kind",
       DEFAULT_SLO_KIND
     );
-    kind_input.value = DEFAULT_SLO_KIND;
+    kind_input.value = editing === null ? DEFAULT_SLO_KIND : editing.kind;
     kind_input.setAttribute(
       "help-text",
-      "availability_ratio: achieved = good / total over the window."
+      editing === null ? "availability_ratio: achieved = good / total over the window." : "The kind cannot be changed; create a new SLO for a different kind."
     );
+    if (editing !== null) {
+      kind_input.toggleAttribute("disabled", true);
+    }
     const target_input = this._build_text_field(
       form,
       "Target ratio (0..1)",
-      "create-target",
+      prefix + "-target",
       "0.995"
     );
     const window_input = this._build_text_field(
       form,
       "Window (seconds)",
-      "create-window",
+      prefix + "-window",
       "604800"
     );
     const config_label = document.createElement("label");
@@ -966,7 +1034,7 @@ class PycSlos extends HTMLElement {
     config_label.textContent = "Definition config (JSON)";
     const config_area = document.createElement("mj-textarea");
     config_area.classList.add("pyc-metrics__input");
-    config_area.setAttribute("data-role", "create-config");
+    config_area.setAttribute("data-role", prefix + "-config");
     config_area.setAttribute("placeholder", SLO_CONFIG_EXAMPLE);
     config_area.setAttribute(
       "help-text",
@@ -978,12 +1046,26 @@ class PycSlos extends HTMLElement {
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-metrics__button");
     submit_button.setAttribute("type", "submit");
-    submit_button.setAttribute("data-role", "create-submit");
-    submit_button.textContent = "Create SLO";
+    submit_button.setAttribute("data-role", prefix + "-submit");
+    submit_button.textContent = editing === null ? "Create SLO" : "Save changes";
     form.appendChild(submit_button);
+    if (editing !== null) {
+      const cancel_button = document.createElement("mj-button");
+      cancel_button.classList.add("pyc-metrics__button");
+      cancel_button.setAttribute("type", "button");
+      cancel_button.setAttribute("data-role", "edit-cancel");
+      cancel_button.textContent = "Cancel";
+      cancel_button.addEventListener("click", () => {
+        this._editing = null;
+        if (this._create_region !== null) {
+          this._create_region.hidden = true;
+        }
+      });
+      form.appendChild(cancel_button);
+    }
     const status = document.createElement("p");
     status.classList.add("pyc-metrics__form-status");
-    status.setAttribute("data-role", "create-status");
+    status.setAttribute("data-role", prefix + "-status");
     form.appendChild(status);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -998,6 +1080,13 @@ class PycSlos extends HTMLElement {
       );
     });
     this._create_region.replaceChildren(form);
+    if (editing !== null) {
+      // Filled in once the form is in the page: the inputs draw their value when they connect.
+      name_input.value = editing.name;
+      target_input.value = String(editing.target);
+      window_input.value = String(editing.window_seconds);
+      config_area.value = JSON.stringify(editing.definition_config ?? {}, null, 2);
+    }
     return;
   }
   /**
@@ -1025,7 +1114,8 @@ class PycSlos extends HTMLElement {
     return input;
   }
   async _submit_create(form, name_input, kind_input, target_input, window_input, config_area, submit_button) {
-    const status = form.querySelector('[data-role="create-status"]');
+    const editing = this._editing;
+    const status = form.querySelector('[data-role="' + (editing === null ? "create" : "edit") + '-status"]');
     const name = name_input.value.trim();
     const kind = kind_input.value.trim();
     if (name.length === 0 || kind.length === 0) {
@@ -1063,15 +1153,15 @@ class PycSlos extends HTMLElement {
     }
     submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
-      status.textContent = "Creating SLO\u2026";
+      status.textContent = editing === null ? "Creating SLO\u2026" : "Saving SLO\u2026";
     }
-    const outcome = await this._do_create(
+    const outcome = editing === null ? await this._do_create(
       name,
       kind,
       target,
       window_seconds,
       definition_config
-    );
+    ) : await this._do_update(editing, name, target, window_seconds, definition_config);
     submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
@@ -1081,6 +1171,14 @@ class PycSlos extends HTMLElement {
       outcome.ok === true ? "ok" : "error"
     );
     if (outcome.ok === true) {
+      if (editing !== null) {
+        // The target or window may have changed, so the status shown for it is stale.
+        this._status.delete(editing.slo_id);
+        this._editing = null;
+        if (this._create_region !== null) {
+          this._create_region.hidden = true;
+        }
+      }
       await this._refresh();
     }
     return;
@@ -1106,6 +1204,60 @@ class PycSlos extends HTMLElement {
       definition_config
     );
     return rtnval;
+  }
+  /**
+   * ``PUT`` an edited SLO (the create body; its kind cannot change). Exposed so
+   * unit tests can drive an edit without a form-submit event.
+   *
+   * @param slo The SLO being edited.
+   * @param name The new name.
+   * @param target The new target ratio.
+   * @param window_seconds The new window.
+   * @param definition_config The new kind-specific configuration.
+   *
+   * @returns ``{ok, status, sloId, message}``.
+   */
+  async updateSlo(slo, name, target, window_seconds, definition_config) {
+    const rtnval = await this._do_update(slo, name, target, window_seconds, definition_config);
+    return rtnval;
+  }
+  async _do_update(slo, name, target, window_seconds, definition_config) {
+    if (this._state.projectId.length === 0) {
+      return { ok: false, status: 0, sloId: slo.slo_id, message: "Select a project before editing an SLO." };
+    }
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(build_slo_detail_url(this._state.projectId, slo.slo_id), {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name, kind: slo.kind, target, window_seconds, definition_config })
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+      if (response.ok !== true) {
+        try {
+          detail = slo_problem_detail(await response.json());
+        } catch (parse_reason) {
+          detail = "";
+        }
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.metrics.slo_update_failed", { reason: String(reason) });
+      return { ok: false, status: 0, sloId: slo.slo_id, message: "Failed to reach the SLO service." };
+    }
+    return {
+      ok: status === 200,
+      status,
+      sloId: slo.slo_id,
+      message: slo_update_message_for_status(status, detail, name)
+    };
   }
   async _do_create(name, kind, target, window_seconds, definition_config) {
     if (this._state.projectId.length === 0) {
@@ -1200,5 +1352,6 @@ export {
   slo_delete_message_for_status,
   slo_problem_detail,
   slo_status_label,
-  slo_status_tone
+  slo_status_tone,
+  slo_update_message_for_status
 };

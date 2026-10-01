@@ -99,6 +99,24 @@ def list_for_project(
     return rtnval
 
 
+def update_slo_row(
+        *,
+        db_session: DbSession,
+        row: SLO,
+        values: Dict[str, Any],
+        updated_at: datetime
+    ) -> None:
+    """
+        Apply the changed fields, bump the version and stamp the time.
+    """
+    for field_name, value in values.items():
+        setattr(row, field_name, value)
+    row.version = int(row.version or 1) + 1
+    row.updated_at = updated_at
+    db_session.flush()
+    return
+
+
 def delete_slo_row(
         *,
         db_session: DbSession,

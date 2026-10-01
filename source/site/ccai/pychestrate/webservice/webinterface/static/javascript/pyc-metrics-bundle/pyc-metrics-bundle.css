@@ -267,6 +267,13 @@ pyc-alert-rules {
     background: var(--pyc-metrics-surface);
 }
 
+/* The title of a form that edits something that already exists (the SLO form, in edit mode) */
+.pyc-metrics__form-heading {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 1rem;
+}
+
 /* Alert-rule editor -- inline checkbox field (label beside box) */
 .pyc-metrics__field--inline {
     flex-direction: row;

@@ -224,6 +224,96 @@ def create_slo(
     return rtnval
 
 
+def update_slo(
+        *,
+        db_session: DbSession,
+        slo_id: str,
+        name: str,
+        target: float,
+        window_seconds: int,
+        description: str = "",
+        definition_config: Optional[Mapping[str, Any]] = None,
+        default_notification_route_key: Optional[str] = None,
+        auto_attach_burn_rate_alerts: bool = False
+    ) -> SLOView:
+    """
+        Replace an SLO's editable definition (``specs/7-slo-views``: ``PUT``). The kind and the
+        project cannot change: a different kind is a different objective, so it is created anew.
+        The same rules as :func:`create_slo` apply (a non-empty name, unique in the project; a target in
+        ``[0.0, 1.0]``; a positive window; a config the kind accepts). When nothing differs from what is
+        stored nothing is written; otherwise the version goes up, ``updated_at`` is stamped and
+        ``entity.slo.updated`` names the fields that changed.
+
+        :raises: SLONotFoundError, SLOConflictError, SLOConfigInvalidError.
+    """
+    row = _require_slo(db_session=db_session, slo_id=slo_id)
+    if name is None or len(name) == 0:
+        err_msg = os.linesep.join(["SLO name must be non-empty."])
+        raise SLOConfigInvalidError(err_msg) from None
+    if target < 0.0 or target > 1.0:
+        err_lines = ["SLO target must be in [0.0, 1.0]."]
+        err_lines.append("VALUE: {}".format(target))
+        raise SLOConfigInvalidError(os.linesep.join(err_lines)) from None
+    if window_seconds <= 0:
+        err_lines = ["SLO window_seconds must be positive."]
+        err_lines.append("VALUE: {}".format(window_seconds))
+        raise SLOConfigInvalidError(os.linesep.join(err_lines)) from None
+
+    if name != row.name:
+        clash = repository.find_by_name(db_session=db_session, project_id=str(row.project_id), name=name)
+        if clash is not None and str(clash.slo_id) != str(row.slo_id):
+            err_lines = ["SLO name already exists in project."]
+            err_lines.append("PROJECT_ID: {}".format(row.project_id))
+            err_lines.append("NAME: {}".format(name))
+            raise SLOConflictError(os.linesep.join(err_lines)) from None
+
+    kind_cls = _resolve_kind(kind=row.kind)
+    config = dict(definition_config or {})
+    ok, issues = kind_cls.validate_config(config=config)
+    if ok is False:
+        err_lines = ["SLO definition_config failed validation: {} issue(s).".format(len(issues))]
+        err_lines.append("KIND: {}".format(row.kind))
+        for index, issue in enumerate(issues):
+            err_lines.append("  [{}] {}".format(index + 1, issue))
+        raise SLOConfigInvalidError(os.linesep.join(err_lines)) from None
+
+    wanted = {
+        "name": name,
+        "description": description,
+        "target": float(target),
+        "window_seconds": int(window_seconds),
+        "definition_config": config,
+        "default_notification_route_key": default_notification_route_key,
+        "auto_attach_burn_rate_alerts": bool(auto_attach_burn_rate_alerts),
+    }
+    changed = [field_name for field_name, value in wanted.items() if getattr(row, field_name) != value]
+    if len(changed) == 0:
+        rtnval = _to_view(row=row)
+        return rtnval
+
+    repository.update_slo_row(
+        db_session=db_session, row=row, values={field_name: wanted[field_name] for field_name in changed}, updated_at=utc_now(),
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=SLOEventTopics.UPDATED,
+            payload={
+                "slo_id": str(row.slo_id),
+                "project_id": str(row.project_id),
+                "name": row.name,
+                "kind": row.kind,
+                "version": int(row.version),
+                "changed": changed,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _to_view(row=row)
+    return rtnval
+
+
 def get_slo(
         *,
         db_session: DbSession,

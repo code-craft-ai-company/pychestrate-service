@@ -10,6 +10,7 @@ Covers the SLO operations attached by ``register_slos_routes``:
 * GET    /api/v1/projects/{project_id}/slos
 * POST   /api/v1/projects/{project_id}/slos
 * GET    /api/v1/projects/{project_id}/slos/{slo_id}
+* PUT    /api/v1/projects/{project_id}/slos/{slo_id}
 * DELETE /api/v1/projects/{project_id}/slos/{slo_id}
 
 Auth (401/403), session boundary (503), project not-found (404),
@@ -208,11 +209,11 @@ def _make_slo_status(*, slo_id: str = "slo-1") -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_slos_routes_attaches_four_endpoints():
+def test_register_slos_routes_attaches_five_endpoints():
     """
     **Feature: 7-slo-views PR p21c**
-    **Property: register_slos_routes attaches the four method+path
-    pairs from the OpenAPI spec.**
+    **Property: register_slos_routes attaches the five method+path
+    pairs from the OpenAPI spec (PUT edits an SLO).**
     """
     app = _FakeApp()
     slos_routes.register_slos_routes(app=app, version_prefix="/api/v1")
@@ -220,6 +221,7 @@ def test_register_slos_routes_attaches_four_endpoints():
         ("/api/v1/projects/{project_id}/slos", ("GET",)),
         ("/api/v1/projects/{project_id}/slos", ("POST",)),
         ("/api/v1/projects/{project_id}/slos/{slo_id}", ("GET",)),
+        ("/api/v1/projects/{project_id}/slos/{slo_id}", ("PUT",)),
         ("/api/v1/projects/{project_id}/slos/{slo_id}", ("DELETE",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)

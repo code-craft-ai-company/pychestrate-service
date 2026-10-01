@@ -11,16 +11,15 @@ Implements the SLO-view operations from
 * ``GET    /api/v1/projects/{project_id}/slos``
 * ``POST   /api/v1/projects/{project_id}/slos``
 * ``GET    /api/v1/projects/{project_id}/slos/{slo_id}``
+* ``PUT    /api/v1/projects/{project_id}/slos/{slo_id}``
 * ``DELETE /api/v1/projects/{project_id}/slos/{slo_id}``
 
 DOMAIN NOTE -- the in-tree SLO facade
 (``metrics.slos.service``) ships ``create_slo``, ``get_slo``,
-``list_slos_for_project``, ``delete_slo``, and ``compute_status``.
-It does NOT ship an ``update_slo`` mutator (the SLO row carries a
-``version`` column reserved for an M2 edit path that has not
-landed). A ``PATCH`` route is therefore intentionally NOT
-registered -- there is no domain capability behind it. The
-``GET .../slos/{slo_id}`` read embeds the current burn-rate /
+``list_slos_for_project``, ``update_slo``, ``delete_slo``, and
+``compute_status``. ``PUT`` replaces the editable definition (the
+create body; the kind cannot change) and bumps the row's ``version``.
+The ``GET .../slos/{slo_id}`` read embeds the current burn-rate /
 status by calling ``compute_status``; the ``GET .../slos``
 list embeds the same ``status`` block per item (bounded by
 ``MAX_LIST_STATUS_ITEMS`` per page) so the SLOs page can show
@@ -667,6 +666,91 @@ def handle_create_slo(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# PUT /api/v1/projects/{project_id}/slos/{slo_id}
+# ---------------------------------------------------------------------------
+
+
+def handle_update_slo(request: Request) -> Response:
+    """
+        ``PUT .../slos/{slo_id}`` -- replace an SLO's definition (``specs/7-slo-views``).
+
+        The body is the create body. ``kind`` is required and must be the SLO's own (a different
+        kind is a different objective: create a new SLO); the project cannot change. ``409`` for a
+        name another SLO in the project has; ``422`` for an invalid value or a config the kind refuses;
+        ``404`` for an unknown SLO or one in another project. Nothing is written when nothing differs.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the SLO, or a problem response.
+    """
+    project_id = request.path_params.get("project_id", "")
+    slo_id = request.path_params.get("slo_id", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(request=request, db_session=db_session, permission_key=SLOS_WRITE_PERMISSION_KEY)
+        _require_project_exists(request=request, db_session=db_session, project_id=project_id)
+        body = _decode_json_object_or_abort(request=request)
+
+        try:
+            existing = slos_service.get_slo(db_session=db_session, slo_id=slo_id)
+        except SLONotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"slo_id": slo_id})
+            existing = None  # unreachable
+        if str(existing.project_id) != str(project_id):
+            _abort_problem(
+                request=request, status=404, detail="SLO does not belong to this project.",
+                extensions={"project_id": project_id, "slo_id": slo_id},
+            )
+
+        name = body.get("name", None)
+        if not isinstance(name, str) or len(name) == 0:
+            _abort_problem(request=request, status=422, detail="Field 'name' is required.", extensions={"missing_fields": ["name"]})
+        kind = body.get("kind", None)
+        if kind != existing.kind:
+            _abort_problem(
+                request=request, status=422,
+                detail="The kind of an SLO cannot be changed ('{}'): create a new SLO for a different kind.".format(existing.kind),
+                extensions={"invalid_fields": ["kind"], "kind": existing.kind},
+            )
+        target = body.get("target", None)
+        if isinstance(target, bool) or not isinstance(target, (int, float)):
+            _abort_problem(request=request, status=422, detail="Field 'target' is required and must be a number.", extensions={"missing_fields": ["target"]})
+        window_seconds = body.get("window_seconds", existing.window_seconds)
+        if isinstance(window_seconds, bool) or not isinstance(window_seconds, int):
+            _abort_problem(request=request, status=422, detail="Field 'window_seconds' must be an integer.")
+        description = body.get("description", existing.description)
+        if isinstance(description, str) is False:
+            _abort_problem(request=request, status=422, detail="Field 'description' must be a string.")
+        definition_config = body.get("definition_config", dict(existing.definition_config))
+        if isinstance(definition_config, dict) is False:
+            _abort_problem(request=request, status=422, detail="Field 'definition_config' must be an object.")
+        route_key = body.get("default_notification_route_key", existing.default_notification_route_key)
+        if route_key is not None and isinstance(route_key, str) is False:
+            _abort_problem(request=request, status=422, detail="Field 'default_notification_route_key' must be a string.")
+        auto_attach = body.get("auto_attach_burn_rate_alerts", existing.auto_attach_burn_rate_alerts)
+        if isinstance(auto_attach, bool) is False:
+            _abort_problem(request=request, status=422, detail="Field 'auto_attach_burn_rate_alerts' must be a boolean.")
+
+        try:
+            view = slos_service.update_slo(
+                db_session=db_session, slo_id=slo_id, name=name, target=float(target), window_seconds=int(window_seconds),
+                description=description, definition_config=dict(definition_config),
+                default_notification_route_key=route_key, auto_attach_burn_rate_alerts=auto_attach,
+            )
+        except SLOConflictError as xcpt:
+            _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"name": name})
+            view = None  # unreachable
+        except (SLOConfigInvalidError, SLOKindUnknownError) as xcpt:
+            _abort_problem(request=request, status=422, detail=str(xcpt), extensions={"kind": existing.kind})
+            view = None  # unreachable
+
+        rtnval: Response = JSONResponse(content=_slo_view_to_dict(view=view), status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/projects/{project_id}/slos/{slo_id}
 # ---------------------------------------------------------------------------
 
@@ -811,8 +895,7 @@ def register_slos_routes(*, app: Any, version_prefix: str) -> None:
     """
         Attach the SLO-view REST routes to a webworks app.
 
-        DOMAIN NOTE -- no ``PATCH`` route is registered: the SLO
-        facade ships no ``update_slo`` mutator.
+        An SLO is replaced with ``PUT`` (the create body; its kind cannot change).
 
         :param app: WebWorks application built by
                     ``establish_webapp_persona``.
@@ -832,6 +915,9 @@ def register_slos_routes(*, app: Any, version_prefix: str) -> None:
         base + SLOS_PATH_SUFFIX + "/{slo_id}", methods=["GET"],
     )(handle_read_slo)
     app.attach_route(
+        base + SLOS_PATH_SUFFIX + "/{slo_id}", methods=["PUT"],
+    )(handle_update_slo)
+    app.attach_route(
         base + SLOS_PATH_SUFFIX + "/{slo_id}", methods=["DELETE"],
     )(handle_delete_slo)
     return
@@ -848,5 +934,6 @@ __all__ = [
     "handle_list_slos",
     "handle_create_slo",
     "handle_read_slo",
+    "handle_update_slo",
     "handle_delete_slo",
 ]

@@ -9,7 +9,7 @@ Public surface:
   :class:`SLOBurnRateStateView`, :class:`SLOKindRecord` —
   IO shapes.
 * :func:`create_slo`, :func:`get_slo`,
-  :func:`list_slos_for_project`, :func:`delete_slo`,
+  :func:`list_slos_for_project`, :func:`update_slo`, :func:`delete_slo`,
   :func:`compute_status`, :func:`list_slo_kinds`.
 * :class:`SLODefinitionProtocol` factory contract +
   reference :class:`AvailabilityRatioSloKind`.
@@ -62,6 +62,7 @@ from ccai.pychestrate.webservice.metrics.slos.service import (
     get_slo,
     list_slo_kinds,
     list_slos_for_project,
+    update_slo,
 )
 
 

@@ -1014,7 +1014,7 @@ def handle_validate_pipeline(request: Request) -> Response:
             _abort_problem(
                 request=request,
                 status=422,
-                detail="Pipeline definition failed DAG validation.",
+                detail="The pipeline is not valid.",
                 extensions={
                     "reason": "dag_invalid",
                     "issues": list(view.issues),

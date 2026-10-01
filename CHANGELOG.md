@@ -34,7 +34,9 @@ preview tag.
   run time, in the middle of writing the run. `POST .../pipelines:validate` (and the page's Validate button) now run every
   step's inputs through its kind's own validation and report one line per problem naming the step ("Step 'build-image'
   (build): 'image' is required"); a step of a kind that is not loaded is reported too. A run whose inputs are invalid is
-  now refused before any run, stage or step row is written.
+  now refused before any run, stage or step row is written. The refusal's text no longer says "failed DAG validation" for
+  what are input problems: it says "The pipeline is not valid." and lists the lines (the machine-readable `reason` is
+  unchanged).
 
 - Section headings are one size across bundle and server pages (XC-05). A server-rendered card heading is 16px,
   weight 600; a bundle's section, panel and sub headings were 14px in some views (run detail, admin overview and
@@ -76,6 +78,18 @@ preview tag.
   envelope holds the id, from the catalog when the entry still exists.
 
 ### Added
+
+- An SLO can be edited (INS-12). It could only be created or deleted: a typo in a name or a tighter target meant
+  deleting the objective and losing its history. `PUT /api/v1/projects/{project_id}/slos/{slo_id}` replaces the
+  editable definition (name, target, window, description, definition config, notification route, auto-attach; a field
+  left out keeps its stored value) under the rules of create (`409` for a name another SLO in the project has, `422` for
+  a target outside 0..1, a window that is not positive or a config the kind refuses). The **kind** and the project cannot
+  change: a different kind is a different objective, so a `PUT` naming another kind is a `422` that says to create a new
+  SLO. Saving a change that alters nothing records nothing; otherwise the version goes up and `entity.slo.updated` names
+  the fields that changed. The SLOs page has an **Edit** button on each row (for people who may write SLOs): it opens the
+  create form filled in with the SLO's values (the kind shown but fixed), **Save changes** sends the `PUT`, closes the
+  form and shows the new target, a refusal is said in words and keeps the form open, and **Cancel** closes it. The
+  Actions column is wider so the three row buttons stay on one line.
 
 - A saved pipeline can be run from its page (ORC-13). A pipeline could be defined and validated in the UI but not
   run: the trigger API wanted the whole document sent again, which the page does not have. `POST
