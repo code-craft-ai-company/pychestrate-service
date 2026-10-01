@@ -796,6 +796,7 @@ class PycTestCatalog extends HTMLElement {
           trigger_button.setAttribute("data-role", "trigger-run");
           trigger_button.setAttribute("data-entry-id", entry.entry_id);
           trigger_button.textContent = "Trigger Run";
+          hide_unless_may(trigger_button, "system:test_runs.create");
           trigger_button.toggleAttribute("disabled", entry.retired === true);
           trigger_button.addEventListener("click", () => {
             void self._trigger_run(entry, trigger_button);

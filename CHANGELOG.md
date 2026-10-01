@@ -29,6 +29,16 @@ preview tag.
 
 ### Fixed
 
+- More write actions are left out for people who cannot use them (ORC-33). Seven controls were shown to everyone and refused
+  only after the click: a pod's **Drain** and **Retire** (`system:pods.write`), a client's **Revoke** on its page and in the
+  list (`system:clients.write`), a feature flag's **Enable/Disable** on the flags page and the admin overview
+  (`system:flags.admin`), a test catalog entry's **Trigger Run** (`system:test_runs.create`) and the pipeline form's **Save**
+  (`system:pipelines.write`; Validate stays, it only reads). They follow the same rule as the controls hidden earlier: left out
+  when the signed-in person is known not to hold the key, shown when the permission list cannot be read (the server decides, with
+  a reason). The existing browser test now covers twenty controls, each shown with its key and left out with only a read
+  permission. Not changed: secrets (their rights depend on the owner of each secret, not one key), and **Cancel run**
+  (its key is project-scoped and `/me/permissions` lists only `system:` keys).
+
 - An SLO with no data in its window is no longer drawn green (ORC-36). "No data in window" claimed health nobody had
   measured; it is now neutral grey like "Not evaluated" (healthy stays green, a nearly spent budget amber, breaching red;
   a browser test measures the colours from screenshots of the chips, since the audit reported "Breaching" as grey and it is

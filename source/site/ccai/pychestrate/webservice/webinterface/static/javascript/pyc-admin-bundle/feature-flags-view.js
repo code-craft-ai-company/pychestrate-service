@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { hide_unless_may } from "../shared/permissions.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { build_empty_state } from "../shared/empty-state.js";
 const FLAGS_PATH = "/api/v1/flags";
@@ -371,6 +372,7 @@ class PycFeatureFlags extends HTMLElement {
     toggle.setAttribute("data-role", "toggle");
     const target = next_flag_state(entry.state);
     toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    hide_unless_may(toggle, "system:flags.admin");
     if (is_retired === true) {
       toggle.toggleAttribute("disabled", true);
     }

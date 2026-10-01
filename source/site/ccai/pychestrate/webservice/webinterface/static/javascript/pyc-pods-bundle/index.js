@@ -794,6 +794,46 @@ var PycPodsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/admin-contact.js
 function with_access_request(message) {
   if (typeof message !== "string" || message.startsWith("You do not have permission") === false) {
@@ -1821,6 +1861,7 @@ var PycPodDetail = class extends HTMLElement {
     drain_button.setAttribute("type", "button");
     drain_button.setAttribute("data-role", "drain-action");
     drain_button.textContent = "Drain";
+    hide_unless_may(drain_button, "system:pods.write");
     const drain_allowed = DRAINABLE_POD_STATES.indexOf(current_state) >= 0;
     if (drain_allowed === false) {
       drain_button.toggleAttribute("disabled", true);
@@ -1838,6 +1879,7 @@ var PycPodDetail = class extends HTMLElement {
     retire_button.setAttribute("type", "button");
     retire_button.setAttribute("data-role", "retire-action");
     retire_button.textContent = "Retire";
+    hide_unless_may(retire_button, "system:pods.write");
     const retire_allowed = RETIRABLE_POD_STATES.indexOf(current_state) >= 0;
     if (retire_allowed === false) {
       retire_button.toggleAttribute("disabled", true);
@@ -3069,6 +3111,7 @@ var PycClientsList = class extends HTMLElement {
           revoke_button.setAttribute("type", "button");
           revoke_button.setAttribute("data-role", "revoke-action");
           revoke_button.textContent = "Revoke";
+          hide_unless_may(revoke_button, "system:clients.write");
           if (client.status === "REVOKED") {
             revoke_button.toggleAttribute("disabled", true);
             revoke_button.title = "This client is already revoked.";
@@ -3671,6 +3714,7 @@ var PycClientDetail = class extends HTMLElement {
     revoke_button.setAttribute("type", "button");
     revoke_button.setAttribute("data-role", "revoke-action");
     revoke_button.textContent = "Revoke";
+    hide_unless_may(revoke_button, "system:clients.write");
     if (client.status === "REVOKED") {
       revoke_button.toggleAttribute("disabled", true);
       revoke_button.title = "This client is already revoked.";

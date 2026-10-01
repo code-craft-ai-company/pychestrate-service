@@ -111,6 +111,7 @@ def _open_list(browser: Browser, items: List[Dict[str, Any]]) -> Any:
     stubs = {
         "/api/v1/projects": ONE_PROJECT,
         "/api/v1/projects/{}/pipelines".format(PROJECT_ID): {"items": items, "meta": {"page": 1, "per_page": 25, "total": len(items)}},
+        "/api/v1/me/permissions": {"permissions": ["system:pipelines.read", "system:pipelines.write"]},
     }
     page = open_shell_page(
         browser, path="/pipelines?project_id=" + PROJECT_ID, bundle_names=["pyc-site-shell", "pyc-pipelines-bundle"], api_stubs=stubs, **DESKTOP,

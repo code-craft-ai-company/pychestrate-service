@@ -1,3 +1,43 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
+var PERMISSIONS_URL = "/api/v1/me/permissions";
+var held = null;
+function held_permissions() {
+  if (held !== null) {
+    return held;
+  }
+  held = (async () => {
+    try {
+      const response = await fetch(PERMISSIONS_URL, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok !== true) {
+        return null;
+      }
+      const body = await response.json();
+      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
+        return null;
+      }
+      return new Set(body.permissions.filter((key) => typeof key === "string"));
+    } catch (reason) {
+      return null;
+    }
+  })();
+  return held;
+}
+async function may(permission_key) {
+  const keys = await held_permissions();
+  return keys === null ? true : keys.has(permission_key);
+}
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -538,6 +578,7 @@ var PycPipelinesList = class extends HTMLElement {
     save_button.setAttribute("type", "submit");
     save_button.setAttribute("data-role", "save-submit");
     save_button.textContent = "Save";
+    hide_unless_may(save_button, "system:pipelines.write");
     actions.appendChild(save_button);
     form.appendChild(actions);
     const dispatch_note = document.createElement("p");
@@ -1469,46 +1510,6 @@ var PycPipelinesList = class extends HTMLElement {
     return;
   }
 };
-
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/permissions.js
-var PERMISSIONS_URL = "/api/v1/me/permissions";
-var held = null;
-function held_permissions() {
-  if (held !== null) {
-    return held;
-  }
-  held = (async () => {
-    try {
-      const response = await fetch(PERMISSIONS_URL, {
-        method: "GET",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" }
-      });
-      if (response.ok !== true) {
-        return null;
-      }
-      const body = await response.json();
-      if (body === null || typeof body !== "object" || Array.isArray(body.permissions) === false) {
-        return null;
-      }
-      return new Set(body.permissions.filter((key) => typeof key === "string"));
-    } catch (reason) {
-      return null;
-    }
-  })();
-  return held;
-}
-async function may(permission_key) {
-  const keys = await held_permissions();
-  return keys === null ? true : keys.has(permission_key);
-}
-function hide_unless_may(element, permission_key) {
-  void may(permission_key).then((allowed) => {
-    if (allowed === false) {
-      element.hidden = true;
-    }
-  });
-}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/entity-names.js
 var PROJECTS_URL = "/api/v1/projects?per_page=500";

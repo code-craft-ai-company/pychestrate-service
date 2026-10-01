@@ -620,6 +620,11 @@ class PycAdminOverview extends HTMLElement {
     toggle.setAttribute("data-role", "toggle");
     const target = next_flag_state(entry.state);
     toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    void may("system:flags.admin").then((allowed) => {
+      if (allowed === false) {
+        toggle.hidden = true;
+      }
+    });
     if (is_retired === true) {
       toggle.toggleAttribute("disabled", true);
     }

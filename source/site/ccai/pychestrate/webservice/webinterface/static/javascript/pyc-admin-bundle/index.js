@@ -47,6 +47,13 @@ async function may(permission_key) {
   const keys = await held_permissions();
   return keys === null ? true : keys.has(permission_key);
 }
+function hide_unless_may(element, permission_key) {
+  void may(permission_key).then((allowed) => {
+    if (allowed === false) {
+      element.hidden = true;
+    }
+  });
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
@@ -534,6 +541,7 @@ var PycFeatureFlags = class extends HTMLElement {
     toggle.setAttribute("data-role", "toggle");
     const target = next_flag_state(entry.state);
     toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    hide_unless_may(toggle, "system:flags.admin");
     if (is_retired === true) {
       toggle.toggleAttribute("disabled", true);
     }
@@ -1865,6 +1873,11 @@ var PycAdminOverview = class extends HTMLElement {
     toggle.setAttribute("data-role", "toggle");
     const target = next_flag_state(entry.state);
     toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    void may("system:flags.admin").then((allowed) => {
+      if (allowed === false) {
+        toggle.hidden = true;
+      }
+    });
     if (is_retired === true) {
       toggle.toggleAttribute("disabled", true);
     }

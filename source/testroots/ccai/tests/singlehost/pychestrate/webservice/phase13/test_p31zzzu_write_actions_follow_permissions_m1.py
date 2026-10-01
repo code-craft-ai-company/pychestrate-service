@@ -50,10 +50,35 @@ DESKTOP: Dict[str, Any] = {"viewport": {"width": 1440, "height": 900}}
 PROJECT: str = "0f6c2c1e-1111-4000-8000-000000000001"
 PIPELINE: str = "e" * 64
 SLO: str = "0f6c2c1e-1111-4000-8000-0000000000a1"
+CLIENT: str = "0f6c2c1e-1111-4000-8000-0000000000c1"
+POD: str = "0f6c2c1e-1111-4000-8000-0000000000d1"
+ENTRY: str = "0f6c2c1e-1111-4000-8000-0000000000e1"
 
 PROJECTS = {"items": [{"project_id": PROJECT, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}}
 EXTRA: Dict[str, Any] = {
     "slo": {"/api/v1/projects/{}/slos".format(PROJECT): {"items": [{"slo_id": SLO, "project_id": PROJECT, "name": "API", "kind": "availability_ratio", "target": 0.999, "window_seconds": 86400, "definition_config": {}}], "meta": {"total": 1}}},
+    "flag": {"/api/v1/flags": [{"flag_key": "beta.search", "state": "enabled", "description": "Search beta", "updated_at": "2026-09-29T10:00:00+00:00"}]},
+    "client": {
+        "/api/v1/clients": [{
+            "client_id": CLIENT, "pod_name": "lab-pod", "status": "ACTIVE", "liveness_state": "ALIVE", "project_id": PROJECT,
+            "created_at": "2026-09-29T10:00:00+00:00", "last_seen": "2026-09-29T10:05:00+00:00", "capabilities": [],
+        }],
+        "/api/v1/clients/" + CLIENT: {
+            "client_id": CLIENT, "pod_name": "lab-pod", "status": "ACTIVE", "liveness_state": "ALIVE", "project_id": PROJECT,
+            "created_at": "2026-09-29T10:00:00+00:00", "last_seen": "2026-09-29T10:05:00+00:00", "capabilities": [],
+        },
+    },
+    "pod": {
+        "/api/v1/projects/{}/pods/{}/state".format(PROJECT, POD): {"pod_id": POD, "project_id": PROJECT, "state": "READY", "updated_at": "2026-09-29T10:00:00+00:00"},
+        "/api/v1/projects/{}/pods/{}/state/history".format(PROJECT, POD): {"items": [], "meta": {"total": 0}},
+        "/api/v1/projects/{}/pods/{}/state/transitions".format(PROJECT, POD): {"items": [], "meta": {"total": 0}},
+        "/api/v1/projects/{}/pods/{}/registration".format(PROJECT, POD): {"pod_id": POD, "project_id": PROJECT, "status": "registered"},
+        "/api/v1/projects/{}/pods/{}/registrations".format(PROJECT, POD): {"items": [], "meta": {"total": 0}},
+    },
+    "catalog": {"/api/v1/projects/{}/test-catalog".format(PROJECT): {"items": [{
+        "entry_id": ENTRY, "project_id": PROJECT, "name": "login smoke", "retired": False, "created_at": "2026-09-29T10:00:00+00:00",
+    }], "meta": {"total": 1, "page": 1, "per_page": 50}}},
+    "pipelines": {"/api/v1/projects/{}/pipelines".format(PROJECT): {"items": [], "meta": {"total": 0}}},
     "pipeline": {"/api/v1/projects/{}/pipelines/{}".format(PROJECT, PIPELINE): {
         "pipeline_id": PIPELINE, "project_id": PROJECT, "name": "release", "schema_version": 1, "stages": [], "filename": "p.yaml", "commit_sha": "abc", "cached_at": "2026-09-29T10:00:00+00:00",
     }},
@@ -73,6 +98,14 @@ CASES: List[Tuple[str, str, str, str, Optional[str], str, str]] = [
     ("delete an SLO", "/slos?project_id=" + PROJECT, "pyc-metrics-bundle", "slo", None, '[data-role="delete-slo"]', "system:slos.write"),
     ("trigger provisioning", "/provisioning-runs?project_id=" + PROJECT, "pyc-infra-bundle", "", None, '[data-role="trigger-toggle"]', "system:provisioning.create"),
     ("delete a pipeline", "/pipelines/{}?project_id={}".format(PIPELINE, PROJECT), "pyc-pipelines-bundle", "pipeline", None, '[data-role="delete-pipeline"]', "system:pipelines.write"),
+    ("save a pipeline", "/pipelines?project_id=" + PROJECT, "pyc-pipelines-bundle", "pipelines", None, '[data-role="save-submit"]', "system:pipelines.write"),
+    ("toggle a feature flag", "/admin/feature-flags", "pyc-admin-bundle", "flag", None, '[data-role="toggle"]', "system:flags.admin"),
+    ("toggle a feature flag from the admin overview", "/admin", "pyc-admin-bundle", "flag", None, '[data-role="toggle"]', "system:flags.admin"),
+    ("revoke a client from the list", "/clients", "pyc-pods-bundle", "client", None, '[data-role="revoke-action"]', "system:clients.write"),
+    ("revoke a client from its page", "/clients/" + CLIENT, "pyc-pods-bundle", "client", None, '[data-role="revoke-action"]', "system:clients.write"),
+    ("drain a pod", "/pods/{}?project_id={}".format(POD, PROJECT), "pyc-pods-bundle", "pod", None, '[data-role="drain-action"]', "system:pods.write"),
+    ("retire a pod", "/pods/{}?project_id={}".format(POD, PROJECT), "pyc-pods-bundle", "pod", None, '[data-role="retire-action"]', "system:pods.write"),
+    ("trigger a catalog run", "/test-catalog?project_id=" + PROJECT, "pyc-catalog-bundle", "catalog", None, '[data-role="trigger-run"]', "system:test_runs.create"),
 ]
 
 
@@ -106,7 +139,7 @@ def _visible(browser: Browser, case: Tuple[str, str, str, str, Optional[str], st
 def test_each_write_control_is_shown_to_a_holder_and_left_out_for_everyone_else(browser: Browser):
     """
     **Feature: hide what cannot be used (ORC-33)**
-    **Property: for each gated control (twelve of them), with the API's own key it is
+    **Property: for each gated control (twenty of them), with the API's own key it is
     on the page; holding only a read permission it is left out.**
     """
     results: Dict[str, Tuple[bool, bool]] = {}

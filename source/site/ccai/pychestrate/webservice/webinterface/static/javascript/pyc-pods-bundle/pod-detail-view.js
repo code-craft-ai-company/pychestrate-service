@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { confirm_action, label_from_button } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -894,6 +895,7 @@ class PycPodDetail extends HTMLElement {
     drain_button.setAttribute("type", "button");
     drain_button.setAttribute("data-role", "drain-action");
     drain_button.textContent = "Drain";
+    hide_unless_may(drain_button, "system:pods.write");
     const drain_allowed = DRAINABLE_POD_STATES.indexOf(current_state) >= 0;
     if (drain_allowed === false) {
       drain_button.toggleAttribute("disabled", true);
@@ -911,6 +913,7 @@ class PycPodDetail extends HTMLElement {
     retire_button.setAttribute("type", "button");
     retire_button.setAttribute("data-role", "retire-action");
     retire_button.textContent = "Retire";
+    hide_unless_may(retire_button, "system:pods.write");
     const retire_allowed = RETIRABLE_POD_STATES.indexOf(current_state) >= 0;
     if (retire_allowed === false) {
       retire_button.toggleAttribute("disabled", true);

@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { message_with_detail, problem_detail_of_body } from "../shared/problem-detail.js";
 import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -386,6 +387,8 @@ class PycPipelinesList extends HTMLElement {
     save_button.setAttribute("type", "submit");
     save_button.setAttribute("data-role", "save-submit");
     save_button.textContent = "Save";
+    // Validate only reads; saving a definition is the write.
+    hide_unless_may(save_button, "system:pipelines.write");
     actions.appendChild(save_button);
     form.appendChild(actions);
     const dispatch_note = document.createElement("p");

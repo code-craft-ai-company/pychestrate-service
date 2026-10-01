@@ -161,7 +161,7 @@ def test_revoking_a_client_from_a_table_row_asks_in_the_shells_dialog(browser: B
         "client_id": CLIENT_ID, "pod_name": "lab-pod", "status": "ACTIVE", "liveness_state": "ALIVE", "project_id": PROJECT_ID,
         "created_at": "2026-09-29T10:00:00+00:00", "last_seen": "2026-09-29T10:05:00+00:00", "capabilities": [],
     }
-    page = _open(browser, path="/clients", bundle="pyc-pods-bundle", stubs={"/api/v1/clients": [client]})
+    page = _open(browser, path="/clients", bundle="pyc-pods-bundle", stubs={"/api/v1/clients": [client], "/api/v1/me/permissions": {"permissions": ["system:clients.read", "system:clients.write"]}})
     try:
         seen = _drive(page, '[data-role="revoke-action"]')
     finally:
@@ -185,7 +185,7 @@ def test_disabling_a_flag_asks_in_the_shells_dialog_and_enabling_does_not(browse
         {"flag_key": "beta.search", "state": "enabled", "description": "Search beta", "updated_at": "2026-09-29T10:00:00+00:00"},
         {"flag_key": "beta.export", "state": "disabled", "description": "Export beta", "updated_at": "2026-09-29T10:00:00+00:00"},
     ]
-    page = _open(browser, path="/admin/feature-flags", bundle="pyc-admin-bundle", stubs={"/api/v1/flags": flags})
+    page = _open(browser, path="/admin/feature-flags", bundle="pyc-admin-bundle", stubs={"/api/v1/flags": flags, "/api/v1/me/permissions": {"permissions": ["system:flags.admin"]}})
     try:
         page.wait_for_selector('[data-flag-key="beta.export"] [data-role="toggle"]')
         page.wait_for_timeout(500)

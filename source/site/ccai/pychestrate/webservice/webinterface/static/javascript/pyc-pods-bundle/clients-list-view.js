@@ -1,3 +1,4 @@
+import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { confirm_action } from "../shared/confirm.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -960,6 +961,7 @@ class PycClientsList extends HTMLElement {
           revoke_button.setAttribute("type", "button");
           revoke_button.setAttribute("data-role", "revoke-action");
           revoke_button.textContent = "Revoke";
+          hide_unless_may(revoke_button, "system:clients.write");
           if (client.status === "REVOKED") {
             revoke_button.toggleAttribute("disabled", true);
             revoke_button.title = "This client is already revoked.";
