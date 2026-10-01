@@ -36,6 +36,13 @@ class ResourceKindUnknownError(ResourceError):
     """
 
 
+class ResourceRetiredError(ResourceError):
+    """
+        Raised when a caller asks to change a retired resource: retirement is
+        terminal and the record is kept as it was.
+    """
+
+
 class ResourceStateTransitionError(ResourceError):
     """
         Raised when a caller asks for a state transition that

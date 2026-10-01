@@ -5166,6 +5166,41 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [resources]
+      summary: Change a resource's name, description or tags.
+      operationId: resources_update
+      description: |
+        Changes `display_name`, `description` and/or `tags`; a field left out is
+        not touched. The kind, the identity and the attributes cannot be changed
+        here (`422` names them), and a retired resource is refused with `409`
+        (retirement is terminal). A change that alters nothing records nothing;
+        otherwise `entity.resource.updated` names the fields that changed.
+        Needs `system:resources.write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceUpdateRequest' }
+      responses:
+        '200':
+          description: The resource after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resource' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The resource is retired.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Nothing to change, a field that cannot be changed here, or an invalid value.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /resources/{resource_id}/state:
     parameters:
@@ -10800,6 +10835,16 @@ components:
             Validated and normalised by the kind. The `device` kind takes
             `hostname` (required), `mac_address`, `ipv4`, `ipv6`, `vendor`,
             `model`, `location` and `notes`.
+        tags:
+          type: array
+          items: { type: string }
+
+    ResourceUpdateRequest:
+      type: object
+      description: At least one of the three fields.
+      properties:
+        display_name: { type: string, minLength: 1 }
+        description: { type: string }
         tags:
           type: array
           items: { type: string }

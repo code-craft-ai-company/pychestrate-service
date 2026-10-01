@@ -65,6 +65,14 @@ preview tag.
 
 ### Added
 
+- A resource's name, description and tags can be changed over REST (RES-22). A resource could be registered and
+  read but not changed: a typo in a name, a new tag or a note meant retiring the device and registering it again.
+  `PATCH /api/v1/resources/{id}` (`system:resources.write`) changes `display_name`, `description` and/or `tags`;
+  a field left out is not touched. The kind, identity, attributes, state and project cannot be changed there (422
+  names them), a retired resource is refused (409: retirement is terminal), and a change that alters nothing
+  records nothing; a real change publishes `entity.resource.updated` naming the fields. `DELETE` is deliberately
+  not added: a resource is retired (`POST /resources/{id}/state`), which keeps its history.
+
 - A deactivated user can be anonymised for a data-protection request (ADM-41; decisions recorded in
   `specs/1-user-management`, Requirement 5). The user's page has an **Anonymise** button for a deactivated
   account (`POST /admin/users/{id}/anonymise`, `system:users.write`); it asks for the login name to be typed

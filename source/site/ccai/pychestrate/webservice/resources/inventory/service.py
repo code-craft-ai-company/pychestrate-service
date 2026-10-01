@@ -29,6 +29,7 @@ from ccai.pychestrate.webservice.resources.inventory.errors import (
     ResourceIdentityConflictError,
     ResourceKindUnknownError,
     ResourceNotFoundError,
+    ResourceRetiredError,
     ResourceStateTransitionError,
 )
 from ccai.pychestrate.webservice.resources.inventory.events import (
@@ -182,6 +183,72 @@ def list_resources(
         include_retired=include_retired,
     )
     rtnval = [_to_view(row=row) for row in rows]
+    return rtnval
+
+
+def update_resource(
+        *,
+        db_session: DbSession,
+        resource_id: str,
+        display_name: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[Tuple[str, ...]] = None,
+        actor: str = "system:test"
+    ) -> ResourceView:
+    """
+        Change a resource's display name, description and/or tags (a field left as ``None``
+        is not touched). Its kind, identity and attributes are not editable here: the identity
+        is what makes it the same device, and the attributes are validated by the kind. A
+        retired resource is refused (retirement is terminal). Nothing is recorded when nothing
+        actually changed; otherwise ``entity.resource.updated`` names the fields that did.
+
+        :raises: ResourceNotFoundError, ResourceRetiredError.
+    """
+    row = repository.find_by_id(db_session=db_session, resource_id=resource_id)
+    if row is None:
+        err_lines = ["Resource not found."]
+        err_lines.append("RESOURCE_ID: {}".format(resource_id))
+        err_msg = os.linesep.join(err_lines)
+        raise ResourceNotFoundError(err_msg) from None
+    if row.state == ResourceState.RETIRED:
+        err_lines = ["Resource is retired and cannot be changed."]
+        err_lines.append("RESOURCE_ID: {}".format(resource_id))
+        err_msg = os.linesep.join(err_lines)
+        raise ResourceRetiredError(err_msg) from None
+
+    new_name = row.display_name if display_name is None else display_name
+    new_description = row.description if description is None else description
+    new_tags = list(row.tags or []) if tags is None else list(tags)
+    changed: List[str] = []
+    if new_name != row.display_name:
+        changed.append("display_name")
+    if new_description != row.description:
+        changed.append("description")
+    if new_tags != list(row.tags or []):
+        changed.append("tags")
+    if len(changed) == 0:
+        rtnval = _to_view(row=row)
+        return rtnval
+
+    repository.update_profile(
+        db_session=db_session, row=row, display_name=new_name, description=new_description,
+        tags=new_tags, updated_at=utc_now(),
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=ResourceEventTopics.UPDATED,
+            payload={
+                "resource_id": str(row.resource_id),
+                "project_id": str(row.project_id),
+                "changed": changed,
+                "actor": actor,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _to_view(row=row)
     return rtnval
 
 

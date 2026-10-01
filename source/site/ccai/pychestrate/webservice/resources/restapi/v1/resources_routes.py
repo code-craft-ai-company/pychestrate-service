@@ -64,6 +64,7 @@ from ccai.pychestrate.webservice.resources.inventory.errors import (
     ResourceIdentityConflictError,
     ResourceKindUnknownError,
     ResourceNotFoundError,
+    ResourceRetiredError,
     ResourceStateTransitionError,
 )
 from ccai.pychestrate.webservice.resources.inventory.models import (
@@ -710,6 +711,97 @@ def handle_read_resource(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/v1/resources/{resource_id}
+# ---------------------------------------------------------------------------
+
+
+def handle_update_resource(request: Request) -> Response:
+    """
+        ``PATCH /api/v1/resources/{resource_id}`` -- change a resource's
+        ``display_name``, ``description`` and/or ``tags`` (RES-22).
+
+        At least one of those fields must be in the body; a field left out is not
+        touched. The kind, the identity and the attributes cannot be changed here
+        (``422`` names them), and a retired resource is refused (``409``): retirement
+        is terminal. ``404`` for an unknown id.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the ``Resource``, or a problem response.
+    """
+    resource_id = request.path_params.get("resource_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(
+            request=request, db_session=db_session,
+            permission_key=RESOURCES_WRITE_PERMISSION_KEY,
+        )
+        resource_id = _require_resource_id(request=request)
+        body = _decode_json_object_or_abort(request=request)
+
+        fixed = [name for name in ("kind", "identity_hash", "attributes", "project_id", "state") if name in body]
+        if len(fixed) > 0:
+            _abort_problem(
+                request=request, status=422,
+                detail="These cannot be changed here: {}. Only 'display_name', 'description' and 'tags' can.".format(", ".join(fixed)),
+                extensions={"invalid_fields": fixed},
+            )
+        if all(name not in body for name in ("display_name", "description", "tags")):
+            _abort_problem(
+                request=request, status=422,
+                detail="Give at least one of 'display_name', 'description' and 'tags'.",
+                extensions={"missing_fields": ["display_name", "description", "tags"]},
+            )
+        display_name = None
+        if "display_name" in body:
+            raw_name = body["display_name"]
+            if isinstance(raw_name, str) is False or len(raw_name.strip()) == 0:
+                _abort_problem(
+                    request=request, status=422, detail="Field 'display_name' must be a non-empty string.",
+                    extensions={"invalid_fields": ["display_name"]},
+                )
+            display_name = raw_name.strip()
+        description = None
+        if "description" in body:
+            if isinstance(body["description"], str) is False:
+                _abort_problem(
+                    request=request, status=422, detail="Field 'description' must be a string.",
+                    extensions={"invalid_fields": ["description"]},
+                )
+            description = body["description"]
+        tags = None
+        if "tags" in body:
+            tags_raw = body["tags"]
+            if isinstance(tags_raw, list) is False or all(isinstance(tag, str) for tag in tags_raw) is False:
+                _abort_problem(
+                    request=request, status=422, detail="Field 'tags' must be an array of strings.",
+                    extensions={"invalid_fields": ["tags"]},
+                )
+            tags = tuple(dict.fromkeys(tag.strip() for tag in tags_raw if len(tag.strip()) > 0))
+
+        try:
+            view = inventory_service.update_resource(
+                db_session=db_session, resource_id=resource_id, display_name=display_name,
+                description=description, tags=tags, actor="user:{}".format(principal.user_id),
+            )
+        except ResourceNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"resource_id": resource_id})
+            view = None  # unreachable
+        except ResourceRetiredError:
+            _abort_problem(
+                request=request, status=409,
+                detail="This resource is retired and cannot be changed.",
+                extensions={"resource_id": resource_id, "reason": "resource_retired"},
+            )
+            view = None  # unreachable
+
+        rtnval: Response = JSONResponse(content=_resource_view_to_dict(view=view), status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/resources/{resource_id}/state
 # ---------------------------------------------------------------------------
 
@@ -934,6 +1026,9 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{resource_id}", methods=["GET"],
     )(handle_read_resource)
     app.attach_route(
+        base + "/{resource_id}", methods=["PATCH"],
+    )(handle_update_resource)
+    app.attach_route(
         base + "/{resource_id}/state", methods=["POST"],
     )(handle_transition_resource_state)
     app.attach_route(
@@ -944,7 +1039,7 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
     )(handle_list_resource_usage_history)
 
     _LOGGER.info(
-        "pychestrate.resources.routes registered: 6 routes under %s",
+        "pychestrate.resources.routes registered: 7 routes under %s",
         base,
     )
     return
@@ -958,6 +1053,7 @@ __all__ = [
     "MAX_TIMELINE_LIMIT",
     "register_resources_routes",
     "handle_list_resources",
+    "handle_update_resource",
     "handle_register_resource",
     "handle_read_resource",
     "handle_transition_resource_state",

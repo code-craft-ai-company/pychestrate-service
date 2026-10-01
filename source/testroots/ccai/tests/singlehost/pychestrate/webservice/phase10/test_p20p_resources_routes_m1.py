@@ -206,11 +206,12 @@ def _make_usage_view(*, event_id: str = "evt-1") -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_resources_routes_attaches_six_endpoints():
+def test_register_resources_routes_attaches_seven_endpoints():
     """
     **Feature: 4-resources PR p20p**
-    **Property: register_resources_routes attaches the six
-    method+path pairs from the OpenAPI spec.**
+    **Property: register_resources_routes attaches the seven
+    method+path pairs from the OpenAPI spec (the update, RES-22,
+    is the seventh).**
     """
     app = _FakeApp()
     resources_routes.register_resources_routes(
@@ -220,6 +221,7 @@ def test_register_resources_routes_attaches_six_endpoints():
         ("/api/v1/resources", ("GET",)),
         ("/api/v1/resources", ("POST",)),
         ("/api/v1/resources/{resource_id}", ("GET",)),
+        ("/api/v1/resources/{resource_id}", ("PATCH",)),
         ("/api/v1/resources/{resource_id}/state", ("POST",)),
         ("/api/v1/resources/{resource_id}/health", ("GET",)),
         ("/api/v1/resources/{resource_id}/usage-history", ("GET",)),

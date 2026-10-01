@@ -115,6 +115,27 @@ def list_by_project(
     return rtnval
 
 
+def update_profile(
+        *,
+        db_session: DbSession,
+        row: Resource,
+        display_name: str,
+        description: str,
+        tags: list,
+        updated_at: datetime
+    ) -> None:
+    """
+        Apply a change to the fields a person edits (the identity and the
+        kind-validated attributes are not among them).
+    """
+    row.display_name = display_name
+    row.description = description
+    row.tags = list(tags)
+    row.updated_at = updated_at
+    db_session.flush()
+    return
+
+
 def update_state(
         *,
         db_session: DbSession,
