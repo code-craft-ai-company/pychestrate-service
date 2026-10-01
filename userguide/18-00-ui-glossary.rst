@@ -161,6 +161,51 @@ secondary    skipped, disabled, unknown, inactive, released
 Red is reserved for errors and destructive actions; an allocation's
 *exclusive* mode is informational and renders with the ``info`` tone.
 
+States and technical terms, said plainly
+----------------------------------------
+
+A stored value is not a label. The interface shows the word a person
+would say: underscores read as spaces and a state stored in capitals
+reads in lowercase (``IN_USE`` is *in use*, ``dispatch_unconfirmed`` is
+*dispatch unconfirmed*). The stored value is still what filters send and
+what colours follow. Terms that need more than that:
+
+``Inputs digest``
+    A SHA-256 over a build's input files, toolchain and environment. Two
+    builds with the same digest were made from the same inputs. (The
+    code and the API call it the *repro digest*.)
+
+``Raw results stream``
+    The results file a test run uploads, as the runner wrote it, before
+    it is summarised. (The file format is JSOS.)
+
+``Run``
+    The execution of a job, with its own page. A build or a provisioning
+    run links to the run that did the work; copy never says *Layer-5 run*.
+
+``dispatch unconfirmed`` / ``progress stalled`` / ``cancel requested`` / ``needs investigation``
+    Run states. *Dispatch unconfirmed*: the job was sent to a pod and the
+    pod did not acknowledge it in time. *Progress stalled*: the run was
+    running and its progress stopped for too long (a later report puts it
+    back to running). *Cancel requested*: a cancel was asked for and has not
+    finished; the run stays here until the pod reports it cancelled.
+    *Needs investigation*: the run was flagged for a person to look at.
+
+``Alive`` / ``Stale`` / ``Lost``
+    A client's liveness, from its heartbeats: *alive* while it reports,
+    *stale* after 90 seconds of silence, *lost* after five minutes. A
+    client that never reported reads *Never seen*; a revoked client shows
+    no liveness.
+
+``Healthy`` / ``Needs attention`` / ``Failing``
+    How System Health reads a subsystem or a check (the API's ``ok``,
+    ``degraded`` and ``error``).
+
+``Serving`` / ``Not attached yet``
+    The Extension Registry's line for extension routes: they are attached
+    and served, or the extensions are loaded but their routes are not
+    attached to the web service yet.
+
 Dates and identifiers
 =====================
 
