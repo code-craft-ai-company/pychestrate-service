@@ -80,6 +80,8 @@ preview tag.
   1a2b3c4 ..."), requests the run by id, says it started or why it did not (the server's reason, for example that no
   enrolled pod matches), and refreshes the Runs section. The note on the pipelines list that running "is not
   available yet" is replaced by how to run one.
+  The confirmation dialog can now be neutral (`confirm_action(..., { tone: "neutral" })`): the Run dialog's confirming
+  button is the primary colour instead of the red of a delete.
 
 - Who registered, changed or retired a resource is in the audit log (RES-22). The inventory published
   `entity.resource.*` events and no audit kind listened, so "who renamed this device, who put it in maintenance,

@@ -682,7 +682,8 @@ class PycPipelineDetail extends HTMLElement {
     const confirmed = await confirm_action(
       this,
       "Run the pipeline \u201C" + name + "\u201D now?\nIt starts its " + String(stages) + (stages === 1 ? " stage" : " stages") + " on this project\u2019s pods" + (commit.length > 0 ? ", from commit " + commit : "") + ", in the order they depend on each other.",
-      "Run pipeline"
+      "Run pipeline",
+      { tone: "neutral" }
     );
     if (confirmed !== true) {
       return;

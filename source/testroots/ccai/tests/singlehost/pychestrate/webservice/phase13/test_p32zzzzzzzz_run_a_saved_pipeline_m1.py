@@ -111,6 +111,7 @@ def test_run_asks_first_then_requests_the_run_by_the_pipelines_id_and_says_it_st
         page.wait_for_selector(DIALOG + "[open]")
         message = " ".join(page.locator(".pyc-confirm__message").inner_text().split())
         accept = page.locator("[data-role=confirm-accept]").inner_text()
+        accept_classes = page.locator("[data-role=confirm-accept]").get_attribute("class") or ""
         page.click("[data-role=confirm-cancel]")
         page.wait_for_timeout(300)
         after_cancel = len(page.posts)
@@ -128,10 +129,10 @@ def test_run_asks_first_then_requests_the_run_by_the_pipelines_id_and_says_it_st
         page.context.close()
 
     testbase.assert_equal(
-        (message, accept, after_cancel, posts, notice, refreshed),
+        (message, accept, "pyc-confirm__button--primary" in accept_classes, "pyc-confirm__button--danger" in accept_classes, after_cancel, posts, notice, refreshed),
         (
             "Run the pipeline “release” now? It starts its 2 stages on this project’s pods, from commit 1a2b3c4, in the order they depend on each other.",
-            "Run pipeline", 0, [{"pipeline_id": PIPELINE_ID}], ("Run started. It is listed under Runs below.", "ok"), True,
+            "Run pipeline", True, False, 0, [{"pipeline_id": PIPELINE_ID}], ("Run started. It is listed under Runs below.", "ok"), True,
         ),
     )
     return

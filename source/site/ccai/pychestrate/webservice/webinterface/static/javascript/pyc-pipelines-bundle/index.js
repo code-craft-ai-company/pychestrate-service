@@ -1556,13 +1556,14 @@ function name_or_short(names, id) {
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/confirm.js
-function confirm_action(source, message, confirm_label) {
+function confirm_action(source, message, confirm_label, options) {
+  const tone = options !== null && options !== void 0 && options.tone === "neutral" ? "neutral" : "danger";
   return new Promise((resolve) => {
     const request = new CustomEvent("pyc-confirm-request", {
       bubbles: true,
       composed: true,
       cancelable: true,
-      detail: { message, confirm_label, resolve }
+      detail: { message, confirm_label, tone, resolve }
     });
     const answered_by_shell = source.dispatchEvent(request) === false;
     if (answered_by_shell === false) {
@@ -2276,7 +2277,8 @@ var PycPipelineDetail = class extends HTMLElement {
     const confirmed = await confirm_action(
       this,
       "Run the pipeline \u201C" + name + "\u201D now?\nIt starts its " + String(stages) + (stages === 1 ? " stage" : " stages") + " on this project\u2019s pods" + (commit.length > 0 ? ", from commit " + commit : "") + ", in the order they depend on each other.",
-      "Run pipeline"
+      "Run pipeline",
+      { tone: "neutral" }
     );
     if (confirmed !== true) {
       return;

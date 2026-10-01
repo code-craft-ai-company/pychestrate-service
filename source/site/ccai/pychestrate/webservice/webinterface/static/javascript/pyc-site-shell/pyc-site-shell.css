@@ -1146,6 +1146,12 @@ mj-data-table::part(grid-root) {
     border-color: var(--pyc-color-on-error-surface);
 }
 
+.pyc-confirm__button--primary {
+    background: var(--pyc-site-shell-accent);
+    color: var(--pyc-color-on-accent);
+    border-color: var(--pyc-site-shell-accent);
+}
+
 .pyc-confirm__button:focus-visible {
     outline: 2px solid var(--pyc-site-shell-focus-ring);
     outline-offset: 2px;

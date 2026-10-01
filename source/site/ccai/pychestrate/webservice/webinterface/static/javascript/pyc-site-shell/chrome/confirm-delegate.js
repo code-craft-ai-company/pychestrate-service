@@ -65,7 +65,7 @@ function resolve_confirm_type(form, submitter) {
  * marks the rest of the page inert, which the browser's own confirm() box
  * does not let a page style or word (XC-15).
  */
-function ask_with_dialog(message, confirm_label, required_text) {
+function ask_with_dialog(message, confirm_label, required_text, tone) {
     return new Promise((resolve) => {
         const dialog = document.createElement("dialog");
         dialog.classList.add("pyc-confirm");
@@ -131,7 +131,7 @@ function ask_with_dialog(message, confirm_label, required_text) {
         const accept = document.createElement("button");
         accept.type = "submit";
         accept.value = "confirm";
-        accept.classList.add("pyc-confirm__button", "pyc-confirm__button--danger");
+        accept.classList.add("pyc-confirm__button", tone === "neutral" ? "pyc-confirm__button--primary" : "pyc-confirm__button--danger");
         accept.setAttribute("data-role", "confirm-accept");
         accept.textContent = confirm_label;
         actions.appendChild(cancel);
@@ -169,11 +169,11 @@ function ask_with_dialog(message, confirm_label, required_text) {
     });
 }
 
-async function ask_confirmation(message, confirm_label, required_text) {
+async function ask_confirmation(message, confirm_label, required_text, tone) {
     const typed_text = typeof required_text === "string" ? required_text : "";
     if (typed_text.length > 0 && typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
         // mj-dialog.confirm has no field to type in: this one must be the page's own dialog.
-        return ask_with_dialog(message, confirm_label, typed_text);
+        return ask_with_dialog(message, confirm_label, typed_text, tone);
     }
     const dialog_ctor = typeof customElements !== "undefined"
         ? customElements.get("mj-dialog")
@@ -187,7 +187,7 @@ async function ask_confirmation(message, confirm_label, required_text) {
         }
     }
     if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal === "function") {
-        return ask_with_dialog(message, confirm_label, "");
+        return ask_with_dialog(message, confirm_label, "", tone);
     }
     return window.confirm(message);
 }
@@ -256,7 +256,7 @@ function install_confirm_delegate(root) {
         }
         event.preventDefault();
         const label = typeof detail.confirm_label === "string" && detail.confirm_label.trim().length > 0 ? detail.confirm_label.trim() : "Continue";
-        ask_confirmation(detail.message, label).then((accepted) => detail.resolve(accepted === true));
+        ask_confirmation(detail.message, label, "", detail.tone === "neutral" ? "neutral" : "danger").then((accepted) => detail.resolve(accepted === true));
     });
     return;
 }
