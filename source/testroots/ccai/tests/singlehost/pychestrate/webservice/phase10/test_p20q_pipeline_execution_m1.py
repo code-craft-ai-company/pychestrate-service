@@ -1002,3 +1002,78 @@ def test_trigger_route_refuses_a_matrix_it_cannot_execute():
         (422, "matrix_not_supported", 0),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Run a saved pipeline by id (ORC-13)
+# ---------------------------------------------------------------------------
+
+
+def _trigger_by_body(*, session: Any, body: Dict[str, Any], build_module: Any) -> Any:
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id=PROJECT_UUID))
+    orchestrator = _make_orchestrator(
+        session_factory=lambda: session, build_module=build_module, test_orch=_FakeTestOrchestrator(),
+    )
+    pipeline_runs_routes.execution_orchestrator.set_active_pipeline_orchestrator(orchestrator=orchestrator)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/{}/pipeline-runs".format(PROJECT_UUID), path_params={"project_id": PROJECT_UUID},
+            db_session=session, auth_principal=_FakePrincipal(), body=body,
+        )
+        return pipeline_runs_routes.handle_trigger_pipeline_run(request)
+    finally:
+        pipeline_runs_routes.execution_orchestrator.set_active_pipeline_orchestrator(orchestrator=None)
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+
+
+def test_a_saved_pipeline_is_run_by_its_id_without_sending_the_document_again():
+    """
+    **Feature: 6-pipeline-execution (ORC-13)**
+    **Property: after a pipeline is saved, ``POST pipeline-runs`` with only its ``pipeline_id`` answers 201
+    with a run of that pipeline at the commit it was saved from, dispatches its root stage, and does not add a
+    second saved copy; a ``commit_sha`` in the body overrides the commit (and, like any run from another commit,
+    is saved as one more source of the same pipeline).**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    saved = definition_service.upsert_definition(
+        db_session=session, project_id=PROJECT_UUID, commit_sha="abc123", filename="pipeline.yaml", document_bytes=_two_stage_document(),
+    )
+    build_module = _FakeBuildServiceModule()
+    by_id = _trigger_by_body(session=session, body={"pipeline_id": saved.pipeline_id}, build_module=build_module)
+    copies = len(definition_service.list_definitions(db_session=session, project_id=PROJECT_UUID, limit=10))
+    overridden = _trigger_by_body(session=session, body={"pipeline_id": saved.pipeline_id, "commit_sha": "def456"}, build_module=_FakeBuildServiceModule())
+    first = _decode_body(by_id)
+    second = _decode_body(overridden)
+
+    testbase.assert_equal(
+        (by_id.status_code, first["pipeline_id"], first["commit_sha"], len(build_module.triggered) > 0, overridden.status_code, second["commit_sha"], copies),
+        (201, saved.pipeline_id, "abc123", True, 201, "def456", 1),
+    )
+    return
+
+
+def test_a_pipeline_id_that_is_not_saved_is_404_and_id_plus_document_is_422_and_nothing_runs():
+    """
+    **Feature: 6-pipeline-execution (ORC-13)**
+    **Property: a ``pipeline_id`` no saved pipeline in the project has answers 404 ``pipeline_not_found``;
+    sending both ``pipeline_id`` and ``document``, or a ``pipeline_id`` that is not a string, answers 422; in each
+    case no job is dispatched.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    saved = definition_service.upsert_definition(
+        db_session=session, project_id=PROJECT_UUID, commit_sha="abc123", filename="pipeline.yaml", document_bytes=_two_stage_document(),
+    )
+    build_module = _FakeBuildServiceModule()
+    unknown = _trigger_by_body(session=session, body={"pipeline_id": "0" * 64}, build_module=build_module)
+    both = _trigger_by_body(session=session, body={"pipeline_id": saved.pipeline_id, "document": "name: x"}, build_module=build_module)
+    not_text = _trigger_by_body(session=session, body={"pipeline_id": 5}, build_module=build_module)
+
+    testbase.assert_equal(
+        (unknown.status_code, _decode_body(unknown).get("reason"), both.status_code, not_text.status_code, len(build_module.triggered)),
+        (404, "pipeline_not_found", 422, 422, 0),
+    )
+    return

@@ -70,6 +70,17 @@ preview tag.
 
 ### Added
 
+- A saved pipeline can be run from its page (ORC-13). A pipeline could be defined and validated in the UI but not
+  run: the trigger API wanted the whole document sent again, which the page does not have. `POST
+  /api/v1/projects/{id}/pipeline-runs` now also accepts `{"pipeline_id": "<digest>"}` instead of
+  `commit_sha`/`filename`/`document`: the saved definition is run at the commit and file it was saved from (a
+  `commit_sha` in the body overrides the commit; `404 pipeline_not_found` when nothing is saved under the id; `422`
+  when `document` is sent too). The pipeline page has a **Run** button (shown to people with `system:pipelines.run`)
+  that asks first ("Run the pipeline "release" now? It starts its 2 stages on this project's pods, from commit
+  1a2b3c4 ..."), requests the run by id, says it started or why it did not (the server's reason, for example that no
+  enrolled pod matches), and refreshes the Runs section. The note on the pipelines list that running "is not
+  available yet" is replaced by how to run one.
+
 - Who registered, changed or retired a resource is in the audit log (RES-22). The inventory published
   `entity.resource.*` events and no audit kind listened, so "who renamed this device, who put it in maintenance,
   who retired it" had no answer. Three kinds now record it: `audit.resource.registered`, `audit.resource.updated`

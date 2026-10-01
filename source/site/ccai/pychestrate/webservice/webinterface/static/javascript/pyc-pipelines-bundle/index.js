@@ -23,6 +23,16 @@ function problem_detail_of_body(body) {
   }
   return "";
 }
+async function read_problem_detail(response) {
+  if (response.ok === true) {
+    return "";
+  }
+  try {
+    return problem_detail_of_body(await response.json());
+  } catch (error) {
+    return "";
+  }
+}
 function message_with_detail(prefix, detail, generic) {
   if (typeof detail === "string" && detail.length > 0) {
     return prefix + ": " + detail;
@@ -533,7 +543,7 @@ var PycPipelinesList = class extends HTMLElement {
     const dispatch_note = document.createElement("p");
     dispatch_note.classList.add("pyc-pipelines__dispatch-note");
     dispatch_note.setAttribute("data-role", "dispatch-note");
-    dispatch_note.textContent = "Running pipelines from the service is not available yet \u2014 definitions can be created and validated.";
+    dispatch_note.textContent = "To start a saved pipeline, open it and choose Run; it needs an enrolled pod in the project.";
     form.appendChild(dispatch_note);
     const status = document.createElement("div");
     status.classList.add("pyc-pipelines__form-status");
@@ -1561,6 +1571,26 @@ function confirm_action(source, message, confirm_label) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/admin-contact.js
+function with_access_request(message) {
+  if (typeof message !== "string" || message.startsWith("You do not have permission") === false) {
+    return message;
+  }
+  if (/administrator|contact/i.test(message) === true) {
+    return message;
+  }
+  const sentence = access_request_sentence();
+  return sentence.length > 0 ? message + " " + sentence : message;
+}
+function access_request_sentence() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const shell = document.querySelector("pyc-site-shell");
+  const contact = shell === null ? "" : (shell.getAttribute("admin-contact") || "").trim();
+  return contact.length > 0 ? "To ask for access, contact " + contact + "." : "";
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -1843,6 +1873,8 @@ var PycPipelineDetail = class extends HTMLElement {
   _deleted;
   _delete_notice;
   _delete_pending;
+  _run_pending;
+  _run_notice;
   _runs;
   constructor() {
     super();
@@ -1859,6 +1891,8 @@ var PycPipelineDetail = class extends HTMLElement {
     this._deleted = false;
     this._delete_notice = "";
     this._delete_pending = false;
+    this._run_pending = false;
+    this._run_notice = null;
     this._runs = { status: "idle", items: [], error_status: 0 };
   }
   /**
@@ -2161,6 +2195,20 @@ var PycPipelineDetail = class extends HTMLElement {
     name_value.textContent = pipeline.name;
     set_entity_title(String(pipeline.name ?? "") || "Pipeline " + short_id(pipeline.pipeline_id));
     id_row.appendChild(name_value);
+    const run_button = document.createElement("mj-button");
+    run_button.classList.add("pyc-pipeline-detail__run-button");
+    run_button.setAttribute("variant", "primary");
+    run_button.setAttribute("type", "button");
+    run_button.setAttribute("data-role", "run-pipeline");
+    hide_unless_may(run_button, "system:pipelines.run");
+    run_button.textContent = "Run";
+    if (this._run_pending === true) {
+      run_button.toggleAttribute("disabled", true);
+    }
+    run_button.addEventListener("click", () => {
+      void this._on_run();
+    });
+    id_row.appendChild(run_button);
     const delete_button = document.createElement("mj-button");
     delete_button.classList.add("pyc-pipeline-detail__delete");
     delete_button.setAttribute("type", "button");
@@ -2175,6 +2223,15 @@ var PycPipelineDetail = class extends HTMLElement {
     });
     id_row.appendChild(delete_button);
     section.appendChild(id_row);
+    if (this._run_notice !== null) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-pipeline-detail__notice");
+      notice.setAttribute("data-role", "run-notice");
+      notice.setAttribute("data-tone", this._run_notice.ok === true ? "ok" : "error");
+      notice.setAttribute("role", this._run_notice.ok === true ? "status" : "alert");
+      notice.textContent = this._run_notice.message;
+      section.appendChild(notice);
+    }
     if (this._delete_notice.length > 0) {
       const notice = document.createElement("p");
       notice.classList.add("pyc-pipeline-detail__notice");
@@ -2203,6 +2260,76 @@ var PycPipelineDetail = class extends HTMLElement {
     this._append_field(grid, "Cached", format_timestamp(pipeline.cached_at));
     section.appendChild(grid);
     return section;
+  }
+  /**
+   * Run this saved pipeline after asking (ORC-13): the dialog says what it will do, the run is
+   * requested by the pipeline's id (the service reads the saved definition), and the page says
+   * whether it started or why it did not, then refreshes the Runs section.
+   */
+  async _on_run() {
+    if (this._pipeline === null || this._run_pending === true) {
+      return;
+    }
+    const name = typeof this._pipeline.name === "string" && this._pipeline.name.trim().length > 0 ? this._pipeline.name.trim() : short_id(this._pipeline.pipeline_id);
+    const stages = Array.isArray(this._pipeline.stages) ? this._pipeline.stages.length : 0;
+    const commit = typeof this._pipeline.commit_sha === "string" ? this._pipeline.commit_sha.slice(0, 7) : "";
+    const confirmed = await confirm_action(
+      this,
+      "Run the pipeline \u201C" + name + "\u201D now?\nIt starts its " + String(stages) + (stages === 1 ? " stage" : " stages") + " on this project\u2019s pods" + (commit.length > 0 ? ", from commit " + commit : "") + ", in the order they depend on each other.",
+      "Run pipeline"
+    );
+    if (confirmed !== true) {
+      return;
+    }
+    this._run_pending = true;
+    this._run_notice = null;
+    this._render_body();
+    const outcome = await this.runPipeline();
+    this._run_pending = false;
+    this._run_notice = outcome;
+    this._render_body();
+    if (outcome.ok === true) {
+      void this._load_runs();
+    }
+    return;
+  }
+  /**
+   * ``POST`` a run of this saved pipeline. Exposed so unit tests can drive it without a dialog.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async runPipeline() {
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(pipeline_runs_url(this._project_id).split("?")[0], {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline_id: this._pipeline_id })
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+      if (response.ok === false) {
+        detail = await read_problem_detail(response);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.pipelines.run_failed",
+        { reason: String(reason) }
+      );
+      return { ok: false, status: 0, message: "Couldn't reach the server, so the pipeline was not run." };
+    }
+    if (status === 201 || status === 200) {
+      return { ok: true, status, message: "Run started. It is listed under Runs below." };
+    }
+    if (status === 403) {
+      return { ok: false, status, message: with_access_request("You do not have permission to run pipelines.") };
+    }
+    const fallback = status === 404 ? "This pipeline is no longer saved in the project, so it was not run. Reload the page." : "The pipeline was not run (HTTP " + String(status) + ").";
+    return { ok: false, status, message: message_with_detail("The pipeline was not run", detail, fallback) };
   }
   /**
    * Delete this pipeline definition after asking (ORC-26). The dialog says

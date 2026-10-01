@@ -430,9 +430,14 @@ pyc-pipeline-detail {
     font-variant-numeric: tabular-nums;
 }
 
-/* Deleting a pipeline (ORC-26) */
+/* Running (ORC-13) and deleting (ORC-26) a pipeline: the two sit together at the end of the row. */
+.pyc-pipeline-detail__run-button,
 .pyc-pipeline-detail__delete {
     margin-inline-start: auto;
+}
+
+.pyc-pipeline-detail__run-button:not([hidden]) ~ .pyc-pipeline-detail__delete {
+    margin-inline-start: 0.5rem;
 }
 
 .pyc-pipeline-detail__notice,
@@ -443,6 +448,10 @@ pyc-pipeline-detail {
 
 .pyc-pipeline-detail__notice {
     color: var(--pyc-pipelines-error-fg);
+}
+
+.pyc-pipeline-detail__notice[data-tone="ok"] {
+    color: var(--pyc-pipelines-ok-fg);
 }
 
 /* Runs of a pipeline (ORC-13) */

@@ -391,7 +391,7 @@ class PycPipelinesList extends HTMLElement {
     const dispatch_note = document.createElement("p");
     dispatch_note.classList.add("pyc-pipelines__dispatch-note");
     dispatch_note.setAttribute("data-role", "dispatch-note");
-    dispatch_note.textContent = "Running pipelines from the service is not available yet \u2014 definitions can be created and validated.";
+    dispatch_note.textContent = "To start a saved pipeline, open it and choose Run; it needs an enrolled pod in the project.";
     form.appendChild(dispatch_note);
     const status = document.createElement("div");
     status.classList.add("pyc-pipelines__form-status");

@@ -48,6 +48,7 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
 from ccai.pychestrate.webservice.orchestration.pipelines.definition import (
+    repository as definition_repository,
     service as definition_service,
 )
 from ccai.pychestrate.webservice.orchestration.pipelines.definition.errors import (
@@ -413,10 +414,76 @@ def _pipeline_run_to_dict(view: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _decode_saved_pipeline_trigger_body(
+        *,
+        request: Request,
+        body: Dict[str, Any],
+        db_session: Any,
+        project_id: str
+    ) -> Dict[str, Any]:
+    """
+        Resolve a run requested by ``pipeline_id``: the document is the project's saved
+        definition (what the pipelines page shows), so the caller does not have to send it
+        again. The commit and filename are the ones it was saved from (the cache row is the
+        same one a run of the inline document would use, so no second copy is made); a
+        ``commit_sha`` in the body overrides the commit.
+
+        :param request: Incoming webworks request.
+        :param body: Decoded JSON object body, with ``pipeline_id`` and without ``document``.
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: The project the run is for.
+
+        :returns: Dict with the decoded trigger inputs.
+    """
+    if "document" in body:
+        _abort_problem(
+            request=request, status=422,
+            detail="Give either 'pipeline_id' (a saved pipeline) or 'document', not both.",
+            extensions={"invalid_fields": ["pipeline_id", "document"]},
+        )
+    pipeline_id = body.get("pipeline_id", None)
+    if not isinstance(pipeline_id, str) or len(pipeline_id.strip()) == 0:
+        _abort_problem(
+            request=request, status=422, detail="Field 'pipeline_id' must be a non-empty string.",
+            extensions={"invalid_fields": ["pipeline_id"]},
+        )
+        pipeline_id = ""  # unreachable
+    row = definition_repository.find_document_cache_by_digest(
+        db_session=db_session, project_id=project_id, pipeline_digest_sha256=pipeline_id.strip(),
+    )
+    if row is None:
+        _abort_problem(
+            request=request, status=404,
+            detail="No saved pipeline has this id in this project. Save it first.",
+            extensions={"reason": "pipeline_not_found", "pipeline_id": pipeline_id},
+        )
+        return {}  # unreachable
+    commit_sha = body.get("commit_sha", None)
+    if commit_sha is None:
+        commit_sha = row.commit_sha
+    elif not isinstance(commit_sha, str) or len(commit_sha.strip()) == 0:
+        _abort_problem(
+            request=request, status=422, detail="Field 'commit_sha' must be a non-empty string.",
+            extensions={"invalid_fields": ["commit_sha"]},
+        )
+    ref = body.get("ref", "")
+    matrix = body.get("matrix", {})
+    rtnval: Dict[str, Any] = {
+        "document_bytes": str(row.canonical_json).encode("utf-8"),
+        "commit_sha": str(commit_sha).strip(),
+        "ref": ref if isinstance(ref, str) else "",
+        "filename": str(row.filename),
+        "matrix": matrix if isinstance(matrix, dict) else {},
+    }
+    return rtnval
+
+
 def _decode_trigger_body(
         *,
         request: Request,
-        body: Dict[str, Any]
+        body: Dict[str, Any],
+        db_session: Any = None,
+        project_id: str = ""
     ) -> Dict[str, Any]:
     """
         Validate the trigger body and return the document bytes plus
@@ -425,13 +492,20 @@ def _decode_trigger_body(
         The body carries the pipeline document inline (string or
         object) plus ``commit_sha`` / ``ref`` / ``filename`` and an
         optional ``matrix`` dimensions object (the orchestrator
-        refuses a non-empty one -- matrix execution is unsupported).
+        refuses a non-empty one -- matrix execution is unsupported); or
+        a ``pipeline_id`` naming a saved pipeline instead of the document.
 
         :param request: Incoming webworks request.
         :param body: Decoded JSON object body.
+        :param db_session: Active SQLAlchemy session (needed for ``pipeline_id``).
+        :param project_id: The project the run is for (needed for ``pipeline_id``).
 
         :returns: Dict with the decoded trigger inputs.
     """
+    if "pipeline_id" in body:
+        return _decode_saved_pipeline_trigger_body(
+            request=request, body=body, db_session=db_session, project_id=project_id,
+        )
     commit_sha = body.get("commit_sha", None)
     if not isinstance(commit_sha, str) or len(commit_sha) == 0:
         _abort_problem(
@@ -537,7 +611,9 @@ def handle_trigger_pipeline_run(request: Request) -> Response:
             )
 
         body = _decode_json_object_or_abort(request=request)
-        decoded = _decode_trigger_body(request=request, body=body)
+        decoded = _decode_trigger_body(
+            request=request, body=body, db_session=db_session, project_id=project_id,
+        )
 
         project_row = projects_repo.get_project_by_id(
             db_session=db_session, project_id=project_id,

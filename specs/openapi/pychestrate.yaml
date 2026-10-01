@@ -4222,7 +4222,11 @@ paths:
       operationId: pipeline_runs_trigger
       description: |
         Triggers a pipeline run from a supplied pipeline-definition
-        document. The DAG-walking `PipelineOrchestrator` parses and
+        document, or from a pipeline already saved in the project
+        (`pipeline_id`, the digest the pipelines list shows): the saved
+        definition is run at the commit and file it was saved from, so
+        the caller need not send it again. The DAG-walking
+        `PipelineOrchestrator` parses and
         DAG-checks the document, persists a `PipelineRun` plus its
         per-stage and per-step rows, and dispatches the root stages'
         jobs through the existing build / test / provision dispatch.
@@ -9787,11 +9791,21 @@ components:
         pipeline document is supplied inline; the DAG-walking
         orchestrator parses, DAG-checks, persists, and dispatches the
         root stages' jobs.
-      required: [commit_sha, filename, document]
+      oneOf:
+        - required: [commit_sha, filename, document]
+        - required: [pipeline_id]
       properties:
+        pipeline_id:
+          type: string
+          description: |
+            A pipeline saved in this project (`GET .../pipelines`): run it at the commit and
+            file it was saved from. Cannot be combined with `document`; `404` when no saved
+            pipeline has this id.
         commit_sha:
           type: string
-          description: Commit the pipeline document was read at.
+          description: |
+            Commit the pipeline document was read at. With `pipeline_id`, optional: it
+            overrides the commit the pipeline was saved from.
         ref:
           type: string
           description: Git ref (branch / tag) the run targets.
