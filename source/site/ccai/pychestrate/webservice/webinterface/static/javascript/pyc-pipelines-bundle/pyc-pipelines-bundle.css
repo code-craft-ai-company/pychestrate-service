@@ -125,7 +125,7 @@ pyc-pipeline-detail {
 
 .pyc-pipelines__panel-heading {
     margin: 0;
-    font-size: var(--pyc-font-size-body, 1rem);
+    font-size: var(--pyc-font-size-h3, 1rem);
     font-weight: 600;
 }
 
@@ -334,7 +334,7 @@ pyc-pipeline-detail {
 
 .pyc-pipeline-detail__section-heading {
     margin: 0;
-    font-size: var(--pyc-font-size-body, 1rem);
+    font-size: var(--pyc-font-size-h3, 1rem);
     font-weight: 600;
 }
 

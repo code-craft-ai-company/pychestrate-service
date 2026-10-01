@@ -400,7 +400,7 @@ pyc-run-detail {
 
 .pyc-run-detail__section-heading {
     margin: 0;
-    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-size: var(--pyc-font-size-h3, 1rem);
     font-weight: 600;
 }
 

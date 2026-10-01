@@ -354,7 +354,7 @@ pyc-build-detail {
 
 .pyc-build-detail__section-heading {
     margin: 0;
-    font-size: var(--pyc-font-size-body, 1rem);
+    font-size: var(--pyc-font-size-h3, 1rem);
     font-weight: 600;
 }
 

@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- Section headings are one size across bundle and server pages (XC-05). A server-rendered card heading is 16px,
+  weight 600; a bundle's section, panel and sub headings were 14px in some views (run detail, admin overview and
+  extension registry, the updates detail, webhooks) and 16px in others. Every bundle section heading now takes the
+  `--pyc-font-size-h3` token (16px), the same as the server's; page titles were unified earlier.
+
 - A run's state reads as words (ORC-38). The Runs list and the run, build and provisioning pages showed a state
   as stored (`dispatch_unconfirmed`, `progress_stalled`, `needs_investigation`); the chips and the Runs list's state
   filter now read "dispatch unconfirmed", "progress stalled", "needs investigation". The stored value is still what

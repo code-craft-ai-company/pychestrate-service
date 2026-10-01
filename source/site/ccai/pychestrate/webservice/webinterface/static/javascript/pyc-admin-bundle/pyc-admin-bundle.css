@@ -60,7 +60,7 @@ pyc-system-health {
 
 .pyc-admin__subheading {
     margin: 1rem 0 0;
-    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-size: var(--pyc-font-size-h3, 1rem);
     font-weight: 600;
     color: var(--pyc-admin-fg-muted);
 }
