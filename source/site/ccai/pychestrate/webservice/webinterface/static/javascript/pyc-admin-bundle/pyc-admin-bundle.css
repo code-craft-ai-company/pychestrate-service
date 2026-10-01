@@ -58,6 +58,15 @@ pyc-system-health {
     line-height: var(--pyc-line-height-heading, 1.25);
 }
 
+/* The page header: the title on the left, the page's own action (Refresh) on the right, on one line */
+.pyc-admin__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+}
+
 .pyc-admin__subheading {
     margin: 1rem 0 0;
     font-size: var(--pyc-font-size-h3, 1rem);

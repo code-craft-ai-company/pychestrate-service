@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- The admin pages put their one action in the title row (ADM-30). Administration, System Health, Extension Registry and
+  Feature Flags each had a boxed "Refresh" button on a row of its own under the title, which made every page look like a
+  form with a single control. The title now sits on the left with **Refresh** on the right of the same row, as a quiet button
+  (no box until it is hovered); the description, where there is one, follows, and the Feature Flags filter keeps its own
+  row. A browser test checks the four pages.
+
 - The Secrets page keeps which project or user it is showing in the address (ORC-27). The tab was there (`?scope=project`)
   but the owner chosen inside it was not, so a shared link opened the Project tab on its first project whatever the sender
   was looking at. The address now carries the owner too (`?scope=project&owner=<project id>`): the page opens on that owner

@@ -148,25 +148,29 @@ class PycFeatureFlags extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-admin");
+    const header = document.createElement("div");
+    header.classList.add("pyc-admin__header");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-admin__heading");
     heading.textContent = "Feature Flags";
-    root.appendChild(heading);
+    header.appendChild(heading);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-admin__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("variant", "tertiary");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    header.appendChild(refresh_button);
+    root.appendChild(header);
     const lede = document.createElement("p");
     lede.classList.add("pyc-admin__lede");
     lede.textContent = "Toggle a flag's state. Retired flags are read-only.";
     root.appendChild(lede);
     const controls = document.createElement("div");
     controls.classList.add("pyc-admin__controls");
-    const refresh_button = document.createElement("mj-button");
-    refresh_button.classList.add("pyc-admin__button");
-    refresh_button.setAttribute("type", "button");
-    refresh_button.setAttribute("data-role", "refresh");
-    refresh_button.textContent = "Refresh";
-    refresh_button.addEventListener("click", () => {
-      void this._refresh();
-    });
-    controls.appendChild(refresh_button);
     const filter_input = document.createElement("input");
     filter_input.classList.add("pyc-admin__filter");
     filter_input.setAttribute("type", "search");

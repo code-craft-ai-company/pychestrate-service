@@ -110,22 +110,23 @@ class PycSystemHealth extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-admin");
+    const header = document.createElement("div");
+    header.classList.add("pyc-admin__header");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-admin__heading");
     heading.textContent = "System Health";
-    root.appendChild(heading);
-    const controls = document.createElement("div");
-    controls.classList.add("pyc-admin__controls");
+    header.appendChild(heading);
     const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-admin__button");
     refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("variant", "tertiary");
     refresh_button.setAttribute("data-role", "refresh");
     refresh_button.textContent = "Refresh";
     refresh_button.addEventListener("click", () => {
       void this._refresh();
     });
-    controls.appendChild(refresh_button);
-    root.appendChild(controls);
+    header.appendChild(refresh_button);
+    root.appendChild(header);
     const body_region = document.createElement("div");
     body_region.classList.add("pyc-admin__cards");
     body_region.setAttribute("data-role", "body-region");

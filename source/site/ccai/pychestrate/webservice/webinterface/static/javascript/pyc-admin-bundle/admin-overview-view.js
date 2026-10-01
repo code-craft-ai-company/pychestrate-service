@@ -137,26 +137,27 @@ class PycAdminOverview extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-admin");
+    const header = document.createElement("div");
+    header.classList.add("pyc-admin__header");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-admin__heading");
     heading.textContent = "Administration";
-    root.appendChild(heading);
-    const lede = document.createElement("p");
-    lede.classList.add("pyc-admin__lede");
-    lede.textContent = "System health, who has access, and the settings and features that shape this installation.";
-    root.appendChild(lede);
-    const controls = document.createElement("div");
-    controls.classList.add("pyc-admin__controls");
+    header.appendChild(heading);
     const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-admin__button");
     refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("variant", "tertiary");
     refresh_button.setAttribute("data-role", "refresh");
     refresh_button.textContent = "Refresh";
     refresh_button.addEventListener("click", () => {
       void this._refresh();
     });
-    controls.appendChild(refresh_button);
-    root.appendChild(controls);
+    header.appendChild(refresh_button);
+    root.appendChild(header);
+    const lede = document.createElement("p");
+    lede.classList.add("pyc-admin__lede");
+    lede.textContent = "System health, who has access, and the settings and features that shape this installation.";
+    root.appendChild(lede);
     const tiles = document.createElement("div");
     tiles.classList.add("pyc-admin__tiles");
     const health_region = document.createElement("div");
