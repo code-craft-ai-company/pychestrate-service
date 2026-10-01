@@ -50,19 +50,26 @@
     </table>
 </div>
 
+{% if system_owner %}
+<p class="muted small mt" data-role="system-owned-note">This variable belongs to the product: it is changed on the <a href="{{ system_owner.url }}">{{ system_owner.label }}</a> page, which checks what it saves, so it cannot be edited or deleted here.</p>
+{% endif %}
 <div class="actions-row mt">
+    {% if not system_owner %}
     <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-primary">
         {{ ui.icon("edit") }} Edit Variable
     </a>
+    {% endif %}
     <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-secondary">
         {{ ui.icon("history") }} View History
     </a>
+    {% if not system_owner %}
     <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger">
             {{ ui.icon("delete") }} Delete
         </button>
     </form>
+    {% endif %}
     <a href="{{ url_for('config.variable_list') }}" class="btn btn-secondary">Back to List</a>
 </div>
 {% include "site_shell/_reveal_values.html" %}

@@ -677,6 +677,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "minted": _minted,
     "variables": _many(GlobalVariableResponse),
     "variable": _one(GlobalVariableResponse),
+    "system_owners": _by_mode({}, {}),
+    "system_owner": _by_mode({"url": "/admin/ui-profile", "label": "Interface profile"}, None),
     "secrets": _many(SecretMetadataResponse),
     "secret": _one(SecretMetadataResponse),
     "scopes": _many(SecretScopeResponse),

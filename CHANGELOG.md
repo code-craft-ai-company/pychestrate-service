@@ -29,6 +29,15 @@ preview tag.
 
 ### Fixed
 
+- A variable the product owns can no longer be edited or deleted on the Variables pages (ADM-08). `ui.profile.surfaces` is the
+  deployment-wide interface profile; the Variables pages offered Edit and Delete for it like any other, so a typo or a delete
+  there changed how the whole interface looks for everyone and bypassed the Interface profile page, which checks what it
+  saves. It now stays visible, marked **system**, but read-only: no Edit and no Delete on the list or its page, a note
+  saying where to change it, and the handlers refuse an edit, a delete and the creation of a variable with that name ("managed
+  by the product: change it on the Interface profile page"). Its history is still readable. Ordinary variables are unchanged.
+  This is the first step of the order recorded in `specs/model-convergence.md` for ADM-08; backing the Admin page with the
+  modern variables service is the next.
+
 - The not-found page says where to look next (DOC-20). A signed-in person who followed a stale link got "Page not found" and one
   button, "Go to the home page". The page now also says: search with Ctrl+K, browse the projects, or read the user guide (linked
   at `/docs/`). The 403 and 500 pages are unchanged.

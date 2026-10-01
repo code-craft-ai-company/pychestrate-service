@@ -38,7 +38,7 @@
     <tbody>
         {% for variable in variables %}
         <tr>
-            <td><a href="{{ url_for('config.variable_detail', name=variable.name) }}">{{ variable.name }}</a></td>
+            <td><a href="{{ url_for('config.variable_detail', name=variable.name) }}">{{ variable.name }}</a>{% if variable.name in system_owners %} <span class="badge badge-secondary" data-role="system-owned" title="Changed on the {{ system_owners[variable.name].label }} page">system</span>{% endif %}</td>
             <td><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
             {# Values are masked by default -- they may hold credentials.
                The reveal toggle swaps the mask for the real value per row. #}
@@ -51,12 +51,16 @@
             <td>{% if variable.updated_at %}{{ variable.updated_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>
                 <div class="row-actions">
+                    {% if variable.name not in system_owners %}
                     <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
+                    {% endif %}
                     <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
+                    {% if variable.name not in system_owners %}
                     <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable? Its history is kept.">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-sm btn-quiet-danger">Delete</button>
                     </form>
+                    {% endif %}
                 </div>
             </td>
         </tr>

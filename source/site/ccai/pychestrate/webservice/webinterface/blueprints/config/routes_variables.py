@@ -35,7 +35,7 @@ import difflib
 import json
 import re
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
@@ -51,6 +51,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     form_errors,
     url_for as _url_for_module,
 )
+from ccai.pychestrate.webservice.webinterface.site_shell import ui_profile as _ui_profile
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     CONFIG_PATH,
     MultiFormView,
@@ -65,6 +66,37 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _require_admin_permission_for,
     _wrap_admin_handler_in_shell,
 )
+
+
+#: Variables the product itself owns, each with the endpoint of the page that manages it and that page's name. They stay on
+#: the Variables pages (nothing is hidden) but are read-only there: changing or deleting one changes how the whole
+#: interface behaves, and the page that owns it checks what it writes (specs/model-convergence.md, ADM-08).
+SYSTEM_OWNED_VARIABLES: Dict[str, Tuple[str, str]] = {
+    _ui_profile.DEPLOYMENT_VARIABLE_NAME: ("config.ui_profile", "Interface profile"),
+}
+
+
+def system_owner_of(name: str) -> Optional[Dict[str, str]]:
+    """
+        The page that manages a product-owned variable.
+
+        :param name: A variable's name.
+
+        :returns: ``{"url", "label"}`` for a variable the product owns, else ``None``.
+    """
+    owner = SYSTEM_OWNED_VARIABLES.get(name)
+    if owner is None:
+        return None
+    rtnval = {"url": _url_for_module.url_for(owner[0]), "label": owner[1]}
+    return rtnval
+
+
+def system_owned_message(name: str, owner: Dict[str, str]) -> str:
+    """
+        Why a product-owned variable cannot be changed here.
+    """
+    rtnval = '"{}" is managed by the product: change it on the {} page ({}).'.format(name, owner["label"], owner["url"])
+    return rtnval
 
 
 _ROUTE_TABLE = (
@@ -395,6 +427,7 @@ def handle_variable_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variables"] = result.variables
+        context["system_owners"] = {variable.name: system_owner_of(variable.name) for variable in result.variables if system_owner_of(variable.name) is not None}
         context["format_value"] = format_variable_value
         context["total"] = total
         context["page"] = params["page"]
@@ -481,6 +514,12 @@ def handle_variable_create(request: Request) -> Response:
                     VariableValidationError,
                 )
                 raise VariableValidationError(VARIABLE_NAME_RULE, field="name")
+            reserved_owner = system_owner_of(name)
+            if reserved_owner is not None:
+                from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+                    VariableValidationError,
+                )
+                raise VariableValidationError(system_owned_message(name, reserved_owner), field="name")
             var_type = _resolve_variable_type(var_type_str=var_type_str)
             parsed_value = variable_store.parse_value_from_string(
                 value_raw, var_type
@@ -576,6 +615,7 @@ def handle_variable_detail(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variable"] = variable
+        context["system_owner"] = system_owner_of(variable.name)
         context["format_value"] = format_variable_value
         response = _render(
             template_name="config/variables/detail.html",
@@ -604,6 +644,14 @@ def handle_variable_edit(request: Request) -> Response:
     db_session = auth.db_session
     try:
         name = str(request.path_params.get("name", ""))
+        edit_owner = system_owner_of(name)
+        if edit_owner is not None:
+            return _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.variable_detail", name=name),
+                message=system_owned_message(name, edit_owner),
+                category=flash.CATEGORY_ERROR,
+            )
         variable_store = _build_variable_store(db_session=db_session)
         method = request.method.upper()
         errors: Dict[str, str] = {}
@@ -736,6 +784,14 @@ def handle_variable_delete(request: Request) -> Response:
             )
             return csrf_redirect
 
+        delete_owner = system_owner_of(name)
+        if delete_owner is not None:
+            return _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.variable_detail", name=name),
+                message=system_owned_message(name, delete_owner),
+                category=flash.CATEGORY_ERROR,
+            )
         variable_store = _build_variable_store(db_session=db_session)
 
         try:
