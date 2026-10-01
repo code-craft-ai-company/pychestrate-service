@@ -266,7 +266,7 @@ class PycEnvironmentDetail extends HTMLElement {
     const grid = document.createElement("dl");
     grid.classList.add("pyc-infra__detail-grid");
     grid.setAttribute("data-role", "environment-summary");
-    this._append_field(grid, "Kind", environment.kind_name);
+    this._append_field(grid, "Kind", state_label(environment.kind_name));
     const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-infra__badge");
     state_badge.setAttribute("data-tone", environment_state_tone(environment.state));

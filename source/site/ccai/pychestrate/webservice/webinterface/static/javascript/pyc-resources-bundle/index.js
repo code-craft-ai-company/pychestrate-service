@@ -1067,6 +1067,15 @@ var PycResourcePools = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/problem-detail.js
 var REASON_PHRASES = [
   "bad request",
@@ -1345,7 +1354,7 @@ var PycResourceInventory = class extends HTMLElement {
           return link;
         }
       },
-      { key: "kind", label: "Kind", width: "8rem", render: (resource) => resource.kind },
+      { key: "kind", label: "Kind", width: "8rem", render: (resource) => state_label(resource.kind) },
       {
         key: "state",
         label: "State",
@@ -1628,7 +1637,7 @@ function addable_resources(resources, members) {
 }
 function resource_option_label(resource) {
   const name = typeof resource.display_name === "string" && resource.display_name.length > 0 ? resource.display_name : resource.resource_id;
-  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " \xB7 " + resource.kind : "";
+  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " \xB7 " + state_label(resource.kind) : "";
   return name + kind;
 }
 function build_pool_member_url(pool_id, resource_id) {
@@ -2251,7 +2260,7 @@ var PycPoolDetail = class extends HTMLElement {
         label: "Kind",
         width: "8rem",
         render: (member) => {
-          const rtnval = typeof member.resource_kind === "string" && member.resource_kind.length > 0 ? member.resource_kind : "\u2014";
+          const rtnval = typeof member.resource_kind === "string" && member.resource_kind.length > 0 ? state_label(member.resource_kind) : "\u2014";
           return rtnval;
         }
       },
@@ -3392,7 +3401,7 @@ var PycResourceDetail = class extends HTMLElement {
     const grid = document.createElement("dl");
     grid.classList.add("pyc-resources__grid");
     this._append_field(grid, "Resource id", resource.resource_id);
-    this._append_field(grid, "Kind", resource.kind);
+    this._append_field(grid, "Kind", state_label(resource.kind));
     this._append_field(
       grid,
       "Project",

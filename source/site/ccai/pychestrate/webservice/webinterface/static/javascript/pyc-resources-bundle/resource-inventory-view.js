@@ -1,4 +1,5 @@
 import { format_timestamp } from "../shared/datetime.js";
+import { state_label as word_label } from "../shared/run-labels.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
@@ -260,7 +261,7 @@ class PycResourceInventory extends HTMLElement {
           return link;
         },
       },
-      { key: "kind", label: "Kind", width: "8rem", render: (resource) => resource.kind },
+      { key: "kind", label: "Kind", width: "8rem", render: (resource) => word_label(resource.kind) },
       {
         key: "state",
         label: "State",

@@ -158,6 +158,15 @@ function format_timestamp(value) {
   return rtnval;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
 function build_empty_state({ class_name, message, next_step, link, inline, role }) {
   const paragraph = document.createElement(inline === true ? "span" : "p");
@@ -505,7 +514,7 @@ var PycFeatureFlags = class extends HTMLElement {
         key: "flag_kind",
         label: "Kind",
         width: "10rem",
-        render: (entry) => entry.flag_kind ?? "\u2014"
+        render: (entry) => state_label(entry.flag_kind)
       },
       {
         key: "current_version",

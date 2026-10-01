@@ -37,6 +37,11 @@ preview tag.
   filter still sends the stored value (`status=REVOKED`). The shared `state_label` lowercases a state stored in capitals.
   (The provisioning filter had to drop a local variable that shadowed the import.)
 
+- Kinds read as words too (ORC-38): an environment of kind `k8s_cluster` reads "k8s cluster" in the environments list and on
+  its page, a resource of kind `network_switch` reads "network switch" in the inventory, on its page and in a pool's member
+  list, and a feature flag's kind loses its underscores (underscores are for programs, not for people). Webhook providers and
+  release channel names are already plain words and are unchanged.
+
 - The Extension Registry says whether the extensions' routes are served, in words (ADM-30). It printed the API's own word,
   "Registry status: mounted" or "deferred", and a person reading "deferred" could not tell whether anything was wrong. The line
   now reads "Extension routes:" with **Serving** (green), **Not attached yet** (amber) or **Unknown**, and the chip's hover text

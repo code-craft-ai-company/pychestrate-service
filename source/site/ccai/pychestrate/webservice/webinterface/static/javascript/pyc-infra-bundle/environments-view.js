@@ -5,6 +5,7 @@ import { format_clock_instant, format_instant, parse_timestamp } from "../shared
 import { build_empty_state, show_no_projects } from "../shared/empty-state.js";
 import { choose_project_id, mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import { reveal } from "../shared/reveal.js";
+import { state_label as word_label } from "../shared/run-labels.js";
 const ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -860,7 +861,7 @@ class PycEnvironments extends HTMLElement {
           return name;
         }
       },
-      { key: "kind_name", label: "Kind", width: "10rem" },
+      { key: "kind_name", label: "Kind", width: "10rem", render: (environment) => word_label(environment.kind_name) },
       {
         key: "state",
         label: "State",

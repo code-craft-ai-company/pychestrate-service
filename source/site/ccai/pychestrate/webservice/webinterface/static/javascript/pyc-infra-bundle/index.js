@@ -370,6 +370,20 @@ function reveal(region, options) {
   return focused;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  const words = state.replace(/[_-]+/g, " ");
+  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
+}
+function provisioning_title(run) {
+  const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
+  const driver = typeof run.driver_name === "string" ? run.driver_name : "";
+  return driver.length > 0 ? action + " \xB7 " + driver : action;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
   "active",
@@ -1204,7 +1218,7 @@ var PycEnvironments = class extends HTMLElement {
           return name;
         }
       },
-      { key: "kind_name", label: "Kind", width: "10rem" },
+      { key: "kind_name", label: "Kind", width: "10rem", render: (environment) => state_label(environment.kind_name) },
       {
         key: "state",
         label: "State",
@@ -1765,20 +1779,6 @@ var PycEnvironments = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
-function state_label(state) {
-  if (typeof state !== "string" || state.length === 0) {
-    return "\u2014";
-  }
-  const words = state.replace(/[_-]+/g, " ");
-  return /^[A-Z0-9 ]+$/.test(words) ? words.toLowerCase() : words;
-}
-function provisioning_title(run) {
-  const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
-  const driver = typeof run.driver_name === "string" ? run.driver_name : "";
-  return driver.length > 0 ? action + " \xB7 " + driver : action;
-}
-
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -2052,7 +2052,7 @@ var PycEnvironmentDetail = class extends HTMLElement {
     const grid = document.createElement("dl");
     grid.classList.add("pyc-infra__detail-grid");
     grid.setAttribute("data-role", "environment-summary");
-    this._append_field(grid, "Kind", environment.kind_name);
+    this._append_field(grid, "Kind", state_label(environment.kind_name));
     const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-infra__badge");
     state_badge.setAttribute("data-tone", environment_state_tone(environment.state));

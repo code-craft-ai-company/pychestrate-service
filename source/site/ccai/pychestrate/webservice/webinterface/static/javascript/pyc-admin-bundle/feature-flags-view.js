@@ -1,5 +1,6 @@
 import { confirm_action } from "../shared/confirm.js";
 import { hide_unless_may } from "../shared/permissions.js";
+import { state_label as word_label } from "../shared/run-labels.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { build_empty_state } from "../shared/empty-state.js";
 const FLAGS_PATH = "/api/v1/flags";
@@ -336,7 +337,7 @@ class PycFeatureFlags extends HTMLElement {
         key: "flag_kind",
         label: "Kind",
         width: "10rem",
-        render: (entry) => entry.flag_kind ?? "\u2014"
+        render: (entry) => word_label(entry.flag_kind)
       },
       {
         key: "current_version",

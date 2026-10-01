@@ -177,3 +177,43 @@ def test_the_provisioning_state_filter_offers_words(browser: Browser):
 
     testbase.assert_equal(("rejected by guard" in options, "rejected_by_guard" in options, [option for option in options if "_" in option]), (True, False, []))
     return
+
+
+def test_kinds_read_as_words_in_the_environments_list_and_on_a_resource_page(browser: Browser):
+    """
+    **Feature: states in words (ORC-38)**
+    **Property: an environment of kind ``k8s_cluster`` reads "k8s cluster" in the environments list and a resource of kind
+    ``network_switch`` reads "network switch" on its page (underscores are for programs, not for people).**
+    """
+    environment = {"environment_id": "0f6c2c1e-1111-4000-8000-0000000000e1", "project_id": PROJECT, "name": "staging", "kind_name": "k8s_cluster", "state": "active", "created_at": "2026-09-29T10:00:00+00:00"}
+    page = _open(
+        browser, "/environments?project_id=" + PROJECT, "pyc-infra-bundle",
+        {"/api/v1/projects/{}/environments".format(PROJECT): {"items": [environment], "meta": {"page": 1, "per_page": 25, "total": 1}}},
+    )
+    try:
+        listed = " ".join(page.evaluate("() => document.querySelector('mj-data-table').shadowRoot.textContent").split())
+    finally:
+        page.context.close()
+    resource_id = "7e7e7e7e-0000-4000-8000-000000000001"
+    resource = {
+        "resource_id": resource_id, "project_id": PROJECT, "kind": "network_switch", "display_name": "Rack 7", "description": "", "identity_hash": "ab" * 32,
+        "state": "available", "tags": [], "attributes": {}, "created_at": "2026-09-01T10:00:00Z", "updated_at": "2026-09-01T10:00:00Z",
+    }
+    page = _open(
+        browser, "/resource-pools/resources/" + resource_id, "pyc-resources-bundle",
+        {
+            "/api/v1/resources/" + resource_id: resource,
+            "/api/v1/resources/{}/health".format(resource_id): {"resource_id": resource_id, "status": "healthy"},
+            "/api/v1/resources/{}/usage-history".format(resource_id): {"items": [], "meta": {"total": 0}},
+        },
+    )
+    try:
+        shown = " ".join(page.locator("main").inner_text().split())
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        ("k8s cluster" in listed, "k8s_cluster" in listed, "network switch" in shown, "network_switch" in shown),
+        (True, False, True, False),
+    )
+    return

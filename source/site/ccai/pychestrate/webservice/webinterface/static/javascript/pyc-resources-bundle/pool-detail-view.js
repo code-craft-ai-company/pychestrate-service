@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { state_label as word_label } from "../shared/run-labels.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
@@ -111,7 +112,7 @@ function addable_resources(resources, members) {
 }
 function resource_option_label(resource) {
   const name = typeof resource.display_name === "string" && resource.display_name.length > 0 ? resource.display_name : resource.resource_id;
-  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " · " + resource.kind : "";
+  const kind = typeof resource.kind === "string" && resource.kind.length > 0 ? " · " + word_label(resource.kind) : "";
   return name + kind;
 }
 function build_pool_member_url(pool_id, resource_id) {
@@ -734,7 +735,7 @@ class PycPoolDetail extends HTMLElement {
         label: "Kind",
         width: "8rem",
         render: (member) => {
-          const rtnval = typeof member.resource_kind === "string" && member.resource_kind.length > 0 ? member.resource_kind : "—";
+          const rtnval = typeof member.resource_kind === "string" && member.resource_kind.length > 0 ? word_label(member.resource_kind) : "—";
           return rtnval;
         }
       },

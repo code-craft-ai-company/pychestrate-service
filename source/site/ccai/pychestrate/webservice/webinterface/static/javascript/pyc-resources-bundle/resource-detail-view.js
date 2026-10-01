@@ -1,5 +1,6 @@
 import { confirm_action } from "../shared/confirm.js";
 import { reveal } from "../shared/reveal.js";
+import { state_label as word_label } from "../shared/run-labels.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
@@ -581,7 +582,7 @@ class PycResourceDetail extends HTMLElement {
     const grid = document.createElement("dl");
     grid.classList.add("pyc-resources__grid");
     this._append_field(grid, "Resource id", resource.resource_id);
-    this._append_field(grid, "Kind", resource.kind);
+    this._append_field(grid, "Kind", word_label(resource.kind));
     this._append_field(
       grid,
       "Project",
