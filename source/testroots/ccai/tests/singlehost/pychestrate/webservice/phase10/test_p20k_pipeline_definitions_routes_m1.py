@@ -805,20 +805,27 @@ def test_validate_real_document_passes_for_acyclic_dag():
     """
     **Feature: 6-pipeline-definition PR p20k**
     **Property: definition_service.validate_document accepts a
-    well-formed two-stage DAG.**
+    well-formed two-stage DAG whose steps have the inputs their kinds
+    need (it also checks the inputs now, ORC-13).**
     """
+    from ccai.pychestrate.webservice.extensions.registry import reset_registry_for_testing  # noqa: E402
+    from ccai.pychestrate.webservice.orchestration.pipelines.definition import (  # noqa: E402
+        register_builtin_extensions as pipeline_definition_register,
+    )
+    reset_registry_for_testing()
+    pipeline_definition_register()
     document = json.dumps({
         "schema_version": 1,
         "name": "ci",
         "stages": [
             {
                 "id": "build",
-                "steps": [{"id": "compile", "kind": "build"}],
+                "steps": [{"id": "compile", "kind": "build", "inputs": {"image": "registry.example.com/app"}}],
             },
             {
                 "id": "test",
                 "needs": ["build"],
-                "steps": [{"id": "pytest", "kind": "test"}],
+                "steps": [{"id": "pytest", "kind": "test", "inputs": {"catalog_entry_id": "00000000-0000-4000-8000-aaaaaaaaaaaa"}}],
             },
         ],
     })

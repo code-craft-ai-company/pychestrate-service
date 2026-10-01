@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- Validating a pipeline checks its steps' inputs, not just its stage graph (ORC-13). Validate said "valid" for a
+  pipeline whose build step had no `image` and whose script step had no commands; the inputs were refused later, at
+  run time, in the middle of writing the run. `POST .../pipelines:validate` (and the page's Validate button) now run every
+  step's inputs through its kind's own validation and report one line per problem naming the step ("Step 'build-image'
+  (build): 'image' is required"); a step of a kind that is not loaded is reported too. A run whose inputs are invalid is
+  now refused before any run, stage or step row is written.
+
 - Section headings are one size across bundle and server pages (XC-05). A server-rendered card heading is 16px,
   weight 600; a bundle's section, panel and sub headings were 14px in some views (run detail, admin overview and
   extension registry, the updates detail, webhooks) and 16px in others. Every bundle section heading now takes the

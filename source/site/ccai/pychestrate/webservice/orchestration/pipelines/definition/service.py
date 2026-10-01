@@ -259,12 +259,39 @@ def _document_to_definition_view(
     return rtnval
 
 
+def step_input_issues(*, document: PipelineDocument) -> List[str]:
+    """
+        What is wrong with the inputs of a document's steps, as its step kinds see them: every
+        step's inputs go through its kind's ``validate_inputs``, so a pipeline that would be refused
+        when it is run (a build with no ``image``, a script with no commands) is refused when it is
+        validated. A step of a kind that is not loaded is reported too.
+
+        :param document: A parsed document.
+
+        :returns: One line per problem ("Step 'build-image' (build): 'image' is required"); empty
+                  when every step's inputs are valid.
+    """
+    issues: List[str] = []
+    for stage in document.stages:
+        for step in stage.steps:
+            try:
+                kind_cls = _resolve_step_kind(kind_name=step.kind_name)
+            except PipelineStepKindUnknownError:
+                issues.append("Step '{}' uses a step kind that is not loaded: '{}'.".format(step.step_id, step.kind_name))
+                continue
+            ok, kind_issues = kind_cls.validate_inputs(inputs=step.inputs)
+            if ok is False:
+                for issue in kind_issues:
+                    issues.append("Step '{}' ({}): {}".format(step.step_id, step.kind_name, issue))
+    return issues
+
+
 def validate_document(*, document_bytes: bytes, filename: str) -> DagValidationView:
     """
         Pure parse + DAG validation of a pipeline-definition
         document. No persistence, no events. Surfaces parse,
-        schema, cycle, and stage-reference issues in a single
-        :class:`DagValidationView`.
+        schema, cycle, stage-reference and step-input issues in a
+        single :class:`DagValidationView`.
 
         :param document_bytes: Raw document bytes (YAML or JSON).
         :param filename: Document filename; selects the parser.
@@ -295,6 +322,16 @@ def validate_document(*, document_bytes: bytes, filename: str) -> DagValidationV
             stage_count=len(document.stages),
             topological_order=(),
             issues=(str(dag_err),),
+        )
+        return rtnval
+
+    input_issues = step_input_issues(document=document)
+    if len(input_issues) > 0:
+        rtnval = DagValidationView(
+            valid=False,
+            stage_count=len(document.stages),
+            topological_order=dag.topological_order,
+            issues=tuple(input_issues),
         )
         return rtnval
 
@@ -540,6 +577,23 @@ def trigger_run(
     )
 
     digest = compute_pipeline_digest(document=document)
+
+    # Refuse a document whose step inputs are invalid before anything is persisted, so a refused
+    # run leaves no run, stage or step rows behind.
+    for stage in document.stages:
+        for step in stage.steps:
+            kind_cls = _resolve_step_kind(kind_name=step.kind_name)
+            ok, kind_issues = kind_cls.validate_inputs(inputs=step.inputs)
+            if ok is False:
+                err_lines = [
+                    "Step '{}' inputs failed validation: {} issue(s).".format(step.step_id, len(kind_issues)),
+                ]
+                err_lines.append("STAGE_ID: {}".format(stage.stage_id))
+                err_lines.append("KIND: {}".format(step.kind_name))
+                for issue_index, issue in enumerate(kind_issues):
+                    err_lines.append("  [{}] {}".format(issue_index + 1, issue))
+                raise PipelineDocumentInvalidError(os.linesep.join(err_lines)) from None
+
     now = utc_now()
 
     pipeline_row = repository.insert_pipeline_run(
