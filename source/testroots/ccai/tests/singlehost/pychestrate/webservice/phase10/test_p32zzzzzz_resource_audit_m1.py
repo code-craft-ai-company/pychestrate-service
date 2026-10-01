@@ -26,6 +26,7 @@ from sqlalchemy.orm import sessionmaker
 
 from ccai import testbase
 
+from ccai.pychestrate.webservice.audit.audit_presenter import action_for_kind, describe_audit_record
 from ccai.pychestrate.webservice.audit.bus_subscriber import wire_bus_subscribers
 from ccai.pychestrate.webservice.audit.models import AuditRecord
 from ccai.pychestrate.webservice.resources.inventory import register_builtin_extensions as inventory_register
@@ -86,6 +87,41 @@ def test_registering_changing_and_retiring_a_resource_is_in_the_audit_log_with_w
             1, ["audit.resource.registered", "audit.resource.updated", "audit.resource.state_changed"],
             {ACTOR}, {"resource:" + resource_id},
             ["display_name", "tags"], "available", "retired", "dropped",
+        ),
+    )
+    return
+
+
+def test_the_audit_page_describes_a_resource_record_in_words():
+    """
+    **Feature: resource audit (RES-22)**
+    **Property: the Audit Logs page names the three actions ("Registered resource", "Updated resource",
+    "Changed resource state") and its detail column says which resource and what happened: its name and kind;
+    its name and the fields changed; its name, the states and the reason.**
+    """
+    reset_phase1_runtime()
+    inventory_register()
+    engine, session = build_in_memory_session()
+    factory = sessionmaker(bind=engine)
+    wire_bus_subscribers(session_factory=factory)
+    view = inventory_service.register_resource(
+        db_session=session, project_id=PROJECT_ID, kind="device", display_name="Bench phone 1",
+        attributes={"hostname": "phone-words", "mac_address": "aa:bb:cc:dd:ee:98"}, actor="user:" + ACTOR,
+    )
+    inventory_service.update_resource(db_session=session, resource_id=str(view.resource_id), description="moved to rack 4", actor="user:" + ACTOR)
+    inventory_service.transition_state(db_session=session, resource_id=str(view.resource_id), new_state=ResourceState.MAINTENANCE, actor="user:" + ACTOR, reason="firmware")
+    reader = factory()
+    try:
+        rows = reader.query(AuditRecord).filter(AuditRecord.kind.like("audit.resource.%")).order_by(AuditRecord.sequence_number.asc()).all()
+        described = [describe_audit_record(record=row, logins={ACTOR: "ada"}) for row in rows]
+    finally:
+        reader.close()
+
+    testbase.assert_equal(
+        ([row.action for row in described], [row.summary for row in described]),
+        (
+            ["Registered resource", "Updated resource", "Changed resource state"],
+            ['"Bench phone 1" - device', '"Bench phone 1" - changed: description', '"Bench phone 1" - available to maintenance - reason: "firmware"'],
         ),
     )
     return

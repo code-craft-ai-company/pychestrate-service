@@ -91,6 +91,9 @@ _ACTIONS = {
     "audit.project.member_added": "Added project member",
     "audit.project.member_removed": "Removed project member",
     "audit.ui_profile.deployment_changed": "Changed the UI profile",
+    "audit.resource.registered": "Registered resource",
+    "audit.resource.updated": "Updated resource",
+    "audit.resource.state_changed": "Changed resource state",
     "audit.reservation.overridden": "Acted on another person's reservation",
     "audit.ip_allocation.force_released": "Released another person's IP address",
 }
@@ -231,6 +234,22 @@ def _summary(*, kind: str, payload: Dict[str, Any], logins: Dict[str, str]) -> s
         if payload.get("must_change", None) is True:
             parts.append("must change at next sign-in")
         return " - ".join(parts)
+
+    if kind.startswith("audit.resource.") is True:
+        name = payload.get("display_name", None)
+        if name is not None and len(str(name)) > 0:
+            parts.append('"{}"'.format(name))
+        if kind == "audit.resource.registered":
+            parts.append(str(payload.get("kind", "")))
+        elif kind == "audit.resource.updated":
+            changed = payload.get("changed", None) or []
+            parts.append("changed: {}".format(", ".join(str(item).replace("_", " ") for item in changed)))
+        else:
+            parts.append("{} to {}".format(payload.get("from_state", ""), payload.get("to_state", "")))
+            reason = payload.get("reason", None)
+            if reason is not None and len(str(reason)) > 0:
+                parts.append('reason: "{}"'.format(reason))
+        return " - ".join(part for part in parts if len(part) > 0)
 
     if kind == "audit.ip_allocation.force_released":
         parts.append(str(payload.get("ip_address", "")))

@@ -71,6 +71,8 @@ preview tag.
   (naming the fields that changed) and `audit.resource.state_changed` (naming the states and the reason, which
   covers maintenance, quarantine and retirement). Each record targets `resource:<id>` and names the acting user
   (the register, update and state endpoints pass the signed-in user); a change that alters nothing writes none.
+  The Audit Logs page names them "Registered resource", "Updated resource" and "Changed resource state" and its detail column
+  says which resource and what happened (its name and kind; the fields changed; the states and the reason).
 
 - A resource's name, description and tags can be changed over REST (RES-22). A resource could be registered and
   read but not changed: a typo in a name, a new tag or a note meant retiring the device and registering it again.
