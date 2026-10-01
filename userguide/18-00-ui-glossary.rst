@@ -181,7 +181,7 @@ what colours follow. Terms that need more than that:
 
 ``Run``
     The execution of a job, with its own page. A build or a provisioning
-    run links to the run that did the work; copy never says *Layer-5 run*.
+    run links to the run that did the work, named simply *Run*.
 
 ``dispatch unconfirmed`` / ``progress stalled`` / ``cancel requested`` / ``needs investigation``
     Run states. *Dispatch unconfirmed*: the job was sent to a pod and the

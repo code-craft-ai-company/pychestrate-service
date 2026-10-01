@@ -410,7 +410,7 @@ class PycGuards extends HTMLElement {
       for (const environment of this._environments) {
         const option = document.createElement("mj-option");
         option.setAttribute("value", environment.environment_id);
-        option.textContent = environment.name + " (" + short_id(environment.environment_id) + ")";
+        option.textContent = environment.name;
         if (environment.environment_id === this._state.environmentFilter) {
           option.setAttribute("selected", "");
         }
@@ -641,7 +641,7 @@ class PycGuards extends HTMLElement {
       for (const environment of this._environments) {
         const option = document.createElement("mj-option");
         option.setAttribute("value", environment.environment_id);
-        option.textContent = environment.name + " (" + short_id(environment.environment_id) + ")";
+        option.textContent = environment.name;
         select.appendChild(option);
       }
       const rtnval = select;
@@ -885,7 +885,19 @@ class PycGuards extends HTMLElement {
     table.rowClass = "pyc-infra__row";
     table.rowAttrs = (guard) => ({ "data-guard-id": guard.guard_id });
     table.columns = [
-      { key: "environment_id", label: "Environment", width: "16rem" },
+      {
+        key: "environment_id",
+        label: "Environment",
+        width: "16rem",
+        render: (guard) => {
+          // The environment's name, not its id (ORC-18); the id stays in the hover text.
+          const cell = document.createElement("span");
+          const known = self._environments.find((environment) => environment.environment_id === guard.environment_id);
+          cell.textContent = known !== void 0 ? known.name : short_id(guard.environment_id);
+          cell.title = guard.environment_id;
+          return cell;
+        }
+      },
       { key: "rule_id", label: "Rule", width: "16rem" },
       {
         key: "enabled",

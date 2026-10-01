@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- The Blast-Radius Guards page names an environment, not its id (ORC-18). The table's Environment column printed the id
+  ("9a1b2c3d-...") and the environment pickers read "staging (9a1b2c3d)". An environment has a name that is unique in its
+  project, so that is what the page says; the id stays in the hover text of the table cell.
+
 - Pod, client and provisioning states read as words, not as stored enum spellings (ORC-38). The clients list showed `ACTIVE`,
   `SUSPENDED` and `REVOKED` with filters named `ALIVE`, `DEGRADED` and `LOST`; the pod page showed `IN_USE` and `DRAINING`, a
   history of `READY → IN_USE` and sentences such as "only available while the pod is READY or IN_USE"; the provisioning State
