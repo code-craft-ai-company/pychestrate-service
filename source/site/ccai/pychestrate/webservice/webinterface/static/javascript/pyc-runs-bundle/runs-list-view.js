@@ -1,5 +1,5 @@
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
-import { job_type_label, run_title } from "../shared/run-labels.js";
+import { job_type_label, run_title, state_label } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 const RUN_STATES = [
   "pending",
@@ -319,8 +319,8 @@ class PycRunsList extends HTMLElement {
     root.appendChild(heading);
     const filters = document.createElement("div");
     filters.classList.add("pyc-runs-list__filters");
-    const state_label = document.createElement("div");
-    state_label.classList.add("pyc-runs-list__filter");
+    const state_field = document.createElement("div");
+    state_field.classList.add("pyc-runs-list__filter");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
@@ -332,7 +332,7 @@ class PycRunsList extends HTMLElement {
     for (const run_state of RUN_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", run_state);
-      option.textContent = run_state;
+      option.textContent = state_label(run_state);
       state_select.appendChild(option);
     }
     state_select.value = this._state.stateFilter;
@@ -341,9 +341,9 @@ class PycRunsList extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
+    state_field.appendChild(state_select);
     this._state_select = state_select;
-    filters.appendChild(state_label);
+    filters.appendChild(state_field);
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
     const project_select = document.createElement("mj-select");
@@ -914,7 +914,7 @@ class PycRunsList extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-runs-list__badge");
           badge.setAttribute("data-tone", state_badge_tone(run.state));
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         },
       },

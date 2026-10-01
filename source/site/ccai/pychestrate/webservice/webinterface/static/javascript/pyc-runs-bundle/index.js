@@ -85,6 +85,12 @@ var JOB_TYPE_KINDS = [
   ["build-", "Build"],
   ["provision-", "Provisioning"]
 ];
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  return state.replace(/[_-]+/g, " ");
+}
 function job_type_label(job_type) {
   const text = typeof job_type === "string" ? job_type.trim() : "";
   if (text.length === 0) {
@@ -471,8 +477,8 @@ var PycRunsList = class extends HTMLElement {
     root.appendChild(heading);
     const filters = document.createElement("div");
     filters.classList.add("pyc-runs-list__filters");
-    const state_label = document.createElement("div");
-    state_label.classList.add("pyc-runs-list__filter");
+    const state_field = document.createElement("div");
+    state_field.classList.add("pyc-runs-list__filter");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
@@ -484,7 +490,7 @@ var PycRunsList = class extends HTMLElement {
     for (const run_state of RUN_STATES) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", run_state);
-      option.textContent = run_state;
+      option.textContent = state_label(run_state);
       state_select.appendChild(option);
     }
     state_select.value = this._state.stateFilter;
@@ -493,9 +499,9 @@ var PycRunsList = class extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
+    state_field.appendChild(state_select);
     this._state_select = state_select;
-    filters.appendChild(state_label);
+    filters.appendChild(state_field);
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
     const project_select = document.createElement("mj-select");
@@ -1051,7 +1057,7 @@ var PycRunsList = class extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-runs-list__badge");
           badge.setAttribute("data-tone", state_badge_tone(run.state));
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         }
       },
@@ -2219,7 +2225,7 @@ var PycRunDetail = class extends HTMLElement {
     badge.classList.add("pyc-run-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", state_badge_tone(run.state));
-    badge.textContent = run.state;
+    badge.textContent = state_label(run.state);
     id_row.appendChild(badge);
     if (is_terminal_state(run.state) === false) {
       const cancel_button = document.createElement("mj-button");

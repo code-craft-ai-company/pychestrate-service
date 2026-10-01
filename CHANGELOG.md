@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- A run's state reads as words (ORC-38). The Runs list and the run, build and provisioning pages showed a state
+  as stored (`dispatch_unconfirmed`, `progress_stalled`, `needs_investigation`); the chips and the Runs list's state
+  filter now read "dispatch unconfirmed", "progress stalled", "needs investigation". The stored value is still what
+  the colour, the filter query and the CSV export use.
+
 - A refused action says whom to ask for access (XC-21). About thirty bundle messages said "You do not have
   permission to ..." and none said what to do next; only the dashboard editor named the access contact. Every toast
   now adds "To ask for access, contact <contact>." to a permission message when the installation names a contact

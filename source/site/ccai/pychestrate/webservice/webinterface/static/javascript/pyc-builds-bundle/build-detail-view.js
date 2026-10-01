@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { state_label } from "../shared/run-labels.js";
 import { project_of_run } from "../shared/run-project.js";
 import { fetch_project_names, name_or_short } from "../shared/entity-names.js";
 import { format_bytes, opens_in_browser, run_artifact_url, served_artifact_path, tail_lines } from "../shared/run-artifacts.js";
@@ -519,7 +520,7 @@ class PycBuildDetail extends HTMLElement {
     badge.classList.add("pyc-build-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", build_state_tone(build.state));
-    badge.textContent = build.state;
+    badge.textContent = state_label(build.state);
     id_row.appendChild(badge);
     section.appendChild(id_row);
     const grid = document.createElement("dl");

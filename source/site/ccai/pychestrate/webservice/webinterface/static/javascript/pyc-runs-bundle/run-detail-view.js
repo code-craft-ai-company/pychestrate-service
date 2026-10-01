@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { state_label } from "../shared/run-labels.js";
 import { set_entity_title } from "../shared/page-title.js";
 import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
@@ -1115,7 +1116,7 @@ class PycRunDetail extends HTMLElement {
     badge.classList.add("pyc-run-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", state_badge_tone(run.state));
-    badge.textContent = run.state;
+    badge.textContent = state_label(run.state);
     id_row.appendChild(badge);
     if (is_terminal_state(run.state) === false) {
       const cancel_button = document.createElement("mj-button");

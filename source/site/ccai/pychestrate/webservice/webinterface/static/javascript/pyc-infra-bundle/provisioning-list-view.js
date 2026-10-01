@@ -2,7 +2,7 @@ import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_duration } from "../shared/datetime.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
-import { provisioning_title } from "../shared/run-labels.js";
+import { provisioning_title, state_label } from "../shared/run-labels.js";
 import { choose_project_id, mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import {
   build_environments_query_url,
@@ -637,7 +637,7 @@ class PycProvisioningList extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-infra__badge");
           badge.setAttribute("data-tone", provisioning_state_tone(run.state));
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         }
       },

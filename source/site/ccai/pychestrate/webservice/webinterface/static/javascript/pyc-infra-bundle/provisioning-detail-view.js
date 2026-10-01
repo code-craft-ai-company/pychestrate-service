@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { state_label } from "../shared/run-labels.js";
 import { project_of_run } from "../shared/run-project.js";
 import { fetch_environment_names, fetch_project_names, name_or_short } from "../shared/entity-names.js";
 import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
@@ -397,7 +398,7 @@ class PycProvisioningDetail extends HTMLElement {
     badge.classList.add("pyc-provisioning-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", provisioning_state_tone(run.state));
-    badge.textContent = run.state;
+    badge.textContent = state_label(run.state);
     id_row.appendChild(badge);
     section.appendChild(id_row);
     const grid = document.createElement("dl");

@@ -1,4 +1,5 @@
 import { show_toast } from "../shared/toast.js";
+import { state_label } from "../shared/run-labels.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
   ENVIRONMENTS_ROUTE,
@@ -383,7 +384,7 @@ class PycEnvironmentDetail extends HTMLElement {
           const badge = document.createElement("span");
           badge.classList.add("pyc-infra__badge");
           badge.setAttribute("data-role", "drift-run-state");
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         }
       },

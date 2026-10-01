@@ -191,6 +191,12 @@ function format_duration(started, finished, still_running, now) {
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  return state.replace(/[_-]+/g, " ");
+}
 function build_title(build) {
   const kind = typeof build.runner_kind === "string" && build.runner_kind.length > 0 ? build.runner_kind : "build";
   const inputs = build.inputs !== null && typeof build.inputs === "object" ? build.inputs : {};
@@ -613,8 +619,8 @@ var PycBuildsList = class extends HTMLElement {
       void this._on_project_changed();
     });
     controls.appendChild(project_input);
-    const state_label = document.createElement("div");
-    state_label.classList.add("pyc-builds__field");
+    const state_label2 = document.createElement("div");
+    state_label2.classList.add("pyc-builds__field");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-builds__select");
@@ -635,8 +641,8 @@ var PycBuildsList = class extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
-    controls.appendChild(state_label);
+    state_label2.appendChild(state_select);
+    controls.appendChild(state_label2);
     const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-builds__button");
     trigger_button.setAttribute("type", "button");
@@ -1142,7 +1148,7 @@ var PycBuildsList = class extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-builds__badge");
           badge.setAttribute("data-tone", build_state_tone(build.state));
-          badge.textContent = build.state;
+          badge.textContent = state_label(build.state);
           return badge;
         }
       },
@@ -2077,7 +2083,7 @@ var PycBuildDetail = class extends HTMLElement {
     badge.classList.add("pyc-build-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", build_state_tone(build.state));
-    badge.textContent = build.state;
+    badge.textContent = state_label(build.state);
     id_row.appendChild(badge);
     section.appendChild(id_row);
     const grid = document.createElement("dl");

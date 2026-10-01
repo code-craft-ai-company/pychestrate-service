@@ -1,7 +1,7 @@
 import { hide_unless_may } from "../shared/permissions.js";
 import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
-import { build_source_label, build_title } from "../shared/run-labels.js";
+import { build_source_label, build_title, state_label } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
 import { build_empty_state } from "../shared/empty-state.js";
 import { reveal } from "../shared/reveal.js";
@@ -833,7 +833,7 @@ class PycBuildsList extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-builds__badge");
           badge.setAttribute("data-tone", build_state_tone(build.state));
-          badge.textContent = build.state;
+          badge.textContent = state_label(build.state);
           return badge;
         }
       },

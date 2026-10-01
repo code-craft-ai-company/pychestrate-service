@@ -15,6 +15,18 @@ const JOB_TYPE_KINDS = [
   ["provision-", "Provisioning"],
 ];
 
+/*
+ * A state or status as it reads on a chip: the stored spelling with its underscores and dashes
+ * read as spaces ("dispatch_unconfirmed" -> "dispatch unconfirmed", "needs_investigation" ->
+ * "needs investigation"). The stored value is still what the colour and the logic go by.
+ */
+export function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  return state.replace(/[_-]+/g, " ");
+}
+
 /* "build-makefile" -> "Build · makefile", "testbase" -> "Test · testbase". */
 export function job_type_label(job_type) {
   const text = typeof job_type === "string" ? job_type.trim() : "";

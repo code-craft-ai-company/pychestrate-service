@@ -773,9 +773,9 @@ var PycEnvironments = class extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const state_label = document.createElement("label");
-    state_label.classList.add("pyc-infra__field");
-    state_label.textContent = "State";
+    const state_label2 = document.createElement("label");
+    state_label2.classList.add("pyc-infra__field");
+    state_label2.textContent = "State";
     const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
@@ -794,8 +794,8 @@ var PycEnvironments = class extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
-    controls.appendChild(state_label);
+    state_label2.appendChild(state_select);
+    controls.appendChild(state_label2);
     const register_button = document.createElement("mj-button");
     register_button.classList.add("pyc-infra__button");
     register_button.setAttribute("type", "button");
@@ -1760,6 +1760,19 @@ var PycEnvironments = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
+function state_label(state) {
+  if (typeof state !== "string" || state.length === 0) {
+    return "\u2014";
+  }
+  return state.replace(/[_-]+/g, " ");
+}
+function provisioning_title(run) {
+  const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
+  const driver = typeof run.driver_name === "string" ? run.driver_name : "";
+  return driver.length > 0 ? action + " \xB7 " + driver : action;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
 var SECTION_TITLE_KEY = "pycSectionTitle";
 var ENTITY_TITLE_KEY = "pycEntityTitle";
@@ -2152,7 +2165,7 @@ var PycEnvironmentDetail = class extends HTMLElement {
           const badge = document.createElement("span");
           badge.classList.add("pyc-infra__badge");
           badge.setAttribute("data-role", "drift-run-state");
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         }
       },
@@ -2239,13 +2252,6 @@ var PycEnvironmentDetail = class extends HTMLElement {
     return;
   }
 };
-
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/run-labels.js
-function provisioning_title(run) {
-  const action = typeof run.action === "string" && run.action.length > 0 ? run.action : "run";
-  const driver = typeof run.driver_name === "string" ? run.driver_name : "";
-  return driver.length > 0 ? action + " \xB7 " + driver : action;
-}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
@@ -2446,9 +2452,9 @@ var PycProvisioningList = class extends HTMLElement {
       void this._on_project_changed();
     });
     controls.appendChild(project_input);
-    const state_label = document.createElement("label");
-    state_label.classList.add("pyc-infra__field");
-    state_label.textContent = "State";
+    const state_label2 = document.createElement("label");
+    state_label2.classList.add("pyc-infra__field");
+    state_label2.textContent = "State";
     const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
@@ -2468,8 +2474,8 @@ var PycProvisioningList = class extends HTMLElement {
       this._state.page = 1;
       void this._refresh();
     });
-    state_label.appendChild(state_select);
-    controls.appendChild(state_label);
+    state_label2.appendChild(state_select);
+    controls.appendChild(state_label2);
     const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");
@@ -2849,7 +2855,7 @@ var PycProvisioningList = class extends HTMLElement {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-infra__badge");
           badge.setAttribute("data-tone", provisioning_state_tone(run.state));
-          badge.textContent = run.state;
+          badge.textContent = state_label(run.state);
           return badge;
         }
       },
@@ -3613,7 +3619,7 @@ var PycProvisioningDetail = class extends HTMLElement {
     badge.classList.add("pyc-provisioning-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", provisioning_state_tone(run.state));
-    badge.textContent = run.state;
+    badge.textContent = state_label(run.state);
     id_row.appendChild(badge);
     section.appendChild(id_row);
     const grid = document.createElement("dl");
