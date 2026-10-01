@@ -1,7 +1,7 @@
 """
 .. module:: test_p32zzzzzzzzzz_slo_update_m1
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: An SLO can be edited (INS-12): service rules, the PUT route and the event.
+    :synopsis: An SLO can be edited (ORC-26): service rules, the PUT route and the event.
 
 .. moduleauthor:: Code Craft AI LLC
 
@@ -80,7 +80,7 @@ def _create(session, *, name="checkout", target=0.99):
 
 def test_update_changes_the_fields_bumps_the_version_and_names_what_changed():
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: update_slo stores the new name, target, window and description on the same SLO (same id, kind and
     project), bumps the version, and publishes entity.slo.updated naming exactly the fields that changed.**
     """
@@ -112,7 +112,7 @@ def test_update_changes_the_fields_bumps_the_version_and_names_what_changed():
 
 def test_update_that_changes_nothing_writes_nothing_and_says_nothing():
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: saving an SLO exactly as it is leaves the version where it was and publishes no event.**
     """
     session = _prepare()
@@ -130,7 +130,7 @@ def test_update_that_changes_nothing_writes_nothing_and_says_nothing():
 
 def test_update_applies_the_rules_of_create():
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: an empty name, a target outside 0..1, a non-positive window and a config the kind refuses are
     refused with the create errors; a name another SLO in the project has is a conflict (an SLO may keep its own
     name); an unknown id is not found; and after every refusal the SLO is as it was.**
@@ -191,7 +191,7 @@ def _put(session, *, slo, body, project_id=PROJECT_UUID):
 
 def test_put_route_edits_and_refuses_a_kind_change_a_clash_and_a_bad_target():
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: PUT .../slos/{id} answers 200 with the SLO after the edit (version 2); a different kind is a 422
     that says to create a new SLO; a name another SLO has is a 409; a target above 1 is a 422; fields left out of the
     body keep their stored values.**

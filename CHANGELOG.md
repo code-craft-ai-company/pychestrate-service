@@ -79,7 +79,7 @@ preview tag.
 
 ### Added
 
-- An SLO can be edited (INS-12). It could only be created or deleted: a typo in a name or a tighter target meant
+- An SLO can be edited (ORC-26). It could only be created or deleted: a typo in a name or a tighter target meant
   deleting the objective and losing its history. `PUT /api/v1/projects/{project_id}/slos/{slo_id}` replaces the
   editable definition (name, target, window, description, definition config, notification route, auto-attach; a field
   left out keeps its stored value) under the rules of create (`409` for a name another SLO in the project has, `422` for

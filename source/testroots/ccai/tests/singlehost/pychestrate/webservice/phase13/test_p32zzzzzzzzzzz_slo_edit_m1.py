@@ -1,7 +1,7 @@
 """
 .. module:: test_p32zzzzzzzzzzz_slo_edit_m1
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: An SLO can be edited from the SLOs page (INS-12).
+    :synopsis: An SLO can be edited from the SLOs page (ORC-26).
 
 .. moduleauthor:: Code Craft AI LLC
 
@@ -114,7 +114,7 @@ def _row_text(page: Any) -> str:
 
 def test_edit_fills_the_form_with_the_slo_fixes_its_kind_and_saves_with_one_put(browser: Browser):
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: Edit opens the form titled with the SLO's name, filled with its name, target, window and config, the
     kind shown but disabled; changing the target and choosing Save changes sends one PUT (the SLO's own kind, the
     new values), says it was saved, closes the form and shows the new target in the list.**
@@ -160,7 +160,7 @@ def test_edit_fills_the_form_with_the_slo_fixes_its_kind_and_saves_with_one_put(
 
 def test_a_refused_edit_says_why_and_keeps_the_form_open_for_another_try(browser: Browser):
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: a name another SLO already has (409) is said in words and the form stays open with the person's
     values (a second attempt is possible); Cancel closes the form without sending anything.**
     """
@@ -193,7 +193,7 @@ def test_a_refused_edit_says_why_and_keeps_the_form_open_for_another_try(browser
 
 def test_without_the_write_permission_there_is_no_edit_button(browser: Browser):
     """
-    **Feature: SLO edit (INS-12)**
+    **Feature: SLO edit (ORC-26)**
     **Property: a person who may not write SLOs is not offered Edit (it follows the same permission as Create and
     Delete).**
     """
