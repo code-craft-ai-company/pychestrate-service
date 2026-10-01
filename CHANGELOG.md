@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- The Extension Registry says whether the extensions' routes are served, in words (ADM-30). It printed the API's own word,
+  "Registry status: mounted" or "deferred", and a person reading "deferred" could not tell whether anything was wrong. The line
+  now reads "Extension routes:" with **Serving** (green), **Not attached yet** (amber) or **Unknown**, and the chip's hover text
+  says what each means ("the extensions are loaded but the routes they add are not attached to the web service yet, so they
+  are not being served"). This was the audit's "unexplained deferred".
+
 - The admin pages put their one action in the title row (ADM-30). Administration, System Health, Extension Registry and
   Feature Flags each had a boxed "Refresh" button on a row of its own under the title, which made every page look like a
   form with a single control. The title now sits on the left with **Refresh** on the right of the same row, as a quiet button

@@ -57,6 +57,24 @@ function mount_state_tone(dynamic_mount) {
   const rtnval = "error";
   return rtnval;
 }
+/**
+ * Say in words whether the extensions' routes are being served. The API reports ``mounted`` once the routes are attached
+ * and ``deferred`` before that; "deferred" meant nothing to a person reading the page.
+ *
+ * @param dynamic_mount The listing's ``dynamic_mount`` value.
+ *
+ * @returns ``{label, hint}``: the chip's text and what it means.
+ */
+function mount_state_words(dynamic_mount) {
+  const lowered = typeof dynamic_mount === "string" ? dynamic_mount.toLowerCase() : "";
+  if (lowered === "mounted") {
+    return { label: "Serving", hint: "The routes the extensions add are attached and being served." };
+  }
+  if (lowered === "deferred") {
+    return { label: "Not attached yet", hint: "The extensions are loaded but the routes they add are not attached to the web service yet, so they are not being served." };
+  }
+  return { label: "Unknown", hint: "The service did not say whether the extensions' routes are attached." };
+}
 class PycExtensionRegistry extends HTMLElement {
   _extensions;
   _mountState;
@@ -281,7 +299,7 @@ class PycExtensionRegistry extends HTMLElement {
     registry_status.classList.add("pyc-admin__lede");
     registry_status.setAttribute("data-role", "registry-status");
     registry_status.appendChild(
-      document.createTextNode("Registry status: ")
+      document.createTextNode("Extension routes: ")
     );
     const status_badge = document.createElement("mj-chip");
     status_badge.classList.add("pyc-admin__badge");
@@ -289,7 +307,9 @@ class PycExtensionRegistry extends HTMLElement {
       "data-tone",
       mount_state_tone(this._mountState)
     );
-    status_badge.textContent = this._mountState.length > 0 ? this._mountState : "unknown";
+    const mount_words = mount_state_words(this._mountState);
+    status_badge.textContent = mount_words.label;
+    status_badge.setAttribute("title", mount_words.hint);
     registry_status.appendChild(status_badge);
     region.replaceChildren(registry_status, table);
     return;
@@ -353,5 +373,6 @@ export {
   EXT_LISTING_PATH,
   PycExtensionRegistry,
   group_routes_by_extension,
-  mount_state_tone
+  mount_state_tone,
+  mount_state_words
 };
