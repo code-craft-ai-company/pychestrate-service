@@ -65,6 +65,13 @@ preview tag.
 
 ### Added
 
+- Who registered, changed or retired a resource is in the audit log (RES-22). The inventory published
+  `entity.resource.*` events and no audit kind listened, so "who renamed this device, who put it in maintenance,
+  who retired it" had no answer. Three kinds now record it: `audit.resource.registered`, `audit.resource.updated`
+  (naming the fields that changed) and `audit.resource.state_changed` (naming the states and the reason, which
+  covers maintenance, quarantine and retirement). Each record targets `resource:<id>` and names the acting user
+  (the register, update and state endpoints pass the signed-in user); a change that alters nothing writes none.
+
 - A resource's name, description and tags can be changed over REST (RES-22). A resource could be registered and
   read but not changed: a typo in a name, a new tag or a note meant retiring the device and registering it again.
   `PATCH /api/v1/resources/{id}` (`system:resources.write`) changes `display_name`, `description` and/or `tags`;

@@ -598,7 +598,7 @@ def handle_register_resource(request: Request) -> Response:
     """
     try:
         db_session = _require_session(request=request)
-        _require_permission(
+        principal = _require_permission(
             request=request, db_session=db_session,
             permission_key=RESOURCES_WRITE_PERMISSION_KEY,
         )
@@ -635,6 +635,7 @@ def handle_register_resource(request: Request) -> Response:
                 db_session=db_session, project_id=project_id, kind=kind,
                 display_name=display_name, attributes=attributes,
                 description=description, tags=tags,
+                actor="user:{}".format(principal.user_id),
             )
         except ResourceKindUnknownError as xcpt:
             _abort_problem(

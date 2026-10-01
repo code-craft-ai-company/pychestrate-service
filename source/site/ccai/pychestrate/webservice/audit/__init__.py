@@ -39,6 +39,7 @@ from ccai.pychestrate.webservice.audit.extensions.ip_allocation_events import (
 from ccai.pychestrate.webservice.audit.extensions.reservation_events import (
     ReservationOverriddenAuditEvents,
 )
+from ccai.pychestrate.webservice.audit.extensions.resource_events import RESOURCE_AUDIT_EVENT_TYPES
 from ccai.pychestrate.webservice.audit.extensions.rpa_events import RPA_AUDIT_EVENT_TYPES
 from ccai.pychestrate.webservice.audit.extensions.ui_profile_events import (
     UiProfileDeploymentChangedAuditEvents,
@@ -133,6 +134,7 @@ def register_builtin_extensions() -> None:
             USER_AUDIT_EVENT_TYPES
             + ROLE_AUDIT_EVENT_TYPES
             + SESSION_AUDIT_EVENT_TYPES
+            + RESOURCE_AUDIT_EVENT_TYPES
             + DATA_CHANGE_AUDIT_EVENT_TYPES):
         if extra_event_type in already_registered:
             continue

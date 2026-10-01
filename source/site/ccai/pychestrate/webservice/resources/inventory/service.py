@@ -81,6 +81,17 @@ _PERMITTED_TRANSITIONS = frozenset({
 })
 
 
+def _audit_fields(*, resource_id: Any, actor: str) -> dict:
+    """
+        The members every resource event carries for the audit log: who acted (``actor``, and
+        ``actor_user_id`` when it names a user as ``user:<uuid>``) and what the record is about.
+    """
+    rtnval = {"actor": actor, "target_ref": "resource:{}".format(resource_id)}
+    if actor.startswith("user:") and len(actor) > len("user:"):
+        rtnval["actor_user_id"] = actor[len("user:"):]
+    return rtnval
+
+
 def register_resource(
         *,
         db_session: DbSession,
@@ -89,7 +100,8 @@ def register_resource(
         display_name: str,
         attributes: Mapping[str, Any],
         description: str = "",
-        tags: Optional[Tuple[str, ...]] = None
+        tags: Optional[Tuple[str, ...]] = None,
+        actor: str = "system:test"
     ) -> ResourceView:
     """
         Register a fresh resource. Resolves the registered
@@ -139,6 +151,7 @@ def register_resource(
                 "kind": kind,
                 "display_name": display_name,
                 "identity_hash": identity_hash,
+                **_audit_fields(resource_id=row.resource_id, actor=actor),
             },
             source_event_id=new_uuid(),
         ),
@@ -242,7 +255,7 @@ def update_resource(
                 "resource_id": str(row.resource_id),
                 "project_id": str(row.project_id),
                 "changed": changed,
-                "actor": actor,
+                **_audit_fields(resource_id=row.resource_id, actor=actor),
             },
             source_event_id=new_uuid(),
         ),
@@ -300,8 +313,8 @@ def transition_state(
                 "project_id": str(row.project_id),
                 "from_state": from_state.value,
                 "to_state": new_state.value,
-                "actor": actor,
                 "reason": reason,
+                **_audit_fields(resource_id=row.resource_id, actor=actor),
             },
             source_event_id=new_uuid(),
         ),
