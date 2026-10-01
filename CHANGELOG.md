@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- An SLO with no data in its window is no longer drawn green (ORC-36). "No data in window" claimed health nobody had
+  measured; it is now neutral grey like "Not evaluated" (healthy stays green, a nearly spent budget amber, breaching red;
+  a browser test measures the colours from screenshots of the chips, since the audit reported "Breaching" as grey and it is
+  red). The list already returns every objective's status, so statuses are shown when the page opens with no request per
+  row (the row button only re-reads one); a test pins that too. The Target and Window columns are narrower and Achieved
+  wider so the longest chip does not touch the row buttons.
+
 - Validating a pipeline checks its steps' inputs, not just its stage graph (ORC-13). Validate said "valid" for a
   pipeline whose build step had no `image` and whose script step had no commands; the inputs were refused later, at
   run time, in the middle of writing the run. `POST .../pipelines:validate` (and the page's Validate button) now run every

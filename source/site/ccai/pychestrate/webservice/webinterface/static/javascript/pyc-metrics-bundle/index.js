@@ -2727,6 +2727,10 @@ function slo_status_tone(status) {
     const rtnval2 = "error";
     return rtnval2;
   }
+  if (typeof status.achieved_ratio !== "number") {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
   const remaining = status.error_budget_remaining_ratio;
   if (typeof remaining === "number" && remaining < 0.25) {
     const rtnval2 = "warn";
@@ -3317,19 +3321,19 @@ var PycSlos = class extends HTMLElement {
       {
         key: "target",
         label: "Target",
-        width: "7rem",
+        width: "6rem",
         render: (slo) => format_ratio(slo.target)
       },
       {
         key: "window",
         label: "Window",
-        width: "7rem",
+        width: "6rem",
         render: (slo) => format_window(slo.window_seconds)
       },
       {
         key: "burn",
         label: "Achieved",
-        width: "10rem",
+        width: "11rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
           burn_badge.classList.add("pyc-metrics__badge");
