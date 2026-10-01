@@ -121,6 +121,14 @@ preview tag.
   records nothing; a real change publishes `entity.resource.updated` naming the fields. `DELETE` is deliberately
   not added: a resource is retired (`POST /resources/{id}/state`), which keeps its history.
 
+- A resource's page can edit those details (RES-22, ORC-26). The page shows the description and has **Edit details**
+  (for people who may write resources; not on a retired resource, which the API refuses): a form filled in with the
+  name, description and tags (comma separated; blanks and repeats dropped); **Save changes** sends only what changed,
+  then the page shows the new values and says "Resource details saved."; saving without a change says "Nothing to
+  change." and sends nothing, emptying the name is refused on the page, a 409/422/403 is said in words and the form
+  stays open, **Cancel** closes it. The page's title now follows the display name (it read a field the API never sends,
+  so it always showed "Resource" and the first eight characters of the id).
+
 - A deactivated user can be anonymised for a data-protection request (ADM-41; decisions recorded in
   `specs/1-user-management`, Requirement 5). The user's page has an **Anonymise** button for a deactivated
   account (`POST /admin/users/{id}/anonymise`, `system:users.write`); it asks for the login name to be typed

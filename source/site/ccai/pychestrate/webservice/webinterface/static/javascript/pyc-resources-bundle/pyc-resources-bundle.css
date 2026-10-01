@@ -391,3 +391,13 @@ pyc-resource-detail {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-res-fg-muted);
 }
+
+/* The inline form that edits a resource's name, description and tags (below the summary) */
+.pyc-resources__form-region {
+    display: block;
+    margin-top: 0.75rem;
+}
+
+.pyc-resources__summary > [data-role="edit-resource"] {
+    margin-top: 0.5rem;
+}

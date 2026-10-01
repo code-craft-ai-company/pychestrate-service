@@ -1,4 +1,5 @@
 import { confirm_action } from "../shared/confirm.js";
+import { reveal } from "../shared/reveal.js";
 import { with_access_request } from "../shared/admin-contact.js";
 import { set_entity_title } from "../shared/page-title.js";
 import {
@@ -18,6 +19,85 @@ import {
   section_error_message
 } from "./pool-detail-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+/**
+ * The tags in a comma-separated field: trimmed, empty ones dropped, repeats dropped (first wins).
+ *
+ * @param text What the person typed, e.g. ``"gpu, lab-2"``.
+ *
+ * @returns The tags in order.
+ */
+function parse_tag_list(text) {
+  const seen = /* @__PURE__ */ new Set();
+  const rtnval = [];
+  for (const part of String(text ?? "").split(",")) {
+    const tag = part.trim();
+    if (tag.length > 0 && seen.has(tag) === false) {
+      seen.add(tag);
+      rtnval.push(tag);
+    }
+  }
+  return rtnval;
+}
+/**
+ * What the form changes, as the ``PATCH`` body: only the fields that differ from the resource.
+ *
+ * @param resource The resource as loaded.
+ * @param name What the name field holds.
+ * @param description What the description field holds.
+ * @param tags_text What the tags field holds.
+ *
+ * @returns The changed fields (empty when nothing differs), or ``null`` when the name was cleared (the API
+ *          needs a name once there is one).
+ */
+function changed_resource_fields(resource, name, description, tags_text) {
+  const changes = {};
+  const current_name = typeof resource.display_name === "string" ? resource.display_name : "";
+  const new_name = String(name ?? "").trim();
+  if (new_name !== current_name) {
+    if (new_name.length === 0) {
+      return null;
+    }
+    changes.display_name = new_name;
+  }
+  const current_description = typeof resource.description === "string" ? resource.description : "";
+  const new_description = String(description ?? "").trim();
+  if (new_description !== current_description) {
+    changes.description = new_description;
+  }
+  const current_tags = Array.isArray(resource.tags) === true ? resource.tags : [];
+  const new_tags = parse_tag_list(tags_text);
+  if (JSON.stringify(new_tags) !== JSON.stringify(current_tags)) {
+    changes.tags = new_tags;
+  }
+  return changes;
+}
+/**
+ * Say how an edit went, in words.
+ *
+ * @param status The HTTP status.
+ * @param detail The problem's detail, when it has one.
+ *
+ * @returns The message.
+ */
+function resource_edit_message_for_status(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
+  if (status === 200) {
+    return "Resource details saved.";
+  }
+  if (status === 403) {
+    return with_access_request("You do not have permission to edit resources.");
+  }
+  if (status === 404) {
+    return "This resource no longer exists.";
+  }
+  if (status === 409) {
+    return "This resource is retired and can no longer be edited.";
+  }
+  if (status === 422) {
+    return reason.length > 0 ? "The change was rejected: " + reason : "The change was rejected -- check the fields.";
+  }
+  return "Could not save the changes (HTTP " + String(status) + ").";
+}
 // Project pickers need every project, not the API's default first page
 // of 50 (the registry holds every web-UI project too -- PRJ-06).
 const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
@@ -483,7 +563,7 @@ class PycResourceDetail extends HTMLElement {
     id_value.classList.add("pyc-resources__id");
     id_value.setAttribute("data-role", "resource-id");
     id_value.textContent = short_id(resource.resource_id);
-    set_entity_title(String(resource.name ?? "") || "Resource " + short_id(resource.resource_id));
+    set_entity_title(String(resource.display_name ?? "") || "Resource " + short_id(resource.resource_id));
     id_value.title = resource.resource_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("span");
@@ -509,6 +589,10 @@ class PycResourceDetail extends HTMLElement {
     if (display_name.length > 0) {
       this._append_field(grid, "Display name", display_name);
     }
+    const description = typeof resource.description === "string" ? resource.description : "";
+    if (description.length > 0) {
+      this._append_field(grid, "Description", description);
+    }
     this._append_field(grid, "State", resource.state);
     this._append_field(
       grid,
@@ -528,7 +612,155 @@ class PycResourceDetail extends HTMLElement {
       }
       section.appendChild(tag_list);
     }
+    if (resource.state !== "retired" && shell_write_allowed(RESOURCES_WRITE_PERMISSION) === true) {
+      const edit_button = document.createElement("mj-button");
+      edit_button.classList.add("pyc-resources__button");
+      edit_button.setAttribute("type", "button");
+      edit_button.setAttribute("data-role", "edit-resource");
+      edit_button.textContent = "Edit details";
+      const region = document.createElement("div");
+      region.classList.add("pyc-resources__form-region");
+      region.setAttribute("data-role", "edit-resource-region");
+      region.hidden = true;
+      edit_button.addEventListener("click", () => {
+        this._toggle_edit_form(resource, region);
+      });
+      section.appendChild(edit_button);
+      section.appendChild(region);
+    }
     return section;
+  }
+  /**
+   * Open (or close) the form that changes the resource's name, description and tags.
+   * The kind, the identity and the attributes are not editable here.
+   *
+   * @param resource The resource being shown.
+   * @param region The container the form is rendered into.
+   */
+  _toggle_edit_form(resource, region) {
+    if (region.hidden === false) {
+      region.hidden = true;
+      return;
+    }
+    const form = document.createElement("form");
+    form.classList.add("pyc-resources__filters");
+    form.setAttribute("data-role", "edit-resource-form");
+    const name_label = document.createElement("label");
+    name_label.classList.add("pyc-resources__filter");
+    name_label.textContent = "Display name";
+    const name_input = document.createElement("mj-text-field");
+    name_input.classList.add("pyc-resources__input");
+    name_input.setAttribute("type", "text");
+    name_input.setAttribute("data-role", "edit-resource-name");
+    name_label.appendChild(name_input);
+    form.appendChild(name_label);
+    const description_label = document.createElement("label");
+    description_label.classList.add("pyc-resources__filter");
+    description_label.textContent = "Description";
+    const description_input = document.createElement("mj-textarea");
+    description_input.classList.add("pyc-resources__input");
+    description_input.setAttribute("data-role", "edit-resource-description");
+    description_input.rows = 3;
+    description_label.appendChild(description_input);
+    form.appendChild(description_label);
+    const tags_label = document.createElement("label");
+    tags_label.classList.add("pyc-resources__filter");
+    tags_label.textContent = "Tags";
+    const tags_input = document.createElement("mj-text-field");
+    tags_input.classList.add("pyc-resources__input");
+    tags_input.setAttribute("type", "text");
+    tags_input.setAttribute("data-role", "edit-resource-tags");
+    tags_input.setAttribute("placeholder", "gpu, lab-2");
+    tags_input.setAttribute("help-text", "Separate tags with commas.");
+    tags_label.appendChild(tags_input);
+    form.appendChild(tags_label);
+    const save_button = document.createElement("mj-button");
+    save_button.classList.add("pyc-resources__button");
+    save_button.setAttribute("type", "submit");
+    save_button.setAttribute("data-role", "edit-resource-save");
+    save_button.textContent = "Save changes";
+    form.appendChild(save_button);
+    const cancel_button = document.createElement("mj-button");
+    cancel_button.classList.add("pyc-resources__button");
+    cancel_button.setAttribute("type", "button");
+    cancel_button.setAttribute("data-role", "edit-resource-cancel");
+    cancel_button.textContent = "Cancel";
+    cancel_button.addEventListener("click", () => {
+      region.hidden = true;
+    });
+    form.appendChild(cancel_button);
+    const status = document.createElement("p");
+    status.classList.add("pyc-resources__form-status");
+    status.setAttribute("data-role", "edit-resource-status");
+    status.setAttribute("role", "status");
+    form.appendChild(status);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_edit(resource, region, name_input, description_input, tags_input, save_button, status);
+    });
+    region.replaceChildren(form);
+    region.hidden = false;
+    // Filled in once the form is in the page: the inputs draw their value when they connect.
+    name_input.value = typeof resource.display_name === "string" ? resource.display_name : "";
+    description_input.value = typeof resource.description === "string" ? resource.description : "";
+    tags_input.value = Array.isArray(resource.tags) === true ? resource.tags.join(", ") : "";
+    reveal(region);
+    return;
+  }
+  async _submit_edit(resource, region, name_input, description_input, tags_input, save_button, status) {
+    const changes = changed_resource_fields(resource, name_input.value, description_input.value, tags_input.value);
+    if (changes === null) {
+      status.textContent = "The display name cannot be empty.";
+      return;
+    }
+    if (Object.keys(changes).length === 0) {
+      region.hidden = true;
+      this._show_action_status("Nothing to change.", false);
+      return;
+    }
+    save_button.setAttribute("disabled", "");
+    status.textContent = "Saving\u2026";
+    const outcome = await this._do_edit(changes);
+    save_button.removeAttribute("disabled");
+    if (outcome.ok !== true) {
+      status.textContent = outcome.message;
+      return;
+    }
+    region.hidden = true;
+    this._show_action_status(outcome.message, false);
+    await this._load();
+    return;
+  }
+  /**
+   * ``PATCH`` the changed fields of the resource. Exposed so unit tests can drive it without a form.
+   *
+   * @param changes ``{display_name?, description?, tags?}``.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async _do_edit(changes) {
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(build_resource_url(this._resource_id), {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(changes)
+      });
+      status = response.status;
+      if (response.ok === false) {
+        const problem = await read_problem(response);
+        detail = problem.detail;
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.resources.resource_update_failed", { reason: String(reason) });
+      return { ok: false, status: 0, message: "Could not save the changes -- network error. Try again." };
+    }
+    return { ok: status === 200, status, message: resource_edit_message_for_status(status, detail) };
   }
   /**
    * Build the lifecycle-transition panel -- one button per legal
@@ -856,8 +1088,11 @@ export {
   build_resource_state_url,
   build_resource_url,
   build_resource_usage_url,
+  changed_resource_fields,
   legal_state_actions,
+  parse_tag_list,
   pool_id_from_search,
+  resource_edit_message_for_status,
   resource_id_from_path,
   usage_event_tone
 };
