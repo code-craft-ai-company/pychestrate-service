@@ -43,8 +43,8 @@
         <div class="form-group">
             <label for="ro-trigger">Start this watch when</label>
             <input type="text" id="ro-trigger" class="form-control" disabled
-                   value="{{ trigger_labels.get(trigger, trigger) }}: {{ watch.source_name }}">
-            <p class="form-text">What starts a watch and what it watches cannot be changed; create another watch instead.</p>
+                   value="{{ trigger_labels.get(trigger, trigger) }}: {{ watch.source_name }}" aria-describedby="ro-trigger-help">
+            <p id="ro-trigger-help" class="form-text">What starts a watch and what it watches cannot be changed; create another watch instead.</p>
         </div>
 
         {% if trigger != 'repository_tag' %}
@@ -52,9 +52,9 @@
             <label for="branch_pattern">Branch pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else (watch.conditions.branch_pattern or '') }}"
-                   placeholder="e.g., ^main$ or ^release/"{{ ui.invalid_attrs(errors, 'branch_pattern') }}>
+                   placeholder="e.g., ^main$ or ^release/"{{ ui.invalid_attrs(errors, 'branch_pattern', 'branch_pattern-help') }}>
             {{ ui.field_error(errors, 'branch_pattern') }}
-            <span class="form-text">Regular expression matched from the start of the branch name. Leave empty to match every branch.</span>
+            <span id="branch_pattern-help" class="form-text">Regular expression matched from the start of the branch name. Leave empty to match every branch.</span>
         </div>
         {% endif %}
 
@@ -63,9 +63,9 @@
             <label for="tag_pattern">Tag pattern</label>
             <input type="text" id="tag_pattern" name="tag_pattern" class="form-control"
                    value="{{ form_data.tag_pattern if form_data else (watch.conditions.tag_pattern or '') }}"
-                   placeholder="e.g., ^v[0-9]+"{{ ui.invalid_attrs(errors, 'tag_pattern') }}>
+                   placeholder="e.g., ^v[0-9]+"{{ ui.invalid_attrs(errors, 'tag_pattern', 'tag_pattern-help') }}>
             {{ ui.field_error(errors, 'tag_pattern') }}
-            <span class="form-text">Regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
+            <span id="tag_pattern-help" class="form-text">Regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
         </div>
         {% endif %}
 
@@ -95,7 +95,7 @@
 
         <div class="form-group">
             <label for="action_spec_id">Build specification to run</label>
-            <select id="action_spec_id" name="action_spec_id" class="form-control">
+            <select id="action_spec_id" name="action_spec_id" class="form-control" aria-describedby="action_spec_id-help">
                 <option value="">Select a build spec</option>
                 {% for spec in build_specs %}
                 <option value="{{ spec.id }}" {% if (form_data and form_data.action_spec_id == spec.id|string) or (not form_data and primary_action and primary_action.target_id == spec.id) %}selected{% endif %}>
@@ -103,16 +103,16 @@
                 </option>
                 {% endfor %}
             </select>
-        <p class="form-text">For "Run a build".</p>
+        <p id="action_spec_id-help" class="form-text">For "Run a build".</p>
         </div>
 
         <div class="form-group">
             <label for="action_target_id">Target id for other actions</label>
             <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
                    value="{{ form_data.action_target_id if form_data else '' }}"
-                   placeholder="pipeline, infrastructure specification, or test specification id"{{ ui.invalid_attrs(errors, 'action_target_id') }}>
+                   placeholder="pipeline, infrastructure specification, or test specification id"{{ ui.invalid_attrs(errors, 'action_target_id', 'action_target_id-help') }}>
             {{ ui.field_error(errors, 'action_target_id') }}
-            <p class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
+            <p id="action_target_id-help" class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
 
         <div class="form-group">

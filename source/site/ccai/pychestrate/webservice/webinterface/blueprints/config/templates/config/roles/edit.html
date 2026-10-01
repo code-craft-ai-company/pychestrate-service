@@ -16,8 +16,8 @@
 
         <div class="form-group">
             <label for="ro-role-name">Role Name</label>
-            <input type="text" class="form-control" value="{{ role.name }}" id="ro-role-name" disabled>
-            <p class="form-text">Role name cannot be changed</p>
+            <input type="text" class="form-control" value="{{ role.name }}" id="ro-role-name" disabled aria-describedby="ro-role-name-help">
+            <p id="ro-role-name-help" class="form-text">Role name cannot be changed</p>
         </div>
         
         <div class="form-group">
@@ -38,10 +38,10 @@
         <details class="form-group"{% if errors and 'permission_keys' in errors %} open{% endif %}>
             <summary class="muted">Removing every permission from this role?</summary>
             <label class="regular mt-sm">
-                <input type="checkbox" name="confirm_remove_all">
+                <input type="checkbox" name="confirm_remove_all" aria-describedby="confirm-remove-all-note">
                 Yes, save this role with no permissions
             </label>
-            <p class="form-text">
+            <p class="form-text" id="confirm-remove-all-note">
                 Only needed when no permission is selected above; it prevents
                 accidentally wiping the role's grants.
             </p>

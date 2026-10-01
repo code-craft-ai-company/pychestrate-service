@@ -49,7 +49,7 @@
         <div class="form-group">
             <label for="project_id">Project *</label>
             {% if project_choices %}
-            <select id="project_id" name="project_id" class="form-control" required{{ ui.invalid_attrs(errors, 'project_id') }}>
+            <select id="project_id" name="project_id" class="form-control" required{{ ui.invalid_attrs(errors, 'project_id', 'project_id-help') }}>
                 <option value="">Choose a project&hellip;</option>
                 {% for group in project_choice_groups %}
                 <optgroup label="{{ group.label }}">
@@ -60,9 +60,9 @@
                 {% endfor %}
             </select>
             {{ ui.field_error(errors, 'project_id') }}
-            <p class="form-text">The project whose jobs the enrolled client will run.</p>
+            <p id="project_id-help" class="form-text">The project whose jobs the enrolled client will run.</p>
             {% else %}
-            <p class="form-text" id="project_id-empty">
+            <p class="muted small" id="project_id-empty">
                 There are no projects yet. <a href="{{ url_for('projects.project_create') }}">Create a project</a>
                 first, then come back to mint a token for it.
             </p>
@@ -73,9 +73,9 @@
             <label for="pod_name">Pod label *</label>
             <input type="text" id="pod_name" name="pod_name"
                    class="form-control" required maxlength="128"
-                   value="{{ mint_form.pod_name }}"{{ ui.invalid_attrs(errors, 'pod_name') }}>
+                   value="{{ mint_form.pod_name }}"{{ ui.invalid_attrs(errors, 'pod_name', 'pod_name-help') }}>
             {{ ui.field_error(errors, 'pod_name') }}
-            <p class="form-text">
+            <p id="pod_name-help" class="form-text">
                 The label the client enrolls under &mdash; the value it
                 passes as <code>--name</code>. The token only enrolls a
                 client with this label.
@@ -87,8 +87,8 @@
             <input type="number" id="ttl_seconds" name="ttl_seconds"
                    class="form-control" min="1"
                    value="{{ mint_form.ttl_seconds }}"
-                   placeholder="{{ default_ttl_seconds }}">
-            <p class="form-text">
+                   placeholder="{{ default_ttl_seconds }}" aria-describedby="ttl_seconds-help">
+            <p id="ttl_seconds-help" class="form-text">
                 Optional. Blank defaults to {{ default_ttl_seconds }}
                 seconds.
             </p>

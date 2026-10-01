@@ -18,7 +18,7 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <fieldset class="form-group pyc-choice-group">
+        <fieldset class="form-group pyc-choice-group"{% if hidden_labels %} aria-describedby="hidden-surfaces-note"{% endif %}>
             <legend>Show me</legend>
             {% for row in surfaces %}
             <div class="pyc-choice">
@@ -31,7 +31,7 @@
             {% endfor %}
         </fieldset>
         {% if hidden_labels %}
-        <p class="form-text">Not offered by this deployment: {{ hidden_labels | join(', ') }}.</p>
+        <p class="form-text" id="hidden-surfaces-note">Not offered by this deployment: {{ hidden_labels | join(', ') }}.</p>
         {% endif %}
         <div class="actions-row mt-lg">
             <button type="submit" class="btn btn-primary">{{ ui.icon("save") }} Save preferences</button>
@@ -50,7 +50,7 @@
 
 <div class="card narrow mt">
     <h2 class="h3">Password</h2>
-    <p class="form-text">Change the password you sign in with.</p>
+    <p class="muted small">Change the password you sign in with.</p>
     <a href="{{ url_for('config.account_password') }}" class="btn btn-secondary">Change password</a>
 </div>
 

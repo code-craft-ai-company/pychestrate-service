@@ -30,7 +30,7 @@
             {{ ui.field_error(errors, 'email') }}
         </div>
         
-        <fieldset class="form-group">
+        <fieldset class="form-group" aria-describedby="invite-note">
             <legend>Password *</legend>
             <label class="regular">
                 <input type="radio" name="password_setup" value="password"
@@ -42,7 +42,7 @@
                        {% if form_data and form_data.password_setup == 'invite' %}checked{% endif %}>
                 Create an invite link &mdash; the user chooses their own password
             </label>
-            <p class="form-text">Pychestrate does not send email: you copy the invite link and send it to the user.</p>
+            <p class="form-text" id="invite-note">Pychestrate does not send email: you copy the invite link and send it to the user.</p>
         </fieldset>
 
         <div class="form-group" data-role="password-fields">

@@ -56,9 +56,9 @@
         <div class="form-group">
             <label for="steps">Build Steps (JSON)</label>
             <textarea id="steps" name="steps" class="form-control" rows="8"
-                      placeholder='[{"name": "checkout", "type": "checkout", "config": {}}, {"name": "build", "type": "script", "config": {"script": "make build"}}]'{{ ui.invalid_attrs(errors, 'steps') }}>{{ form_data.steps if form_data else '[]' }}</textarea>
+                      placeholder='[{"name": "checkout", "type": "checkout", "config": {}}, {"name": "build", "type": "script", "config": {"script": "make build"}}]'{{ ui.invalid_attrs(errors, 'steps', 'steps-help') }}>{{ form_data.steps if form_data else '[]' }}</textarea>
             {{ ui.field_error(errors, 'steps') }}
-            <div class="form-text">JSON array of build step definitions</div>
+            <div id="steps-help" class="form-text">JSON array of build step definitions</div>
             {% include "projects/builds/_step_format.html" %}
         </div>
         

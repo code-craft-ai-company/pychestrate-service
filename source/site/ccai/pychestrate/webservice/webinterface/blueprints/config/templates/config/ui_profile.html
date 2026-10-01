@@ -13,7 +13,7 @@
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <fieldset class="form-group pyc-choice-group">
+        <fieldset class="form-group pyc-choice-group" aria-describedby="profile-rule-note">
             <legend>Visible surfaces ({{ enabled_count }} of {{ surface_total }} enabled)</legend>
             {% for row in surfaces %}
             <div class="pyc-choice">
@@ -26,7 +26,7 @@
             </div>
             {% endfor %}
         </fieldset>
-        <p class="form-text">At least one surface must stay enabled. Projects, Resources, Fleet, Insights, and Admin are always shown.</p>
+        <p class="form-text" id="profile-rule-note">At least one surface must stay enabled. Projects, Resources, Fleet, Insights, and Admin are always shown.</p>
 
         <div class="actions-row mt-lg">
             <button type="submit" class="btn btn-primary">{{ ui.icon("save") }} Save profile</button>

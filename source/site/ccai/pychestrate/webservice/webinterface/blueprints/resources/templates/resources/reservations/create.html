@@ -27,7 +27,7 @@
                     {% endfor %}
                 </select>
                 <label for="resource_type" class="visually-hidden">Resource type</label>
-                <select id="resource_type" name="resource_type" class="form-control w-sm">
+                <select id="resource_type" name="resource_type" class="form-control w-sm" aria-describedby="resource_type-help">
                     <option value="">All Types</option>
                     <option value="device" {% if selector_resource_type == 'device' %}selected{% endif %}>Device</option>
                     <option value="ip_address" {% if selector_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
@@ -37,7 +37,7 @@
                 </select>
                 <button type="submit" class="btn btn-sm btn-secondary">Apply filter</button>
             </div>
-            <p class="form-text">Narrow the list before filling in the reservation: applying the filter starts a fresh form.</p>
+            <p id="resource_type-help" class="form-text">Narrow the list before filling in the reservation: applying the filter starts a fresh form.</p>
         </fieldset>
     </form>
 

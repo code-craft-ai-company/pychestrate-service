@@ -16,14 +16,14 @@
 
         <div class="form-group">
             <label for="ro-resource-name">Resource Name</label>
-            <input type="text" class="form-control" value="{{ resource.name }}" id="ro-resource-name" disabled>
-            <p class="form-text">Resource name cannot be changed</p>
+            <input type="text" class="form-control" value="{{ resource.name }}" id="ro-resource-name" disabled aria-describedby="ro-resource-name-help">
+            <p id="ro-resource-name-help" class="form-text">Resource name cannot be changed</p>
         </div>
 
         <div class="form-group">
             <label for="ro-resource-type">Resource Type</label>
-            <input type="text" class="form-control" value="{{ resource.resource_type }}" id="ro-resource-type" disabled>
-            <p class="form-text">Resource type cannot be changed</p>
+            <input type="text" class="form-control" value="{{ resource.resource_type }}" id="ro-resource-type" disabled aria-describedby="ro-resource-type-help">
+            <p id="ro-resource-type-help" class="form-text">Resource type cannot be changed</p>
         </div>
 
         <div class="form-group">
@@ -68,7 +68,7 @@
             {% else %}
             <span class="badge badge-secondary">{{ current_status | capitalize }}</span>
             {% endif %}
-            <p class="form-text">
+            <p class="muted small">
                 Health status changes require a reason for the audit trail --
                 <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">update it on the health page</a>.
             </p>

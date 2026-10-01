@@ -76,7 +76,7 @@
         {% if run_pods | length > 1 %}
         <div class="form-group">
             <label for="target_pod">Run on</label>
-            <select id="target_pod" name="target_pod" class="form-control">
+            <select id="target_pod" name="target_pod" class="form-control" aria-describedby="target_pod-help">
                 <option value="">Any eligible pod</option>
                 {% for pod in run_pods %}
                 <option value="{{ pod.pod_id }}"{% if pod.pod_id == run_selected_pod_id %} selected{% endif %}>{{ pod.label }}</option>
@@ -84,7 +84,7 @@
             </select>
         </div>
         {% elif run_pods | length == 1 %}
-        <p class="form-text">Runs on {{ run_pods[0].label }}, the only pod that can run this job.</p>
+        <p id="target_pod-help" class="form-text">Runs on {{ run_pods[0].label }}, the only pod that can run this job.</p>
         {% endif %}
         <button type="submit" class="btn btn-success" {% if not spec.resolved_version or run_blocked_reason %}disabled{% endif %}>{{ ui.icon("play_arrow") }} Run job now</button>
         {% if not spec.resolved_version %}<span class="muted small">The job type has no active version to run.</span>{% endif %}

@@ -47,15 +47,15 @@
         <div class="form-group">
             <label for="capability_requirements">Required Pod Capabilities</label>
             <input type="text" id="capability_requirements" name="capability_requirements" class="form-control"
-                   value="{{ form_data.capability_requirements if form_data else '' }}" placeholder="browser, gpu">
-            <div class="form-text">Comma-separated tags an eligible pod must advertise.</div>
+                   value="{{ form_data.capability_requirements if form_data else '' }}" placeholder="browser, gpu" aria-describedby="capability_requirements-help">
+            <div id="capability_requirements-help" class="form-text">Comma-separated tags an eligible pod must advertise.</div>
         </div>
 
         <div class="form-group">
             <label for="secret_fields">Secret Packet Fields</label>
             <input type="text" id="secret_fields" name="secret_fields" class="form-control mono"
-                   value="{{ form_data.secret_fields if form_data else '' }}" placeholder="auth.token, /accounts/*/password">
-            <div class="form-text">Packet paths redacted in storage and on every page; the real values travel only in the signed envelope.</div>
+                   value="{{ form_data.secret_fields if form_data else '' }}" placeholder="auth.token, /accounts/*/password" aria-describedby="secret_fields-help">
+            <div id="secret_fields-help" class="form-text">Packet paths redacted in storage and on every page; the real values travel only in the signed envelope.</div>
         </div>
 
         <div class="form-group">

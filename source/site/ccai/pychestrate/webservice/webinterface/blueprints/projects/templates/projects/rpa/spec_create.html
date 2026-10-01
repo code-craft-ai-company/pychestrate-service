@@ -40,7 +40,7 @@
 
         <div class="form-group">
             <label for="type_id">Job Type *</label>
-            <select id="type_id" name="type_id" class="form-control" required>
+            <select id="type_id" name="type_id" class="form-control" required aria-describedby="type_id-help">
                 <option value="">Select a job type...</option>
                 {% for job_type in job_types %}
                 <option value="{{ job_type.type_id }}" {% if form_data and form_data.type_id == job_type.type_id %}selected{% endif %}>
@@ -48,7 +48,7 @@
                 </option>
                 {% endfor %}
             </select>
-            <div class="form-text">Only active job types with at least one active version can be bound.</div>
+            <div id="type_id-help" class="form-text">Only active job types with at least one active version can be bound.</div>
         </div>
 
         <div class="form-group">
@@ -70,8 +70,8 @@
         <div class="form-group">
             <label for="required_capabilities">Required Pod Capabilities</label>
             <input type="text" id="required_capabilities" name="required_capabilities" class="form-control"
-                   value="{{ form_data.required_capabilities if form_data else '' }}" placeholder="browser, gpu">
-            <div class="form-text">Comma-separated capability tags an eligible pod must advertise, in addition to the job type's own.</div>
+                   value="{{ form_data.required_capabilities if form_data else '' }}" placeholder="browser, gpu" aria-describedby="required_capabilities-help">
+            <div id="required_capabilities-help" class="form-text">Comma-separated capability tags an eligible pod must advertise, in addition to the job type's own.</div>
         </div>
 
         <div class="form-group">
@@ -88,8 +88,8 @@
         <div class="form-group">
             <label for="timeout_minutes">Timeout (minutes, optional)</label>
             <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control"
-                   value="{{ form_data.timeout_minutes if form_data else '' }}" min="1" max="1440">
-            <div class="form-text">Leave blank to use the version's timeout.</div>
+                   value="{{ form_data.timeout_minutes if form_data else '' }}" min="1" max="1440" aria-describedby="timeout_minutes-help">
+            <div id="timeout_minutes-help" class="form-text">Leave blank to use the version's timeout.</div>
         </div>
 
         <div class="form-group">

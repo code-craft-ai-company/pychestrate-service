@@ -59,14 +59,14 @@
                    minlength="{{ min_password_length }}" maxlength="{{ password_max_length }}"
                    pattern="{{ password_pattern }}" title="{{ password_title }}"
                    autocomplete="new-password"
-                   aria-describedby="password-rules{% if field_errors and 'password' in field_errors %} password-error{% endif %}"
+                   aria-describedby="password-rules password-note{% if field_errors and 'password' in field_errors %} password-error{% endif %}"
                    {%- if field_errors and 'password' in field_errors %} aria-invalid="true"{% endif %}>
             <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
         </div>
         {% with password_input_id="password" %}
             {% include "config/_password_rules.html" %}
         {% endwith %}
-        <p class="form-text">Your password manager may save it.</p>
+        <p class="form-text" id="password-note">Your password manager may save it.</p>
         {{ ui.field_error(field_errors, "password") }}
     </div>
 

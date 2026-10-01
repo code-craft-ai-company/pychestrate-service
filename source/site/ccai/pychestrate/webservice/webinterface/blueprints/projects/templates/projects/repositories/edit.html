@@ -32,8 +32,8 @@
         
         <div class="form-group">
             <label for="ro-repository-url">Repository URL</label>
-            <input type="text" class="form-control" value="{{ repository.url }}" id="ro-repository-url" disabled>
-            <div class="form-text">URL cannot be changed after creation</div>
+            <input type="text" class="form-control" value="{{ repository.url }}" id="ro-repository-url" disabled aria-describedby="ro-repository-url-help">
+            <div id="ro-repository-url-help" class="form-text">URL cannot be changed after creation</div>
         </div>
         
         <div class="form-group">
@@ -41,12 +41,12 @@
             <input type="text" id="credential_secret_ref" name="credential_secret_ref" class="form-control"
                    list="repository-secret-refs" autocomplete="off" spellcheck="false"
                    value="{{ form_data.credential_secret_ref if form_data else (repository.credential_secret_ref or '') }}"
-                   placeholder="e.g. ci/github-token"{{ ui.invalid_attrs(errors, 'credential_secret_ref') }}>
+                   placeholder="e.g. ci/github-token"{{ ui.invalid_attrs(errors, 'credential_secret_ref', 'credential_secret_ref-help') }}>
             {{ ui.field_error(errors, 'credential_secret_ref') }}
             <datalist id="repository-secret-refs">
                 {% for secret_ref in secret_refs %}<option value="{{ secret_ref }}"></option>{% endfor %}
             </datalist>
-            <div class="form-text">The name of a secret in System &gt; Secrets holding the access token or SSH private key. You must be able to read it.</div>
+            <div id="credential_secret_ref-help" class="form-text">The name of a secret in System &gt; Secrets holding the access token or SSH private key. You must be able to read it.</div>
         </div>
         
         <div class="form-group">

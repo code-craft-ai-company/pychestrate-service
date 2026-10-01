@@ -16,14 +16,14 @@
 
         <div class="form-group">
             <label for="ro-pool-name">Pool Name</label>
-            <input type="text" class="form-control" value="{{ pool.name }}" id="ro-pool-name" disabled>
-            <p class="form-text">Pool name cannot be changed</p>
+            <input type="text" class="form-control" value="{{ pool.name }}" id="ro-pool-name" disabled aria-describedby="ro-pool-name-help">
+            <p id="ro-pool-name-help" class="form-text">Pool name cannot be changed</p>
         </div>
         
         <div class="form-group">
             <label for="ro-cidr-range">CIDR Range</label>
-            <input type="text" class="form-control" value="{{ pool.cidr }}" id="ro-cidr-range" disabled>
-            <p class="form-text">CIDR range cannot be changed</p>
+            <input type="text" class="form-control" value="{{ pool.cidr }}" id="ro-cidr-range" disabled aria-describedby="ro-cidr-range-help">
+            <p id="ro-cidr-range-help" class="form-text">CIDR range cannot be changed</p>
         </div>
         
         <div class="form-group">

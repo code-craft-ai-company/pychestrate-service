@@ -46,7 +46,7 @@
         {{ ui.field_error(errors, 'version_pattern') }}
     </div>
 
-    <fieldset class="form-group pyc-choice-group" data-role="default-repositories"{% if errors and 'default_repo_ids' in errors %} aria-describedby="default_repo_ids-error"{% endif %}>
+    <fieldset class="form-group pyc-choice-group" data-role="default-repositories" aria-describedby="default_repo_ids-help{% if errors and 'default_repo_ids' in errors %} default_repo_ids-error{% endif %}">
         <legend>Default Repositories</legend>
         {% for repo in repository_choices %}
         <div class="pyc-choice">
@@ -58,7 +58,7 @@
         {% endfor %}
     </fieldset>
     {{ ui.field_error(errors, 'default_repo_ids') }}
-    <p class="form-text">Releases made from this template start with these repositories.</p>
+    <p class="form-text" id="default_repo_ids-help">Releases made from this template start with these repositories.</p>
 
     <div class="form-group">
         <label for="default_pipeline">Default Pipeline (JSON object)</label>

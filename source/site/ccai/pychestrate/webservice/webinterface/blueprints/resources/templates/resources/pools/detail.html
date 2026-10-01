@@ -102,12 +102,12 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-group">
                     <label for="resource_ids">Resources to move into this pool</label>
-                    <select id="resource_ids" name="resource_ids" class="form-control" multiple size="8">
+                    <select id="resource_ids" name="resource_ids" class="form-control" multiple size="8" aria-describedby="resource_ids-help">
                         {% for item in addable_resources %}
                         <option value="{{ item.id }}">{{ item.name }} ({{ item.pool_name or 'no pool' }})</option>
                         {% endfor %}
                     </select>
-                    <p class="form-text">Hold Ctrl or Cmd to choose several. A resource keeps its history and its allocations; one whose name is already in this pool stays where it is.</p>
+                    <p id="resource_ids-help" class="form-text">Hold Ctrl or Cmd to choose several. A resource keeps its history and its allocations; one whose name is already in this pool stays where it is.</p>
                 </div>
                 <button type="submit" class="btn btn-secondary btn-block">{{ ui.icon("add") }} Add to this pool</button>
             </form>
@@ -122,13 +122,13 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-group">
                     <label for="target_pool_id">Move all {{ resource_total }} resource(s) to</label>
-                    <select id="target_pool_id" name="target_pool_id" class="form-control" required>
+                    <select id="target_pool_id" name="target_pool_id" class="form-control" required aria-describedby="target_pool_id-help">
                         <option value="">Choose a pool...</option>
                         {% for other in other_pools %}
                         <option value="{{ other.id }}">{{ other.name }}</option>
                         {% endfor %}
                     </select>
-                    <p class="form-text">Empty this pool without deleting its devices, so it can be deleted.</p>
+                    <p id="target_pool_id-help" class="form-text">Empty this pool without deleting its devices, so it can be deleted.</p>
                 </div>
                 <button type="submit" class="btn btn-secondary btn-block">{{ ui.icon("arrow_forward") }} Move resources</button>
             </form>

@@ -53,14 +53,15 @@ def test_a_garbage_repository_url_is_shown_next_to_the_url_field():
     """
     **Feature: projects (PRJ-24 input validation)**
     **Property: adding a repository with the URL "just some words" is
-    refused (400) with the error attached to the URL input.**
+    refused (400) with the error attached to the URL input (named in its
+    aria-describedby after the field's hint, which says what to type).**
     """
     setup = _setup()
     response = _add_repository(setup, url="just some words")
 
     testbase.assert_equal(
         (response.status_code, 'id="url-error"' in response.text,
-         'aria-describedby="url-error"' in response.text),
+         'aria-describedby="url-help url-error"' in response.text),
         (400, True, True),
     )
     return

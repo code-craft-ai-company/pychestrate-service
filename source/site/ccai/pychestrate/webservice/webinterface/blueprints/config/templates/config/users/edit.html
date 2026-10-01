@@ -16,8 +16,8 @@
 
         <div class="form-group">
             <label for="ro-username">Username</label>
-            <input type="text" class="form-control" value="{{ user.username }}" id="ro-username" disabled>
-            <p class="form-text">Username cannot be changed</p>
+            <input type="text" class="form-control" value="{{ user.username }}" id="ro-username" disabled aria-describedby="ro-username-help">
+            <p id="ro-username-help" class="form-text">Username cannot be changed</p>
         </div>
         
         <div class="form-group">
@@ -43,12 +43,12 @@
         <div class="form-group">
             <label for="lastname">Last Name</label>
             <input type="text" id="lastname" name="lastname" class="form-control"
-                   value="{{ user.lastname }}">
+                   value="{{ user.lastname }}" aria-describedby="lastname-help">
         </div>
         
         {% if is_self %}
         <div class="form-group">
-            <p class="form-text">
+            <p id="lastname-help" class="form-text">
                 You are editing your own account. The status and role
                 controls are unavailable here so you cannot lock
                 yourself out -- ask another administrator to change

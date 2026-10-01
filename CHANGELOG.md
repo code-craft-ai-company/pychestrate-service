@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- Form hints are tied to their field with `aria-describedby` (DOC-20). Only four of about 138 hints were, so a screen reader read
+  the label and the input and skipped the text that says what to type ("HTTPS or SSH URL", "3 to 64 characters ..."). Each hint
+  (`class="form-text"`) now has an id that its control (or its fieldset) names, directly or through
+  `ui.invalid_attrs(errors, name, id)`, which merges it with the field's error. Text that describes no control (a card's intro,
+  the built-in-role note, a copy-of-role notice) is a `muted small` note instead of a hint. Two tests keep it that way: a lint reads
+  every server-rendered template, and a second reads six rendered form pages.
+
 - Deleting a resource pool or a secret asks the person to type its name (XC-15). A project's delete already did; these two
   are as hard to undo (a pool takes its membership rows with it, a secret every version) and used the ordinary Cancel/Delete
   dialog, one click from gone. A bundle view can now ask the shell's dialog for the same field
