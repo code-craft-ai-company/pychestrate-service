@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- Deleting a resource pool or a secret asks the person to type its name (XC-15). A project's delete already did; these two
+  are as hard to undo (a pool takes its membership rows with it, a secret every version) and used the ordinary Cancel/Delete
+  dialog, one click from gone. A bundle view can now ask the shell's dialog for the same field
+  (`confirm_action(source, message, label, { type: "<text>" })`): the confirming button stays off until the text is typed
+  exactly, Enter in the field confirms only when it is right, and Cancel stays the safe default. Outside the shell there is no
+  field to type in, so the browser's own box asks, as for every confirmation. The other bundle deletes (an SLO, a pipeline, a
+  flag or webhook disabled, a client revoked) keep the ordinary dialog.
+
 - The Blast-Radius Guards page names an environment, not its id (ORC-18). The table's Environment column printed the id
   ("9a1b2c3d-...") and the environment pickers read "staging (9a1b2c3d)". An environment has a name that is unique in its
   project, so that is what the page says; the id stays in the hover text of the table cell.

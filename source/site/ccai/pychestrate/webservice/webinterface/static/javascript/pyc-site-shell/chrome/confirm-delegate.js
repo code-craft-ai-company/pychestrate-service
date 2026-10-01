@@ -256,7 +256,8 @@ function install_confirm_delegate(root) {
         }
         event.preventDefault();
         const label = typeof detail.confirm_label === "string" && detail.confirm_label.trim().length > 0 ? detail.confirm_label.trim() : "Continue";
-        ask_confirmation(detail.message, label, "", detail.tone === "neutral" ? "neutral" : "danger").then((accepted) => detail.resolve(accepted === true));
+        const required_text = typeof detail.type_to_confirm === "string" ? detail.type_to_confirm.trim() : "";
+        ask_confirmation(detail.message, label, required_text, detail.tone === "neutral" ? "neutral" : "danger").then((accepted) => detail.resolve(accepted === true));
     });
     return;
 }

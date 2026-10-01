@@ -107,11 +107,14 @@ def _open(browser: Browser, *, path: str, bundle: str, stubs: Dict[str, Any]) ->
     return page
 
 
-def _drive(page: Any, selector: str) -> Dict[str, Any]:
+def _drive(page: Any, selector: str, typed: str = "") -> Dict[str, Any]:
     """
-        Click ``selector``, read the shell's dialog, cancel it, click again, confirm it.
+        Click ``selector``, read the shell's dialog, cancel it, click again, confirm it. When the dialog asks the
+        person to type ``typed`` first, its confirming button is checked to be off until the text is right.
 
-        :returns: the dialog's message and acting label, the mutations after Cancel, and after confirming.
+        :returns: the dialog's message and acting label, the mutations after Cancel, and after confirming, and (for
+                  type-to-confirm) whether the confirming button was off at the start, after a wrong text and after
+                  the right one.
     """
     page.wait_for_selector(selector)
     page.wait_for_timeout(500)
@@ -124,9 +127,17 @@ def _drive(page: Any, selector: str) -> Dict[str, Any]:
     after_cancel = list(page.mutations)
     page.locator(selector).first.click()
     page.wait_for_selector("dialog.pyc-confirm[open]")
+    gate: Any = None
+    if typed:
+        accept = page.locator('[data-role="confirm-accept"]')
+        at_start = accept.is_disabled()
+        page.locator('[data-role="confirm-typed"]').fill(typed[:-1])
+        after_wrong = accept.is_disabled()
+        page.locator('[data-role="confirm-typed"]').fill(typed)
+        gate = [at_start, after_wrong, accept.is_disabled()]
     page.locator('[data-role="confirm-accept"]').click()
     page.wait_for_timeout(800)
-    return {"message": message, "label": label, "after_cancel": after_cancel, "after_confirm": list(page.mutations), "native": list(page.native)}
+    return {"message": message, "label": label, "after_cancel": after_cancel, "after_confirm": list(page.mutations), "native": list(page.native), "gate": gate}
 
 
 def test_cancelling_a_run_asks_in_the_shells_dialog(browser: Browser):
@@ -222,7 +233,9 @@ def test_deleting_a_pool_asks_in_the_shells_dialog(browser: Browser):
     """
     **Feature: shell confirmation (XC-15)**
     **Property: a pool's Delete asks what goes and what stays in the shell's
-    dialog; Cancel sends nothing; confirming DELETEs the pool.**
+    dialog and asks the person to type the pool's name: the confirming button is off at
+    first and after a wrong text, on after the right one; Cancel sends nothing;
+    confirming DELETEs the pool.**
     """
     pool = {"pool_id": POOL_ID, "name": "lab-a", "description": "", "created_at": "2026-09-29T10:00:00+00:00", "project_id": PROJECT_ID}
     page = _open(
@@ -233,15 +246,39 @@ def test_deleting_a_pool_asks_in_the_shells_dialog(browser: Browser):
         },
     )
     try:
-        seen = _drive(page, '[data-role="delete-pool"]')
+        seen = _drive(page, '[data-role="delete-pool"]', typed="lab-a")
     finally:
         page.context.close()
 
     testbase.assert_equal(
-        (seen["message"], seen["label"], seen["after_cancel"], "DELETE /api/v1/resource-pools/" + POOL_ID in seen["after_confirm"], seen["native"]),
+        (seen["message"], seen["label"], seen["after_cancel"], "DELETE /api/v1/resource-pools/" + POOL_ID in seen["after_confirm"], seen["native"], seen["gate"]),
         (
             "Delete the pool lab-a? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted.",
-            "Delete pool", [], True, [],
+            "Delete pool", [], True, [], [True, True, False],
         ),
+    )
+    return
+
+
+def test_deleting_a_secret_asks_for_its_name_before_it_can_be_confirmed(browser: Browser):
+    """
+    **Feature: shell confirmation (XC-15)**
+    **Property: a secret's Delete asks the person to type the secret's name: the confirming button is off at
+    first and after a wrong text and on after the right one, Cancel sends nothing, and confirming DELETEs the
+    secret; the browser's box is never used.**
+    """
+    secret = {
+        "secret_ref": "ci/deploy-token", "backend_name": "local", "scope_kind": "ORG", "scope_ref": "", "current_version_id": "v1",
+        "created_at": "2026-09-29T10:00:00+00:00", "updated_at": "2026-09-29T10:00:00+00:00", "description": "",
+    }
+    page = _open(browser, path="/secrets", bundle="pyc-secrets-bundle", stubs={"/api/v1/secrets": [secret]})
+    try:
+        seen = _drive(page, '[data-role="delete-action"]', typed="ci/deploy-token")
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (seen["message"], seen["label"], seen["after_cancel"], any(item.startswith("DELETE /api/v1/secrets/") for item in seen["after_confirm"]), seen["native"], seen["gate"]),
+        ("Delete the secret ci/deploy-token? This removes every version and cannot be undone.", "Delete secret", [], True, [], [True, True, False]),
     )
     return

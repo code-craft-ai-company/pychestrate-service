@@ -1567,7 +1567,7 @@ class PycSecrets extends HTMLElement {
    * @param secret The secret to delete.
    */
   async _delete_secret(secret) {
-    const confirmed = await confirm_action(this, "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone.", "Delete secret");
+    const confirmed = await confirm_action(this, "Delete the secret " + secret.secret_ref + "? This removes every version and cannot be undone.", "Delete secret", { type: secret.secret_ref });
     if (confirmed !== true) {
       return;
     }

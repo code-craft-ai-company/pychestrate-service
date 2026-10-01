@@ -607,7 +607,7 @@ class PycPoolDetail extends HTMLElement {
       return;
     }
     const pool_name = this._pool !== null && typeof this._pool.name === "string" && this._pool.name.length > 0 ? this._pool.name : short_id(this._pool_id);
-    const confirmed = await confirm_action(this, "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted.", "Delete pool");
+    const confirmed = await confirm_action(this, "Delete the pool " + pool_name + "? This permanently removes the pool and its membership rows and cannot be undone. The member resources themselves are not deleted.", "Delete pool", { type: this._pool !== null && typeof this._pool.name === "string" ? this._pool.name : "" });
     if (confirmed !== true) {
       return;
     }
