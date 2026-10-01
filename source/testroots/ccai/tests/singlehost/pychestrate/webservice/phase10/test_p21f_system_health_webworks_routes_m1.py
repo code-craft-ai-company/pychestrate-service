@@ -240,6 +240,33 @@ def test_handle_system_health_database_ok_when_session_attached():
     return
 
 
+def test_every_backend_in_the_health_document_has_a_label_for_people():
+    """
+    **Feature: 9-admin-ui PR p21f (system-health route), ADM-30**
+    **Property: every backend in the document carries a ``label``; the job-loop checks read in plain
+    words ("Job signing key"), a name with no entry is labelled from its name ("Custom check"), and
+    ``name`` stays the stable identifier.**
+    """
+    _activate_permission_patch(allowed=True)
+    try:
+        document = system_health_routes.build_system_health_document(request=_FakeRequest(with_session=True))
+    finally:
+        _deactivate_permission_patch()
+
+    backends = [backend for subsystem in document["subsystems"] for backend in subsystem.get("backends", [])]
+    by_name = {backend["name"]: backend["label"] for backend in backends}
+
+    testbase.assert_equal(
+        (
+            len(backends) > 0, all(len(str(backend.get("label", ""))) > 0 for backend in backends),
+            by_name.get("envelope-signing-key"), by_name.get("dispatch-transport"),
+            system_health_routes.backend_label(name="custom-check"), system_health_routes.backend_label(name="local-db"),
+        ),
+        (True, True, "Job signing key", "Job delivery to pods", "Custom check", "Built-in database"),
+    )
+    return
+
+
 def test_worst_status_reduces_to_highest_severity():
     """
     **Feature: 9-admin-ui PR p21f (system-health route)**

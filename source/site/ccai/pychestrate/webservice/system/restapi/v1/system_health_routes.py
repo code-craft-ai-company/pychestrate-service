@@ -70,6 +70,18 @@ STATUS_OK = "ok"
 STATUS_DEGRADED = "degraded"
 STATUS_ERROR = "error"
 
+#: What each backend (a single check inside a subsystem) is called on the System Health page. The
+#: ``name`` stays the stable identifier; the ``label`` is for people. A backend a pack adds that has no
+#: entry here is labelled from its name.
+BACKEND_LABELS = {
+    "local-db": "Built-in database",
+    "envelope-signing-key": "Job signing key",
+    "enrollment-ca": "Pod enrollment certificate authority",
+    "result-presign-secret": "Result upload signing secret",
+    "dispatch-transport": "Job delivery to pods",
+    "client-certificate-proxies": "Trusted client-certificate proxies",
+}
+
 _STATUS_RANK = {
     STATUS_OK: 0,
     STATUS_DEGRADED: 1,
@@ -162,6 +174,22 @@ def _may_view_details(*, request: Request, db_session: Any) -> bool:
     )
     rtnval = decision.allowed is True
     return rtnval
+
+
+def backend_label(*, name: str) -> str:
+    """
+        What a backend is called for people: its entry in :data:`BACKEND_LABELS`, else its name
+        with the dashes read as spaces and the first letter capitalised.
+
+        :param name: The backend's stable identifier.
+
+        :returns: The label.
+    """
+    known = BACKEND_LABELS.get(name, None)
+    if known is not None:
+        return known
+    words = name.replace("-", " ").replace("_", " ").strip()
+    return words[:1].upper() + words[1:]
 
 
 def _worst_status(*, statuses: List[str]) -> str:
@@ -339,6 +367,11 @@ def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     subsystems.append(_probe_extension_routes())
     subsystems.append(_probe_job_loop())
 
+    for subsystem in subsystems:
+        for backend in subsystem.get("backends", []) or []:
+            if "label" not in backend:
+                backend["label"] = backend_label(name=str(backend.get("name", "")))
+
     statuses = [subsystem["status"] for subsystem in subsystems]
     overall = _worst_status(statuses=statuses)
 
@@ -410,6 +443,8 @@ def register_system_health_routes(
 
 
 __all__ = [
+    "BACKEND_LABELS",
+    "backend_label",
     "SYSTEM_HEALTH_PATH",
     "SYSTEM_HEALTH_PERMISSION_KEY",
     "build_system_health_document",

@@ -3,6 +3,7 @@ import { may } from "../shared/permissions.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import {
   fetch_system_health,
+  health_status_label,
   health_status_tone
 } from "./system-health-view.js";
 import {
@@ -448,7 +449,7 @@ class PycAdminOverview extends HTMLElement {
       health_status_tone(this._health.status)
     );
     value_badge.setAttribute("data-role", "health-status");
-    value_badge.textContent = this._health.status;
+    value_badge.textContent = health_status_label(this._health.status);
     value.appendChild(value_badge);
     children.push(value);
     for (const subsystem of this._health.subsystems) {
@@ -460,7 +461,7 @@ class PycAdminOverview extends HTMLElement {
         "data-tone",
         health_status_tone(subsystem.status)
       );
-      sub_badge.textContent = subsystem.status;
+      sub_badge.textContent = health_status_label(subsystem.status);
       sub.appendChild(sub_badge);
       sub.appendChild(
         document.createTextNode(" " + subsystem.label)

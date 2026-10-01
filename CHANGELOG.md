@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- The System Health page says what is healthy, in words (ADM-30). It showed a bare "ok" chip (and "degraded",
+  "error") beside checks named by their identifiers (`envelope-signing-key`, `client-certificate-proxies`). The
+  chips now read Healthy, Needs attention or Failing (on the health page and the admin overview), and each check
+  carries a `label` for people in `GET /api/v1/system/health` (for example "Job signing key", "Pod enrollment
+  certificate authority"; a check with no entry is labelled from its name), with the identifier kept as `name` and
+  as the hover text. The OpenAPI document now describes the `backends` of a subsystem.
+
 - Two forms showed examples the service refused (ORC-17). The release form took the component as free
   text and showed `agent-runtime`, but the API accepts `service` and `agent`; it now offers exactly those two
   (a choice, `service` first). The Define a pipeline form's example document had `stages: []`, which the

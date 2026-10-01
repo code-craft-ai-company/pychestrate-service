@@ -6881,6 +6881,17 @@ components:
               label: { type: string }
               status: { type: string, enum: [ok, degraded, error] }
               detail: { type: string }
+              backends:
+                type: array
+                description: The individual checks inside the subsystem, when it has them.
+                items:
+                  type: object
+                  required: [name, status]
+                  properties:
+                    name: { type: string, description: Stable identifier. }
+                    label: { type: string, description: What the check is called for people. }
+                    status: { type: string, enum: [ok, degraded, error] }
+                    reason: { type: string }
 
     # ----------------------------------------------------------------
     # Error / pagination envelopes

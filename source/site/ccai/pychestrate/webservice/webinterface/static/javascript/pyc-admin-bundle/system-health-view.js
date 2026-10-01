@@ -2,6 +2,20 @@ import { format_timestamp } from "../shared/datetime.js";
 import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
 import { build_empty_state } from "../shared/empty-state.js";
 const SYSTEM_HEALTH_PATH = "/api/v1/system/health";
+// What a status says in words ("ok" alone says nothing about what is ok).
+function health_status_label(status) {
+  const lowered = typeof status === "string" ? status.toLowerCase() : "";
+  if (lowered === "ok") {
+    return "Healthy";
+  }
+  if (lowered === "degraded") {
+    return "Needs attention";
+  }
+  if (lowered === "error") {
+    return "Failing";
+  }
+  return typeof status === "string" && status.length > 0 ? status : "Unknown";
+}
 function health_status_tone(status) {
   if (typeof status !== "string") {
     const rtnval2 = "neutral";
@@ -192,7 +206,7 @@ class PycSystemHealth extends HTMLElement {
       "data-tone",
       health_status_tone(this._document.status)
     );
-    summary_badge.textContent = this._document.status;
+    summary_badge.textContent = health_status_label(this._document.status);
     summary_head.appendChild(summary_title);
     summary_head.appendChild(summary_badge);
     summary.appendChild(summary_head);
@@ -227,7 +241,7 @@ class PycSystemHealth extends HTMLElement {
       "data-tone",
       health_status_tone(subsystem.status)
     );
-    badge.textContent = subsystem.status;
+    badge.textContent = health_status_label(subsystem.status);
     head.appendChild(title);
     head.appendChild(badge);
     card.appendChild(head);
@@ -244,7 +258,17 @@ class PycSystemHealth extends HTMLElement {
       table.setAttribute("resizable", "");
       table.rowClass = "pyc-admin__row";
       table.columns = [
-        { key: "name", label: "Backend", width: "12rem" },
+        {
+          key: "name",
+          label: "Check",
+          width: "16rem",
+          render: (backend) => {
+            const name = document.createElement("span");
+            name.textContent = typeof backend.label === "string" && backend.label.length > 0 ? backend.label : backend.name;
+            name.title = backend.name;
+            return name;
+          }
+        },
         {
           key: "status",
           label: "Status",
@@ -256,7 +280,7 @@ class PycSystemHealth extends HTMLElement {
               "data-tone",
               health_status_tone(backend.status)
             );
-            status_badge.textContent = backend.status;
+            status_badge.textContent = health_status_label(backend.status);
             return status_badge;
           }
         },
@@ -278,5 +302,6 @@ export {
   PycSystemHealth,
   SYSTEM_HEALTH_PATH,
   fetch_system_health,
+  health_status_label,
   health_status_tone
 };

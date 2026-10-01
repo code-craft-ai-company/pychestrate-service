@@ -633,6 +633,19 @@ var PycFeatureFlags = class extends HTMLElement {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/system-health-view.js
 var SYSTEM_HEALTH_PATH = "/api/v1/system/health";
+function health_status_label(status) {
+  const lowered = typeof status === "string" ? status.toLowerCase() : "";
+  if (lowered === "ok") {
+    return "Healthy";
+  }
+  if (lowered === "degraded") {
+    return "Needs attention";
+  }
+  if (lowered === "error") {
+    return "Failing";
+  }
+  return typeof status === "string" && status.length > 0 ? status : "Unknown";
+}
 function health_status_tone(status) {
   if (typeof status !== "string") {
     const rtnval2 = "neutral";
@@ -823,7 +836,7 @@ var PycSystemHealth = class extends HTMLElement {
       "data-tone",
       health_status_tone(this._document.status)
     );
-    summary_badge.textContent = this._document.status;
+    summary_badge.textContent = health_status_label(this._document.status);
     summary_head.appendChild(summary_title);
     summary_head.appendChild(summary_badge);
     summary.appendChild(summary_head);
@@ -858,7 +871,7 @@ var PycSystemHealth = class extends HTMLElement {
       "data-tone",
       health_status_tone(subsystem.status)
     );
-    badge.textContent = subsystem.status;
+    badge.textContent = health_status_label(subsystem.status);
     head.appendChild(title);
     head.appendChild(badge);
     card.appendChild(head);
@@ -875,7 +888,17 @@ var PycSystemHealth = class extends HTMLElement {
       table.setAttribute("resizable", "");
       table.rowClass = "pyc-admin__row";
       table.columns = [
-        { key: "name", label: "Backend", width: "12rem" },
+        {
+          key: "name",
+          label: "Check",
+          width: "16rem",
+          render: (backend) => {
+            const name = document.createElement("span");
+            name.textContent = typeof backend.label === "string" && backend.label.length > 0 ? backend.label : backend.name;
+            name.title = backend.name;
+            return name;
+          }
+        },
         {
           key: "status",
           label: "Status",
@@ -887,7 +910,7 @@ var PycSystemHealth = class extends HTMLElement {
               "data-tone",
               health_status_tone(backend.status)
             );
-            status_badge.textContent = backend.status;
+            status_badge.textContent = health_status_label(backend.status);
             return status_badge;
           }
         },
@@ -1670,7 +1693,7 @@ var PycAdminOverview = class extends HTMLElement {
       health_status_tone(this._health.status)
     );
     value_badge.setAttribute("data-role", "health-status");
-    value_badge.textContent = this._health.status;
+    value_badge.textContent = health_status_label(this._health.status);
     value.appendChild(value_badge);
     children.push(value);
     for (const subsystem of this._health.subsystems) {
@@ -1682,7 +1705,7 @@ var PycAdminOverview = class extends HTMLElement {
         "data-tone",
         health_status_tone(subsystem.status)
       );
-      sub_badge.textContent = subsystem.status;
+      sub_badge.textContent = health_status_label(subsystem.status);
       sub.appendChild(sub_badge);
       sub.appendChild(
         document.createTextNode(" " + subsystem.label)
