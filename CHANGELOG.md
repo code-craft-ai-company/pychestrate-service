@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- A form restored after a sign-in or token expiry now puts back its tick boxes, radio buttons and several-choice lists too
+  (XC-11). Only text fields, text areas and single-choice lists were put back, so a long form with options still lost its
+  choices. The draft already held them; the page now ticks the boxes the draft names (and unticks a box it does not, even one
+  the page pre-ticked: it was not ticked when the form was sent), chooses the radio button, and reselects the list entries.
+  Passwords and files are still left for the person to enter again, and the notice says so only when the form has one.
+
 - A variable the product owns can no longer be edited or deleted on the Variables pages (ADM-08). `ui.profile.surfaces` is the
   deployment-wide interface profile; the Variables pages offered Edit and Delete for it like any other, so a typo or a delete
   there changed how the whole interface looks for everyone and bypassed the Interface profile page, which checks what it

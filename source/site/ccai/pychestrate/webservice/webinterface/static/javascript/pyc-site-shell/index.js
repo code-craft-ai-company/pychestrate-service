@@ -46,7 +46,7 @@ function build_empty_state(options) {
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/form-draft.js
 var DRAFT_ISLAND_ID = "pyc-form-draft";
 var TEXT_INPUT_TYPES = ["", "text", "search", "url", "tel", "email", "number", "date", "datetime-local", "time", "month", "week"];
-var NOT_RESTORED_TYPES = ["checkbox", "radio", "password", "file"];
+var NOT_RESTORED_TYPES = ["password", "file"];
 function read_draft_pairs(doc) {
   const island = doc.getElementById(DRAFT_ISLAND_ID);
   if (island === null) {
@@ -69,12 +69,43 @@ function restorable(control) {
     return true;
   }
   if (tag === "select") {
-    return control.multiple === false;
+    return true;
   }
   if (tag === "input") {
-    return TEXT_INPUT_TYPES.indexOf((control.getAttribute("type") || "").toLowerCase()) >= 0;
+    const type = (control.getAttribute("type") || "").toLowerCase();
+    return TEXT_INPUT_TYPES.indexOf(type) >= 0 || type === "checkbox" || type === "radio";
   }
   return false;
+}
+function is_choice(control) {
+  const type = (control.getAttribute("type") || "").toLowerCase();
+  return control.tagName.toLowerCase() === "input" && (type === "checkbox" || type === "radio");
+}
+function set_choices(controls, values) {
+  let changed = false;
+  for (const control of controls) {
+    const wanted = (control.getAttribute("type") || "").toLowerCase() === "radio" ? values.length > 0 && control.value === values[0] : values.indexOf(control.value) >= 0;
+    if (control.checked !== wanted && (wanted === true || control.type === "checkbox")) {
+      control.checked = wanted;
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+      changed = true;
+    }
+  }
+  return changed;
+}
+function set_selection(control, values) {
+  let any = false;
+  for (const option of Array.from(control.options)) {
+    const wanted = values.indexOf(option.value) >= 0;
+    if (option.selected !== wanted) {
+      option.selected = wanted;
+    }
+    any = any || wanted;
+  }
+  control.dispatchEvent(new Event("input", { bubbles: true }));
+  control.dispatchEvent(new Event("change", { bubbles: true }));
+  return any;
 }
 function set_value(control, value) {
   if (control.tagName.toLowerCase() === "select") {
@@ -111,14 +142,33 @@ function restore_form_draft(doc) {
       continue;
     }
     seen.add(name);
+    const values = pairs.filter((pair) => pair[0] === name).map((pair) => pair[1]);
     const controls = Array.from(target.elements).filter((control) => control.name === name && restorable(control));
-    if (controls.length === 1 && set_value(controls[0], value) === true) {
+    if (controls.length === 0) {
+      continue;
+    }
+    if (controls.every(is_choice) === true) {
+      set_choices(controls, values);
       restored += 1;
+    } else if (controls.length === 1 && controls[0].tagName.toLowerCase() === "select" && controls[0].multiple === true) {
+      if (set_selection(controls[0], values) === true) {
+        restored += 1;
+      }
+    } else if (controls.length === 1 && set_value(controls[0], value) === true) {
+      restored += 1;
+    }
+  }
+  const ticked_names = new Set(pairs.map((pair) => pair[0]));
+  for (const control of Array.from(target.elements)) {
+    if ((control.getAttribute("type") || "").toLowerCase() === "checkbox" && ticked_names.has(control.name) === false && control.checked === true) {
+      control.checked = false;
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
   const needs_choosing = Array.from(target.elements).some((control) => {
     const type = (control.getAttribute("type") || "").toLowerCase();
-    return NOT_RESTORED_TYPES.indexOf(type) >= 0 || control.tagName.toLowerCase() === "select" && control.multiple === true;
+    return NOT_RESTORED_TYPES.indexOf(type) >= 0;
   });
   try {
     const url = new URL(window.location.href);
@@ -133,7 +183,7 @@ function restore_form_draft(doc) {
 function draft_notice_message(outcome) {
   let text = "Your session or the form had expired. What you had typed has been put back. Check it, then submit again.";
   if (outcome.needs_choosing === true) {
-    text += " Tick boxes, passwords and lists that take several choices are not restored: choose them again.";
+    text += " Passwords and files are not restored: enter them again.";
   }
   return text;
 }

@@ -7,9 +7,10 @@
 
 After a refused form the server hands the page a draft of the typed fields as data
 (``<script type="application/json" id="pyc-form-draft">``). The shell fills the form the
-draft belongs to with it and says so; passwords, hidden fields, tick boxes and lists that
-take several values are left alone (and the notice says to choose them again). The page is
-opened in a browser with a server-rendered form and a draft.
+draft belongs to with it and says so: text, single and several-choice lists, tick boxes and
+radio buttons are put back; passwords, hidden fields and files are left alone (and the notice
+says to enter passwords and files again). The page is opened in a browser with a server-rendered
+form and a draft.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -80,14 +81,14 @@ def _notice(page: Any) -> Optional[str]:
     return " ".join(locator.first.inner_text().split()) if locator.count() > 0 else None
 
 
-def test_the_typed_fields_are_put_back_and_the_notice_says_what_is_left_to_choose(browser: Browser):
+def test_the_typed_fields_are_put_back_and_the_notice_says_what_is_left_to_enter(browser: Browser):
     """
     **Feature: form drafts (XC-11)**
     **Property: with a draft, the form shows the typed name, branch, timeout, steps and
-    choice; the hidden token, the password, the tick box and the multi-select list keep
-    what the page gave them; a field the form does not have is ignored; a notice says it
-    was put back and that boxes, passwords and multi-choice lists must be chosen again;
-    and the ``draft`` parameter is removed from the address.**
+    choice, the ticked box and the several-choice selection; the hidden token and the
+    password keep what the page gave them; a field the form does not have is ignored; a
+    notice says it was put back and that passwords and files must be entered again; and
+    the ``draft`` parameter is removed from the address.**
     """
     page = open_shell_page(browser, path="/projects/create?draft=tok-123&keep=1", content_html=FORM, form_draft=DRAFT, **DESKTOP)
     try:
@@ -102,10 +103,10 @@ def test_the_typed_fields_are_put_back_and_the_notice_says_what_is_left_to_choos
         (
             {
                 "name": "Nightly build", "branch": "release/2", "timeout": "90", "steps": '[{"name": "x"}]', "kind": "b",
-                "tags": [], "enabled": False, "passphrase": "", "csrf": "fresh-token",
+                "tags": ["y"], "enabled": True, "passphrase": "", "csrf": "fresh-token",
             },
             "Your session or the form had expired. What you had typed has been put back. Check it, then submit again. "
-            "Tick boxes, passwords and lists that take several choices are not restored: choose them again.",
+            "Passwords and files are not restored: enter them again.",
             "?keep=1",
         ),
     )
@@ -144,5 +145,54 @@ def test_a_form_without_such_controls_gets_the_short_notice_and_no_draft_means_n
     testbase.assert_equal(
         (short, name, without_draft, unrelated_state),
         ("Your session or the form had expired. What you had typed has been put back. Check it, then submit again.", "Only text", (None, "", "main"), (None, "")),
+    )
+    return
+
+
+CHOICES = """
+<form id="choices" method="post">
+  <input type="radio" name="mode" value="password" checked> <input type="radio" name="mode" value="invite">
+  <input type="checkbox" name="roles" value="viewer" checked> <input type="checkbox" name="roles" value="editor"> <input type="checkbox" name="roles" value="admin">
+  <input type="checkbox" name="notify" value="on" checked>
+  <select name="tags" multiple><option value="x">x</option><option value="y">y</option><option value="z">z</option></select>
+  <input type="text" name="name" value="">
+</form>
+"""
+
+
+def test_radio_buttons_tick_boxes_and_several_choice_lists_are_put_back(browser: Browser):
+    """
+    **Feature: form drafts (XC-11)**
+    **Property: a draft that chose the "invite" radio button, ticked the editor and admin boxes (and not the
+    viewer or the pre-ticked notify box) and selected two list entries restores exactly that: the radio button,
+    the ticks (a box the draft does not name is unticked, even if the page pre-ticked it) and the selection; the
+    notice is the short one (nothing was left to enter again).**
+    """
+    draft = [["mode", "invite"], ["roles", "editor"], ["roles", "admin"], ["tags", "x"], ["tags", "z"], ["name", "Ada"]]
+    page = open_shell_page(browser, path="/admin/users/create?draft=t", content_html=CHOICES, form_draft=draft, **DESKTOP)
+    try:
+        state = page.evaluate(
+            """() => {
+                const form = document.getElementById('choices');
+                const roles = Array.from(form.querySelectorAll('input[name=roles]'));
+                return {
+                    mode: form.querySelector('input[name=mode]:checked').value,
+                    roles: roles.filter((box) => box.checked).map((box) => box.value),
+                    notify: form.querySelector('input[name=notify]').checked,
+                    tags: Array.from(form.elements.tags.selectedOptions).map((option) => option.value),
+                    name: form.elements.name.value,
+                };
+            }"""
+        )
+        notice = _notice(page)
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (state, notice),
+        (
+            {"mode": "invite", "roles": ["editor", "admin"], "notify": False, "tags": ["x", "z"], "name": "Ada"},
+            "Your session or the form had expired. What you had typed has been put back. Check it, then submit again.",
+        ),
     )
     return
