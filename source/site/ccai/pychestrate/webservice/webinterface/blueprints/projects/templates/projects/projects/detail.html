@@ -22,14 +22,6 @@
             {{ ui.icon("edit") }} Edit
         </a>
         {% endif %}
-        {% if can_delete %}
-        <form action="{{ url_for('projects.project_delete', project_id=project.id) }}" method="post" data-confirm="{{ delete_warning }}" data-confirm-type="{{ project.name }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-danger">
-                {{ ui.icon("delete") }} Delete
-            </button>
-        </form>
-        {% endif %}
     </div>
 </div>
 
@@ -192,4 +184,15 @@
     {{ ui.empty_state("No repositories") }}
     {% endif %}
 </div>
+
+{% if can_delete %}
+<div class="mt">
+    <form action="{{ url_for('projects.project_delete', project_id=project.id) }}" method="post" data-confirm="{{ delete_warning }}" data-confirm-type="{{ project.name }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">
+            {{ ui.icon("delete") }} Delete
+        </button>
+    </form>
+</div>
+{% endif %}
 {% endblock %}

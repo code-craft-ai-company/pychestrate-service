@@ -42,24 +42,10 @@
         <a href="{{ url_for('projects.build_spec_edit', project_id=project.id, spec_id=spec.id) }}" class="btn btn-secondary">
             {{ ui.icon("edit") }} Edit
         </a>
-        {% if can_delete and not spec_usage.watches and not spec_usage.active_builds %}
-        <form action="{{ url_for('projects.build_spec_delete', project_id=project.id, spec_id=spec.id) }}" method="post"
-              data-confirm="Delete the build specification &quot;{{ spec.name | e }}&quot;?{% if spec_usage.builds %} Its {{ spec_usage.builds }} build{{ '' if spec_usage.builds == 1 else 's' }} and their artifacts are deleted with it.{% endif %} This cannot be undone.">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-danger">{{ ui.icon("delete") }} Delete</button>
-        </form>
-        {% endif %}
     </div>
     {% endif %}
 </div>
 
-{% if can_delete and (spec_usage.watches or spec_usage.active_builds) %}
-<p class="muted">
-    This specification cannot be deleted now:
-    {% if spec_usage.active_builds %}{{ spec_usage.active_builds }} of its builds are waiting or running.{% endif %}
-    {% if spec_usage.watches %}The watches {{ spec_usage.watches | join(', ') }} use it; change or delete them first.{% endif %}
-</p>
-{% endif %}
 
 <div class="stat-grid">
     <div class="card">
@@ -141,4 +127,23 @@
     {{ ui.empty_state("No builds yet") }}
     {% endif %}
 </div>
+
+{% if can_delete %}
+<div class="mt">
+    {% if (spec_usage.watches or spec_usage.active_builds) %}
+    <p class="muted">
+        This specification cannot be deleted now:
+        {% if spec_usage.active_builds %}{{ spec_usage.active_builds }} of its builds are waiting or running.{% endif %}
+        {% if spec_usage.watches %}The watches {{ spec_usage.watches | join(', ') }} use it; change or delete them first.{% endif %}
+    </p>
+    {% endif %}
+    {% if not spec_usage.watches and not spec_usage.active_builds %}
+    <form action="{{ url_for('projects.build_spec_delete', project_id=project.id, spec_id=spec.id) }}" method="post"
+          data-confirm="Delete the build specification &quot;{{ spec.name | e }}&quot;?{% if spec_usage.builds %} Its {{ spec_usage.builds }} build{{ '' if spec_usage.builds == 1 else 's' }} and their artifacts are deleted with it.{% endif %} This cannot be undone.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">{{ ui.icon("delete") }} Delete</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

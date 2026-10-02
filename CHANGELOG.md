@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- Delete sits below the content on every detail page (PRJ-32). Eight detail pages (roles, variables, release templates, watches, both pool kinds,
+  resources) already kept Delete below the content; the project, repository, build specification and RPA job type pages put it in the header,
+  in a row with Edit. A destructive button beside the everyday ones is one slip from a lost project, and its place moved from page to page. It
+  is now below the content on all of them, with the reason it is unavailable ("cannot be removed while build specifications build it") in
+  the same place. Cancel on a build or RPA job that is running stays at the top beside its status: it is urgent and loses no data. A lint
+  reads every server-rendered template so a danger button cannot return to a page header.
+
 - The primary action of a list page sits on the right on every list page (PRJ-32). On Users, Watches, Roles, Pools, Secrets and others "Create ..."
   is at the right-hand end of the toolbar above the table; on Repositories, Members, Build Specifications, RPA Specifications and RPA Job Types
   it sat on a line of its own at the left, so the main action moved from page to page. All five now use the right-aligned toolbar, and a

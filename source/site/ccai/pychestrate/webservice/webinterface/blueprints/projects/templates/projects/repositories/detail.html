@@ -35,21 +35,10 @@
         <a href="{{ url_for('projects.repository_edit', project_id=project.id, repository_id=repository.id) }}" class="btn btn-secondary">
             {{ ui.icon("edit") }} Edit
         </a>
-        {% if can_delete and not repository_specs %}
-        <form action="{{ url_for('projects.repository_delete', project_id=project.id, repository_id=repository.id) }}" method="post" data-confirm="Remove the repository &quot;{{ repository.name | e }}&quot; from this project? Its watches are disabled, and the branches and tags recorded by fetches are forgotten. This cannot be undone.">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-danger">
-                {{ ui.icon("delete") }} Remove
-            </button>
-        </form>
-        {% endif %}
     </div>
     {% endif %}
 </div>
 
-{% if can_delete and repository_specs %}
-<p class="muted">This repository cannot be removed while build specifications build it: {{ repository_specs | join(', ') }}. Delete them or point them at another repository first.</p>
-{% endif %}
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 20px; margin-bottom: 30px;">
     <div class="card">
@@ -99,4 +88,20 @@
     {% if can_manage %}{{ ui.empty_state("No commit information yet", hint="Use Fetch to retrieve the latest commit from the repository.") }}{% else %}{{ ui.empty_state("No commit information yet", hint="A project developer can fetch the latest commit.") }}{% endif %}
     {% endif %}
 </div>
+
+{% if can_delete %}
+<div class="mt">
+    {% if repository_specs %}
+    <p class="muted">This repository cannot be removed while build specifications build it: {{ repository_specs | join(', ') }}. Delete them or point them at another repository first.</p>
+    {% endif %}
+    {% if not repository_specs %}
+    <form action="{{ url_for('projects.repository_delete', project_id=project.id, repository_id=repository.id) }}" method="post" data-confirm="Remove the repository &quot;{{ repository.name | e }}&quot; from this project? Its watches are disabled, and the branches and tags recorded by fetches are forgotten. This cannot be undone.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">
+            {{ ui.icon("delete") }} Remove
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}
