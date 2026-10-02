@@ -18,7 +18,7 @@
 </div>
 
 {% if can_manage %}
-<div class="mb">
+<div class="toolbar toolbar--end">
     <a href="{{ url_for('projects.member_add', project_id=project.id) }}" class="btn btn-primary">
         {{ ui.icon("person_add") }} Add Member
     </a>

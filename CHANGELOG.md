@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- The primary action of a list page sits on the right on every list page (PRJ-32). On Users, Watches, Roles, Pools, Secrets and others "Create ..."
+  is at the right-hand end of the toolbar above the table; on Repositories, Members, Build Specifications, RPA Specifications and RPA Job Types
+  it sat on a line of its own at the left, so the main action moved from page to page. All five now use the right-aligned toolbar, and a
+  lint reads every server-rendered template so a lone primary button in a plain wrapper cannot come back.
+
 - The Secrets owner list has an accessible name (ADM-29). Scanning every navigation page on staging for links, buttons and fields without
   one (the same scan found no console errors, no failed request, no low-contrast text in either theme and no duplicate id on
   all 39 pages) turned up one: the drop-down that chooses whose secrets to show sat beside a visible caption but had no name of its
