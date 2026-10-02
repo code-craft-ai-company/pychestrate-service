@@ -42,7 +42,7 @@
     <tbody>
         {% for user in users %}
         <tr>
-            <td><a href="{{ url_for('config.user_detail', user_id=user.id) }}">{{ user.username }}</a></td>
+            <td class="min-name"><a href="{{ url_for('config.user_detail', user_id=user.id) }}">{{ user.username }}</a></td>
             <td>{{ user.email }}</td>
             <td>{{ user.display_name }}</td>
             <td>

@@ -40,16 +40,16 @@
     <tbody>
         {% for project in projects %}
         <tr>
-            <td>
+            <td class="min-name">
                 <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="strong">
                     {{ project.name }}
                 </a>
             </td>
             <td>{{ project.description[:40] }}{% if project.description|length > 40 %}...{% endif %}</td>
-            <td>{{ project.owner_username }}</td>
-            <td>{{ project.member_count }}</td>
-            <td>{{ project.repository_count }}</td>
-            <td>{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', '—') }}</td>
+            <td class="nowrap">{{ project.owner_username }}</td>
+            <td class="nowrap">{{ project.member_count }}</td>
+            <td class="nowrap">{{ project.repository_count }}</td>
+            <td class="nowrap">{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', '—') }}</td>
             <td>
                 <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="btn btn-sm btn-secondary">View</a>
                 {% if project.id in editable_project_ids %}

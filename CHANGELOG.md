@@ -29,6 +29,15 @@ preview tag.
 
 ### Fixed
 
+- Table buttons and short values are no longer cut in half (XC-05). The server-rendered tables let every cell break "anywhere" so a
+  long address would not widen the table (ADM-41); that also let the browser shrink every column toward one character when a table
+  was only a little too wide, so on the All Projects list "Orchestrate" and "admin" were cut in two, and on the user and role lists
+  the "Edit", "Copy" and "Deactivate" buttons were. Buttons in a table never break now, and the All Projects, user and
+  enrollment-token lists mark their columns of short values (name, owner, counts, dates) so the description column absorbs the
+  squeeze, as the Projects Dashboard already did. A long description or address may still wrap inside its cell and a very
+  long unbroken value still does (the ADM-41 guard is unchanged). A browser test checks the buttons, the headers and the marked
+  columns of a projects table and a users table; a second reads the three templates.
+
 - Every page starts at the same left edge (XC-05). The server-rendered pages, the Secrets page and the admin pages began 32px inside the
   shell's main region, but every other bundle page (Runs, Builds, Pipelines, the Test Catalog, Environments, Provisioning, SLOs,
   Dashboards, Alert Rules, Webhooks, Pods, Clients, Resource Pools and the detail pages) padded its own root another 24px, so

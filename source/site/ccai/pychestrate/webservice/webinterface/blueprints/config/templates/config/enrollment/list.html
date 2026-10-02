@@ -123,7 +123,7 @@
         {% for token in tokens %}
         <tr>
             <td>{{ ui.truncate_id(token.token_id, 8) }}</td>
-            <td>{% if token.project_id in project_labels %}{{ project_labels[token.project_id] }}{% else %}{{ ui.truncate_id(token.project_id) }}{% endif %}</td>
+            <td class="min-name">{% if token.project_id in project_labels %}{{ project_labels[token.project_id] }}{% else %}{{ ui.truncate_id(token.project_id) }}{% endif %}</td>
             <td>{{ token.pod_name }}</td>
             <td>
                 <span class="badge badge-{{ token.status | status_tone }}">{{ token.status.value | capitalize }}</span>
@@ -131,8 +131,8 @@
                 <div class="muted small" data-role="redeemed-by">by client <a href="/clients">{{ ui.truncate_id(token.redeemed_by_client_id, 8) }}</a>{% if token.redeemed_at %} on {{ token.redeemed_at | local_datetime(false, '—') }}{% endif %}</div>
                 {% endif %}
             </td>
-            <td>{{ token.issued_at | local_datetime(false, '—') }}</td>
-            <td>{{ token.expires_at | local_datetime(false, '—') }}</td>
+            <td class="nowrap">{{ token.issued_at | local_datetime(false, '—') }}</td>
+            <td class="nowrap">{{ token.expires_at | local_datetime(false, '—') }}</td>
             <td>
                 {% if token.status.value == 'PENDING' %}
                 <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"

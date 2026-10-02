@@ -1231,14 +1231,23 @@
     font-size: var(--pyc-font-size-body, 1rem);
 }
 
-/* A long name or address wraps inside its cell instead of widening the table (ADM-41). */
+/*
+ * A long name or address wraps inside its cell instead of widening the table (ADM-41). ``anywhere`` also counts every character as a
+ * break point when the browser sizes the columns, so a table that was only a little too wide shrank every column toward one
+ * character and cut "Orchestrate", "admin" and the "Deactivate" button in half. Buttons therefore never break; a column of
+ * short values is marked ``nowrap`` or ``min-name`` (below) so the description column absorbs the squeeze.
+ */
 .pyc-admin-page-fragment .data-table td {
     overflow-wrap: anywhere;
 }
 
+.pyc-admin-page-fragment .data-table .btn {
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
 /*
- * ``anywhere`` also lets the browser shrink a column to one character, so a
- * short value (an owner, a time, a state) is marked to keep its line and a
+ * A short value (an owner, a time, a state) is marked to keep its line and a
  * name keeps a readable minimum, while the long description column absorbs
  * the squeeze (PRJ-21).
  */

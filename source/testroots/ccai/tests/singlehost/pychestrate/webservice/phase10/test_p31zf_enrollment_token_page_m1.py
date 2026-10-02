@@ -169,7 +169,7 @@ def test_the_list_shows_short_ids_local_times_a_status_colour_and_the_newest_fir
     earlier, later = unique_name(prefix="pod"), unique_name(prefix="pod")
     _mint(admin, project, earlier)
     _status, page = _mint(admin, project, later)
-    row = re.search(r"<tr>\s*<td><code[^>]*>[^<]*</code></td>\s*<td>[^<]*</td>\s*<td>" + re.escape(later) + r"</td>.*?</tr>", page, re.S)
+    row = re.search(r"<tr>\s*<td><code[^>]*>[^<]*</code></td>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>" + re.escape(later) + r"</td>.*?</tr>", page, re.S)
     row_text = row.group(0) if row is not None else ""
 
     testbase.assert_equal(
