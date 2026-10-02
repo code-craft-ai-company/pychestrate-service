@@ -52,7 +52,18 @@ function build_header(options) {
     const brand_link = document.createElement("a");
     brand_link.href = "/";
     brand_link.classList.add("pyc-site-shell__brand-link");
-    brand_link.textContent = options.brand_label;
+    // The product's mark (the favicon, so the tab and the header carry the same one) beside the name.
+    const brand_mark = document.createElement("img");
+    brand_mark.classList.add("pyc-site-shell__brand-mark");
+    brand_mark.setAttribute("src", "/static/favicon.svg");
+    brand_mark.setAttribute("alt", "");
+    brand_mark.setAttribute("width", "22");
+    brand_mark.setAttribute("height", "22");
+    brand_link.appendChild(brand_mark);
+    const brand_name = document.createElement("span");
+    brand_name.classList.add("pyc-site-shell__brand-name");
+    brand_name.textContent = options.brand_label;
+    brand_link.appendChild(brand_name);
     brand_link.setAttribute("aria-label", options.brand_label + " home");
     brand.appendChild(brand_link);
     app_bar.appendChild(brand);

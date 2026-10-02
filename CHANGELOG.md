@@ -185,6 +185,12 @@ preview tag.
 
 ### Added
 
+- The product has one brand colour and a mark (XC-24). The header showed the name as plain text, the sign-in page nothing, and the
+  favicon was a teal (`#0e6b86`) used nowhere else in the interface. The brand colour is now the interface's own accent blue
+  (`--pyc-color-accent`, `#2563eb`): the favicon is drawn in it and the same mark (the "P" in a rounded square) stands beside
+  the name in the shell header and above the sign-in form, in light and dark themes. The name stays text (so it follows the theme
+  and reads aloud once; the mark has empty alt text). A test keeps the favicon's fill equal to the accent token.
+
 - An SLO can be edited (ORC-26). It could only be created or deleted: a typo in a name or a tighter target meant
   deleting the objective and losing its history. `PUT /api/v1/projects/{project_id}/slos/{slo_id}` replaces the
   editable definition (name, target, window, description, definition config, notification route, auto-attach; a field

@@ -1043,8 +1043,23 @@ mj-data-table::part(grid-root) {
 }
 
 .pyc-site-shell__brand-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     color: inherit;
     text-decoration: none;
+}
+
+.pyc-site-shell__brand-mark {
+    display: block;
+    width: 1.375rem;
+    height: 1.375rem;
+    flex: none;
+}
+
+.pyc-site-shell__brand-name {
+    font-weight: 600;
+    letter-spacing: 0.01em;
 }
 
 .pyc-site-shell__brand-link:focus-visible {
