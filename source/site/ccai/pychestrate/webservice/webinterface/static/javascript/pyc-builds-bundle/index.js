@@ -265,6 +265,16 @@ function keep_list_state_on_back(anchor, list_path) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/filter-caption.js
+function show_caption(wrapper, text) {
+  const caption = document.createElement("span");
+  caption.classList.add("pyc-filter-caption");
+  caption.setAttribute("aria-hidden", "true");
+  caption.textContent = text;
+  wrapper.insertBefore(caption, wrapper.firstChild);
+  return wrapper;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/empty-state.js
 function build_empty_state({ class_name, message, next_step, link, inline, role }) {
   const paragraph = document.createElement(inline === true ? "span" : "p");
@@ -596,6 +606,7 @@ var PycBuildsList = class extends HTMLElement {
     controls.classList.add("pyc-builds__controls");
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-builds__field");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-builds__select");
@@ -622,6 +633,7 @@ var PycBuildsList = class extends HTMLElement {
     controls.appendChild(project_input);
     const state_label2 = document.createElement("div");
     state_label2.classList.add("pyc-builds__field");
+    show_caption(state_label2, "State");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-builds__select");

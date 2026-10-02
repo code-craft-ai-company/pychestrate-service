@@ -1,6 +1,7 @@
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { job_type_label, run_title, state_label } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
+import { show_caption } from "../shared/filter-caption.js";
 const RUN_STATES = [
   "pending",
   "dispatching",
@@ -321,6 +322,7 @@ class PycRunsList extends HTMLElement {
     filters.classList.add("pyc-runs-list__filters");
     const state_field = document.createElement("div");
     state_field.classList.add("pyc-runs-list__filter");
+    show_caption(state_field, "State");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
@@ -346,6 +348,7 @@ class PycRunsList extends HTMLElement {
     filters.appendChild(state_field);
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-runs-list__select");

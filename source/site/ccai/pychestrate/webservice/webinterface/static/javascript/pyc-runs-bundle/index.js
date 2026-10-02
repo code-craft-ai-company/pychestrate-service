@@ -172,6 +172,16 @@ function keep_list_state_on_back(anchor, list_path) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/filter-caption.js
+function show_caption(wrapper, text) {
+  const caption = document.createElement("span");
+  caption.classList.add("pyc-filter-caption");
+  caption.setAttribute("aria-hidden", "true");
+  caption.textContent = text;
+  wrapper.insertBefore(caption, wrapper.firstChild);
+  return wrapper;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/runs-list-view.js
 var RUN_STATES = [
   "pending",
@@ -480,6 +490,7 @@ var PycRunsList = class extends HTMLElement {
     filters.classList.add("pyc-runs-list__filters");
     const state_field = document.createElement("div");
     state_field.classList.add("pyc-runs-list__filter");
+    show_caption(state_field, "State");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
@@ -505,6 +516,7 @@ var PycRunsList = class extends HTMLElement {
     filters.appendChild(state_field);
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-runs-list__select");

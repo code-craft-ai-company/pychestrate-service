@@ -3,6 +3,7 @@ import { show_toast } from "../shared/toast.js";
 import { format_clock_instant, format_duration, format_instant, parse_timestamp } from "../shared/datetime.js";
 import { build_source_label, build_title, state_label } from "../shared/run-labels.js";
 import { mirror_to_query, page_from_query, query_choice } from "../shared/view-state.js";
+import { show_caption } from "../shared/filter-caption.js";
 import { build_empty_state } from "../shared/empty-state.js";
 import { reveal } from "../shared/reveal.js";
 const BUILD_STATES = [
@@ -264,6 +265,7 @@ class PycBuildsList extends HTMLElement {
     controls.classList.add("pyc-builds__controls");
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-builds__field");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-builds__select");
@@ -290,6 +292,7 @@ class PycBuildsList extends HTMLElement {
     controls.appendChild(project_input);
     const state_label = document.createElement("div");
     state_label.classList.add("pyc-builds__field");
+    show_caption(state_label, "State");
     const state_select = document.createElement("mj-select");
     state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-builds__select");

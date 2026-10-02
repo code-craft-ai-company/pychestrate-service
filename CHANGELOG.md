@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- Every filter on the list pages is captioned (ORC-42). `<mj-select label="State">` names a control for assistive technology but draws
+  the name visually hidden, so the filter bars of Runs, Builds, Pipelines and the Test Catalog showed unlabelled drop-downs
+  while Environments, Provisioning, Clients and Pods wrote the name above each one. All eight now caption each filter
+  ("Project", "State", "Status", "Liveness") above it in the same small muted type (`shared/filter-caption.js`); the control keeps
+  its accessible name and the caption is hidden from assistive technology so the name is not read twice. A browser test reads
+  the captions of all eight pages.
+
 - A form restored after a sign-in or token expiry now puts back its tick boxes, radio buttons and several-choice lists too
   (XC-11). Only text fields, text areas and single-choice lists were put back, so a long form with options still lost its
   choices. The draft already held them; the page now ticks the boxes the draft names (and unticks a box it does not, even one

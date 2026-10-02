@@ -1,4 +1,5 @@
 import { hide_unless_may } from "../shared/permissions.js";
+import { show_caption } from "../shared/filter-caption.js";
 import { reveal } from "../shared/reveal.js";
 import { show_toast } from "../shared/toast.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
@@ -307,6 +308,7 @@ class PycTestCatalog extends HTMLElement {
     controls.classList.add("pyc-catalog__controls");
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-catalog__field");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-catalog__select");

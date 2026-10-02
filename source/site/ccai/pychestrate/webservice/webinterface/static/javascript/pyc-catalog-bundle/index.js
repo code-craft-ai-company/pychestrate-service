@@ -38,6 +38,16 @@ function hide_unless_may(element, permission_key) {
   });
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/filter-caption.js
+function show_caption(wrapper, text) {
+  const caption = document.createElement("span");
+  caption.classList.add("pyc-filter-caption");
+  caption.setAttribute("aria-hidden", "true");
+  caption.textContent = text;
+  wrapper.insertBefore(caption, wrapper.firstChild);
+  return wrapper;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/reveal.js
 var CONTROL_SELECTOR = [
   "mj-text-field",
@@ -592,6 +602,7 @@ var PycTestCatalog = class extends HTMLElement {
     controls.classList.add("pyc-catalog__controls");
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-catalog__field");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-catalog__select");

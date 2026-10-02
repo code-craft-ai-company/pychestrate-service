@@ -1,4 +1,5 @@
 import { hide_unless_may } from "../shared/permissions.js";
+import { show_caption } from "../shared/filter-caption.js";
 import { message_with_detail, problem_detail_of_body } from "../shared/problem-detail.js";
 import { mirror_to_query, page_from_query } from "../shared/view-state.js";
 import { format_clock_instant, format_instant, parse_timestamp } from "../shared/datetime.js";
@@ -240,6 +241,7 @@ class PycPipelinesList extends HTMLElement {
     controls.classList.add("pyc-pipelines__controls");
     const project_label = document.createElement("div");
     project_label.classList.add("pyc-pipelines__field");
+    show_caption(project_label, "Project");
     const project_select = document.createElement("mj-select");
     project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-pipelines__select");
