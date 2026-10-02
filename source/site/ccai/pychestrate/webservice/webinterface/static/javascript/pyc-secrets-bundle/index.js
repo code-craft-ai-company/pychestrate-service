@@ -823,6 +823,7 @@ var PycSecrets = class extends HTMLElement {
       picker_text.textContent = picker.label;
     }
     if (select instanceof HTMLElement) {
+      select.setAttribute("label", picker.label);
       if (show_list === true) {
         select.replaceChildren(...state.options.map((option) => {
           const item = document.createElement("mj-option");

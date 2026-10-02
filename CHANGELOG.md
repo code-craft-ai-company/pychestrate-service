@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- The Secrets owner list has an accessible name (ADM-29). Scanning every navigation page on staging for links, buttons and fields without
+  one (the same scan found no console errors, no failed request, no low-contrast text in either theme and no duplicate id on
+  all 39 pages) turned up one: the drop-down that chooses whose secrets to show sat beside a visible caption but had no name of its
+  own, so a screen reader announced an unlabelled combo box. It is now named "Project" or "User" to match its tab.
+
 - Table buttons and short values are no longer cut in half (XC-05). The server-rendered tables let every cell break "anywhere" so a
   long address would not widen the table (ADM-41); that also let the browser shrink every column toward one character when a table
   was only a little too wide, so on the All Projects list "Orchestrate" and "admin" were cut in two, and on the user and role lists
