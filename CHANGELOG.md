@@ -35,6 +35,9 @@ preview tag.
   ("Project", "State", "Status", "Liveness") above it in the same small muted type (`shared/filter-caption.js`); the control keeps
   its accessible name and the caption is hidden from assistive technology so the name is not read twice. A browser test reads
   the captions of all eight pages.
+  With the captions in place the small "as of" stamp (Runs, Clients, Pods) and the Runs page's Download CSV link, which centred
+  themselves on the whole captioned row, sat above the buttons they belong beside; they now sit level with the middle of the
+  Refresh button (ORC-48), and a test measures it.
 
 - A form restored after a sign-in or token expiry now puts back its tick boxes, radio buttons and several-choice lists too
   (XC-11). Only text fields, text areas and single-choice lists were put back, so a long form with options still lost its

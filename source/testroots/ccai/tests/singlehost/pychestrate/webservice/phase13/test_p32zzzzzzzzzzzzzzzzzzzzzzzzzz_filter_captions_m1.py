@@ -115,3 +115,42 @@ def test_the_caption_is_not_read_twice(browser: Browser):
 
     testbase.assert_equal(state, ["State", "true", "State"])
     return
+
+
+def test_the_as_of_stamp_and_the_csv_link_sit_level_with_the_buttons(browser: Browser):
+    """
+    **Feature: filter bars (ORC-42, ORC-48)**
+    **Property: with captions above the filters, the small "as of" stamp (Runs, Clients, Pods) and the Runs page's Download CSV
+    link are level with the middle of the Refresh button beside them (their vertical centres are within 4px), not with the
+    middle of the whole captioned row.**
+    """
+    cases = [
+        ("/runs?project_id=" + PROJECT, "pyc-runs-bundle", ["/api/v1/runs"], [".pyc-runs-list__stamp", ".pyc-runs-list__export-link"]),
+        ("/clients?project_id=" + PROJECT, "pyc-pods-bundle", ["/api/v1/clients"], [".pyc-clients-list__stamp"]),
+        ("/pods?project_id=" + PROJECT, "pyc-pods-bundle", ["/api/v1/projects/{}/pod-definitions".format(PROJECT)], [".pyc-pods-list__stamp"]),
+    ]
+    offsets: Dict[str, List[int]] = {}
+    for path, bundle, lists, selectors in cases:
+        stubs: Dict[str, Any] = {"/api/v1/projects": PROJECTS}
+        for url in lists:
+            stubs[url] = {"items": [], "meta": {"total": 0}} if url.endswith("/runs") else []
+        page = open_shell_page(browser, path=path, bundle_names=["pyc-site-shell", bundle], api_stubs=stubs, **DESKTOP)
+        try:
+            page.wait_for_selector('[data-role="refresh"]')
+            page.wait_for_timeout(2000)
+            offsets[path] = page.evaluate(
+                """(selectors) => {
+                    const button = document.querySelector('[data-role=refresh]').getBoundingClientRect();
+                    const middle = button.top + button.height / 2;
+                    return selectors.map((selector) => {
+                        const box = document.querySelector(selector).getBoundingClientRect();
+                        return Math.abs(Math.round(box.top + box.height / 2 - middle));
+                    });
+                }""",
+                selectors,
+            )
+        finally:
+            page.context.close()
+
+    testbase.assert_equal({path: all(offset <= 4 for offset in found) for path, found in offsets.items()}, {path: True for path, _b, _l, _s in cases})
+    return

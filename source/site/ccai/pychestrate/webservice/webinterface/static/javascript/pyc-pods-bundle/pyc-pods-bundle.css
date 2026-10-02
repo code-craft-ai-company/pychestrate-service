@@ -358,7 +358,10 @@ pyc-client-detail {
 .pyc-clients-list__stamp,
 .pyc-pod-detail__stamp,
 .pyc-client-detail__stamp {
-    align-self: center;
+    /* Level with the middle of the controls beside it (which sit on the row's bottom edge under their captions),
+       not with the middle of the whole row. */
+    align-self: flex-end;
+    margin-bottom: 0.5rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-fleet-fg-muted);
 }

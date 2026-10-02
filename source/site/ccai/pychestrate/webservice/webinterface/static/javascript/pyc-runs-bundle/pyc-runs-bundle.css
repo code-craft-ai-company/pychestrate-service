@@ -151,7 +151,9 @@ pyc-runs-list {
 }
 
 .pyc-runs-list__stamp {
-    align-self: center;
+    /* Level with the middle of the controls beside it (which sit on the row's bottom edge under their captions). */
+    align-self: flex-end;
+    margin-bottom: 0.5rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-runs-fg-muted);
 }
@@ -531,7 +533,8 @@ pyc-run-detail {
 
 /* The CSV download beside Refresh: a link that looks like the page's quiet buttons. */
 .pyc-runs-list__export-link {
-    align-self: center;
+    align-self: flex-end;
+    margin-bottom: 0.5rem;
     color: var(--pyc-runs-accent-on-surface, hsl(220, 75%, 40%));
     font-size: var(--pyc-font-size-small, 0.875rem);
     text-decoration: none;
