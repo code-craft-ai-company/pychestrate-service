@@ -42,7 +42,7 @@ pyc-runs-list {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 1.5rem;
+    padding: 0; /* the shell's main region supplies the gutter */
 }
 
 .pyc-runs-list__heading {
@@ -238,7 +238,7 @@ pyc-run-detail {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 1.5rem;
+    padding: 0; /* the shell's main region supplies the gutter */
 }
 
 .pyc-run-detail__heading {

@@ -46,7 +46,7 @@ pyc-pipeline-detail {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 1.5rem;
+    padding: 0; /* the shell's main region supplies the gutter */
 }
 
 .pyc-pipelines__heading,

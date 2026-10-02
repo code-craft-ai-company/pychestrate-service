@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- Every page starts at the same left edge (XC-05). The server-rendered pages, the Secrets page and the admin pages began 32px inside the
+  shell's main region, but every other bundle page (Runs, Builds, Pipelines, the Test Catalog, Environments, Provisioning, SLOs,
+  Dashboards, Alert Rules, Webhooks, Pods, Clients, Resource Pools and the detail pages) padded its own root another 24px, so
+  moving between pages shifted the heading sideways, one of the things that made the product read as two apps. The main region
+  supplies the gutter; no bundle root adds to it. A browser test measures the heading of twelve bundle pages.
+
 - Every filter on the list pages is captioned (ORC-42). `<mj-select label="State">` names a control for assistive technology but draws
   the name visually hidden, so the filter bars of Runs, Builds, Pipelines and the Test Catalog showed unlabelled drop-downs
   while Environments, Provisioning, Clients and Pods wrote the name above each one. All eight now caption each filter
