@@ -27,7 +27,8 @@ This module keeps it, server-side and briefly:
   is deleted as it is read. The shell puts the values back into the form and says so.
 
 A draft holds text people typed, so it is kept for ten minutes, only for the form paths
-that hold no secrets, never with a field whose name suggests a secret, and only as its
+that hold no secrets, never with a field whose name suggests a secret (apart from the few choice and name
+fields in :data:`NOT_SECRET_FIELD_NAMES`), and only as its
 SHA-256 digest is looked up: the token itself is in the address of the page the person is
 sent to, and nowhere else.
 """
@@ -69,6 +70,10 @@ DRAFT_PATH_PREFIXES: Tuple[str, ...] = ("/projects/", "/resources/", "/admin/use
 #: A field whose name says it may hold a secret is never kept.
 SECRET_FIELD_NAME = re.compile(r"pass|secret|token|credential|csrf|pepper|otp|mfa|private", re.IGNORECASE)
 
+#: Fields whose names look secret but hold a choice or the *name* of something, never a credential: whether a new user
+#: sets a password or gets an invite link, the names of the secret fields a job type takes, a repository's secret's name.
+NOT_SECRET_FIELD_NAMES: frozenset = frozenset({"password_setup", "secret_type", "secret_fields", "credential_secret_ref"})
+
 MAX_BODY_BYTES: int = 256 * 1024
 MAX_FIELDS: int = 200
 MAX_VALUE_CHARS: int = 20000
@@ -104,7 +109,8 @@ def keepable_fields(pairs: List[Field]) -> List[Field]:
     for name, value in pairs:
         if len(kept) >= MAX_FIELDS:
             break
-        if len(value) == 0 or SECRET_FIELD_NAME.search(name) is not None or len(name) > 128:
+        looks_secret = SECRET_FIELD_NAME.search(name) is not None and name not in NOT_SECRET_FIELD_NAMES
+        if len(value) == 0 or looks_secret or len(name) > 128:
             continue
         clipped = value[:MAX_VALUE_CHARS]
         if total + len(clipped) > MAX_TOTAL_CHARS:
@@ -330,6 +336,7 @@ __all__ = [
     "DRAFT_LIFETIME",
     "DRAFT_PATH_PREFIXES",
     "DRAFT_QUERY_PARAM",
+    "NOT_SECRET_FIELD_NAMES",
     "SECRET_FIELD_NAME",
     "begin_capture",
     "end_capture",

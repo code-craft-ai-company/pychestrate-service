@@ -75,6 +75,23 @@ def test_secret_looking_fields_and_empty_values_are_never_kept_and_sizes_are_bou
     return
 
 
+def test_choice_fields_whose_names_merely_look_secret_are_kept_and_real_secrets_still_are_not():
+    """
+    **Feature: form drafts (XC-11)**
+    **Property: the new-user form's ``password_setup`` choice ("invite" or "password"), a job type's ``secret_fields``
+    and ``secret_type`` and a repository's ``credential_secret_ref`` (the NAME of a secret) are kept, because they hold
+    choices and names, never a credential; ``password``, ``password_confirm`` and ``current_password`` are still dropped.**
+    """
+    pairs = [
+        ("password_setup", "invite"), ("password", "hunter2"), ("password_confirm", "hunter2"), ("current_password", "old"),
+        ("secret_fields", "auth.token"), ("secret_type", "string"), ("credential_secret_ref", "ci/github-token"), ("name", "ada"),
+    ]
+    kept = [name for name, _value in form_drafts.keepable_fields(pairs)]
+
+    testbase.assert_equal(kept, ["password_setup", "secret_fields", "secret_type", "credential_secret_ref", "name"])
+    return
+
+
 def test_a_draft_is_read_once_only_by_its_path_and_only_while_it_lasts():
     """
     **Feature: form drafts (XC-11)**

@@ -34,6 +34,10 @@ preview tag.
   choices. The draft already held them; the page now ticks the boxes the draft names (and unticks a box it does not, even one
   the page pre-ticked: it was not ticked when the form was sent), chooses the radio button, and reselects the list entries.
   Passwords and files are still left for the person to enter again, and the notice says so only when the form has one.
+  Found checking it on staging: the new-user form's "set a password / send an invite" choice never reached the draft, because the
+  server drops every field whose name contains "pass". Four fields that hold a choice or the *name* of something and never a
+  credential are now kept (`password_setup`, `secret_type`, `secret_fields`, `credential_secret_ref`); every real secret field
+  (`password`, `password_confirm`, `current_password`, tokens, keys) is still dropped.
 
 - A variable the product owns can no longer be edited or deleted on the Variables pages (ADM-08). `ui.profile.surfaces` is the
   deployment-wide interface profile; the Variables pages offered Edit and Delete for it like any other, so a typo or a delete
