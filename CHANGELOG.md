@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- The deployment helpers name no particular host (DOC-12). `renew-cert.sh`, `install-deploy-sudoers.sh` and `bootstrap-client-ca.sh`, and the
+  `deploy` workflow's `target_host` and `target_user` inputs, still defaulted to the maintainers' host and account, so someone who left a
+  flag out would have renewed a certificate on, or installed sudo rules on, a machine that was not theirs to touch. Each helper now requires
+  its target (`--host` and `--user`, and `--public-hostname` for the first two), stops before any `ssh` call with a message naming what is
+  missing, and accepts both `--flag=value` and `--flag value`; the workflow's inputs have no default. The comment examples in the sudoers and
+  logrotate templates and the seed script are generic too. **Behaviour change:** anything that ran a helper without flags (a cron job on a
+  workstation, say) must now pass them.
+
 - Server-rendered pages say a state or kind in words (ADM-27). The glossary says a stored value is not a label, and the bundle pages followed that,
   but the server-rendered pages printed what was stored: the API Tokens page showed a service account as `ACTIVE`, and a variable's type
   would read `SECRET_REF`. A new `state_words` filter (underscores read as spaces, a value stored in capitals reads in lowercase) is now used

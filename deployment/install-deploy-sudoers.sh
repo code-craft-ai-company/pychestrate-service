@@ -22,8 +22,10 @@
 # Usage:
 #
 #   deployment/install-deploy-sudoers.sh \
-#       [--host=tc-app-server.local] \
-#       [--user=myron]
+#       --host=HOST --user=USER --public-hostname=PUBLIC_HOSTNAME
+#
+# All three are required (there is no built-in default host);
+# ``--flag=value`` and ``--flag value`` both work.
 #
 # You will be prompted for the remote sudo password ONCE
 # during this install (to drop the rules file).  After the
@@ -31,29 +33,42 @@
 
 set -euo pipefail
 
-REMOTE_HOST="tc-app-server.local"
-REMOTE_USER="myron"
+# No host-specific defaults: the flags name the target.
+REMOTE_HOST=""
+REMOTE_USER=""
 # Canonical public hostname baked into the tailscale-cert rule --
 # must match the --public-hostname the deploy runs with, so the
 # rule cannot be repurposed to mint certs for other tailnet nodes.
-PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
+PUBLIC_HOSTNAME=""
+
+usage_error() {
+    echo "ERROR: $1" >&2
+    echo "       Run with --help for usage." >&2
+    exit 1
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --host=*) REMOTE_HOST="${1#*=}" ;;
+        --host) [ $# -gt 1 ] || usage_error "--host needs a value"; REMOTE_HOST="$2"; shift ;;
         --user=*) REMOTE_USER="${1#*=}" ;;
+        --user) [ $# -gt 1 ] || usage_error "--user needs a value"; REMOTE_USER="$2"; shift ;;
         --public-hostname=*) PUBLIC_HOSTNAME="${1#*=}" ;;
+        --public-hostname) [ $# -gt 1 ] || usage_error "--public-hostname needs a value"; PUBLIC_HOSTNAME="$2"; shift ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *)
-            echo "ERROR: Unknown argument: $1" >&2
-            exit 1
+            usage_error "Unknown argument: $1"
             ;;
     esac
     shift
 done
+
+if [ -z "${REMOTE_HOST}" ] || [ -z "${REMOTE_USER}" ] || [ -z "${PUBLIC_HOSTNAME}" ]; then
+    usage_error "--host, --user and --public-hostname are required (for example --host app-server --user deploy --public-hostname app-server.example.ts.net)"
+fi
 
 REMOTE_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

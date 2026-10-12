@@ -135,9 +135,10 @@ operationally load-bearing.
 deployment/renew-cert.sh --host=HOST --user=USER --public-hostname=PUBLIC_HOSTNAME
 ```
 
-`renew-cert.sh`, `install-deploy-sudoers.sh` and `bootstrap-client-ca.sh`
-still default `--host`, `--user` and `--public-hostname` to the maintainers'
-host, so always pass all three (the deploy script has no such defaults).
+`renew-cert.sh`, `install-deploy-sudoers.sh` (both need `--host`, `--user` and
+`--public-hostname`) and `bootstrap-client-ca.sh` (`--host` and `--user`) have no
+built-in host, like the deploy script: a run that leaves one out stops with
+a message naming what is missing.
 
 The script mints a fresh cert on the host via `tailscale cert`,
 installs the pair with the right ownership/modes, validates and
@@ -665,10 +666,8 @@ non-interactive.
 GitHub UI → **Actions** tab → **deploy** workflow →
 **Run workflow**. Inputs:
 
-- `target_host` — the target's tailnet name (the workflow's default is the
-  maintainers' staging host; change it in `.github/workflows/deploy.yml`
-  for your own)
-- `target_user` — the deploy account (same note about the default)
+- `target_host` — the target's tailnet name (required; there is no default)
+- `target_user` — the deploy account (required; there is no default)
 - `target_port` — defaults to `8888`
 - `git_ref` — branch / tag / SHA to deploy (defaults to `main`)
 

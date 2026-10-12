@@ -2,7 +2,7 @@
 #
 # Rendered + installed as /etc/logrotate.d/pychestrate by
 # ``deployment/deploy-alpha-to-host.sh``.  Placeholders:
-#   @USER@   -- the deploy user (e.g. myron)
+#   @USER@   -- the deploy user (e.g. deploy)
 #
 # pychestrate.service and pychestrate-backup.service append their
 # stdout/stderr to these files (StandardOutput=append:...), so the

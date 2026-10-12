@@ -31,7 +31,7 @@ name: deploy
 #       {
 #         "action": "accept",
 #         "src":    ["tag:ci"],
-#         "dst":    ["tc-app-server:22", "tc-app-server:80"]
+#         "dst":    ["HOST:22", "HOST:80"]
 #       }
 #     ]
 #   }
@@ -47,7 +47,7 @@ name: deploy
 #
 #   CODECRAFTAI_REPO_TOKEN=ghp_xxx \\
 #       deployment/deploy-alpha-to-host.sh \\
-#           --host=tc-app-server --user=myron
+#           --host=HOST --user=USER
 #
 # After that, the CI deploy workflow uses --skip-system-setup
 # and deploys are entirely non-interactive.
@@ -58,12 +58,10 @@ on:
       target_host:
         description: "Target hostname (Tailscale tailnet name)"
         required: true
-        default: "tc-app-server"
         type: string
       target_user:
         description: "SSH user on target"
         required: true
-        default: "myron"
         type: string
       target_port:
         description: "App bind port (loopback; nginx proxies to this)"

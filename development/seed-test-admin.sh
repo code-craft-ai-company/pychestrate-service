@@ -33,8 +33,8 @@
 # ----------------------------------------------------------------------------
 # Usage -- ALPHA HOST (live staging service DB at ~/pychestrate):
 #
-#   # Run on the deployed host as the service user (e.g. myron), from the
-#   # checkout root /home/myron/pychestrate-service. Stop or leave the
+#   # Run on the deployed host as the service user (e.g. deploy), from the
+#   # checkout root /home/deploy/pychestrate-service. Stop or leave the
 #   # service running -- this opens a separate sqlite connection.
 #
 #   PYCHESTRATE_RUNTIME_ENVIRONMENT=staging \

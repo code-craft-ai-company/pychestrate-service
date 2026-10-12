@@ -24,10 +24,12 @@
 # Usage:
 #
 #   deployment/bootstrap-client-ca.sh \
-#       [--host=tc-app-server.local] \
-#       [--user=myron] \
+#       --host=HOST --user=USER \
 #       [--ca-subject="/CN=pychestrate-client-ca"] \
 #       [--days=3650]
+#
+# ``--host`` and ``--user`` are required (there is no built-in default
+# host); ``--flag=value`` and ``--flag value`` both work.
 #
 # This is a ONE-TIME setup step.  After it lands, every
 # subsequent ``deploy-alpha-to-host.sh`` run picks up the CA
@@ -40,28 +42,42 @@
 
 set -euo pipefail
 
-REMOTE_HOST="tc-app-server.local"
-REMOTE_USER="myron"
+# No host-specific defaults: the flags name the target.
+REMOTE_HOST=""
+REMOTE_USER=""
 CA_SUBJECT="/CN=pychestrate-client-ca"
 CA_DAYS="3650"
+
+usage_error() {
+    echo "ERROR: $1" >&2
+    echo "       Run with --help for usage." >&2
+    exit 1
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --host=*) REMOTE_HOST="${1#*=}" ;;
+        --host) [ $# -gt 1 ] || usage_error "--host needs a value"; REMOTE_HOST="$2"; shift ;;
         --user=*) REMOTE_USER="${1#*=}" ;;
+        --user) [ $# -gt 1 ] || usage_error "--user needs a value"; REMOTE_USER="$2"; shift ;;
         --ca-subject=*) CA_SUBJECT="${1#*=}" ;;
+        --ca-subject) [ $# -gt 1 ] || usage_error "--ca-subject needs a value"; CA_SUBJECT="$2"; shift ;;
         --days=*) CA_DAYS="${1#*=}" ;;
+        --days) [ $# -gt 1 ] || usage_error "--days needs a value"; CA_DAYS="$2"; shift ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *)
-            echo "ERROR: Unknown argument: $1" >&2
-            exit 1
+            usage_error "Unknown argument: $1"
             ;;
     esac
     shift
 done
+
+if [ -z "${REMOTE_HOST}" ] || [ -z "${REMOTE_USER}" ]; then
+    usage_error "--host and --user are required (for example --host app-server --user deploy)"
+fi
 
 REMOTE_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

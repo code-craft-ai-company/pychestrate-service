@@ -2,7 +2,7 @@
 #
 # Rendered + installed by ``deployment/install-deploy-sudoers.sh``
 # OR by hand via ``visudo -f /etc/sudoers.d/pychestrate-deploy``
-# after substituting ``@USER@`` with the deploy user (e.g. myron).
+# after substituting ``@USER@`` with the deploy user (e.g. deploy).
 #
 # Lets the deploy user run JUST the privileged operations the
 # alpha deploy needs -- nothing more.  Both the workstation
