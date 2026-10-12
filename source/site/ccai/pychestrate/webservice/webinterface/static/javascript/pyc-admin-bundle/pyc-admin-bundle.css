@@ -123,6 +123,45 @@ pyc-system-health {
     color: var(--pyc-admin-error-fg);
 }
 
+/* extension packs: what became of each installed pack */
+.pyc-admin__packs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-block-end: 1rem;
+}
+
+.pyc-admin__pack-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pyc-admin__pack {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--pyc-admin-divider);
+}
+
+.pyc-admin__pack-target {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-admin-fg-muted);
+    overflow-wrap: anywhere;
+}
+
+.pyc-admin__pack-error {
+    flex-basis: 100%;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-admin-error-fg);
+    overflow-wrap: anywhere;
+}
+
 /* dashboard tile grid */
 .pyc-admin__tiles {
     display: grid;

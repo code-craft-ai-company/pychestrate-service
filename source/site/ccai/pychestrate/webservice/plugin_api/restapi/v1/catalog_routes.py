@@ -50,6 +50,7 @@ from ccai.pychestrate.webservice.extensions.ext_router import (
     manifest_to_jsonable,
     mount_extension_routes,
 )
+from ccai.pychestrate.webservice.extensions.discovery import load_report
 from ccai.pychestrate.webservice.plugin_api import runtime as plugin_api_runtime
 from ccai.pychestrate.webservice.plugin_api.restapi.v1.ext_mount_routes import (
     attach_extension_routes,
@@ -275,11 +276,15 @@ def handle_list_ext(request: Request) -> Response:
         whose extension names a handler (see ``ext_mount_routes``);
         each entry says whether it is ``mounted``, and
         ``dynamic_mount`` is ``mounted`` once mounting has run.
+        ``packs`` says what became of each installed extension pack
+        (``name``, ``target``, ``loaded``, ``error``) and
+        ``packs_enabled`` whether loading installed packs is on.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) with an ``{items, total,
-                  dynamic_mount}`` body, or a problem response.
+                  dynamic_mount, packs, packs_enabled}`` body, or a
+                  problem response.
     """
     try:
         _require_plugin_api_read(request=request)
@@ -287,10 +292,13 @@ def handle_list_ext(request: Request) -> Response:
         items = manifest_to_jsonable(manifest=manifest)
         for item, route in zip(items, manifest.routes):
             item["mounted"] = is_route_mounted(route=route)
+        report = load_report()
         body = {
             "items": items,
             "total": len(items),
             "dynamic_mount": "mounted" if extension_routes_attached() else "deferred",
+            "packs": report["packs"],
+            "packs_enabled": report["enabled"],
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:

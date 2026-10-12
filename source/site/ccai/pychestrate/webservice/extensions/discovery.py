@@ -39,7 +39,7 @@ import os
 
 from dataclasses import dataclass
 from importlib import metadata
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +53,9 @@ LOAD_EXTENSIONS_VARIABLE: str = "PYCHESTRATE_LOAD_EXTENSIONS"
 
 #: ``1`` (or ``true``/``yes``/``on``) makes a pack that fails to load stop the service.
 STRICT_EXTENSIONS_VARIABLE: str = "PYCHESTRATE_EXTENSIONS_STRICT"
+
+#: What the last discovery did, for the admin pages and ``GET /api/v1/ext``.
+_LOAD_REPORT: Dict[str, Any] = {"enabled": True, "packs": []}
 
 _TRUE_WORDS = ("1", "true", "yes", "on")
 _FALSE_WORDS = ("0", "false", "no", "off")
@@ -102,6 +105,38 @@ def strict_mode() -> bool:
     return rtnval
 
 
+def load_report() -> Dict[str, Any]:
+    """
+        What the last :func:`discover_and_register_extensions` did, as plain data.
+
+        :returns: ``{"enabled": bool, "packs": [{"name", "target", "loaded", "error"}, ...]}``;
+                  ``enabled`` is ``False`` when discovery was turned off, and ``packs`` is
+                  empty before discovery has run or when nothing is installed.
+    """
+    rtnval: Dict[str, Any] = {
+        "enabled": bool(_LOAD_REPORT["enabled"]),
+        "packs": [dict(pack) for pack in _LOAD_REPORT["packs"]],
+    }
+    return rtnval
+
+
+def reset_load_report_for_testing() -> None:
+    """Forget the last discovery (tests only)."""
+    _LOAD_REPORT["enabled"] = True
+    _LOAD_REPORT["packs"] = []
+    return
+
+
+def _remember(*, enabled: bool, results: List["ExtensionLoadResult"]) -> None:
+    """Keep what discovery did so the admin pages can show it."""
+    _LOAD_REPORT["enabled"] = enabled
+    _LOAD_REPORT["packs"] = [
+        {"name": result.name, "target": result.target, "loaded": result.loaded, "error": result.error}
+        for result in results
+    ]
+    return
+
+
 def _installed_entry_points() -> Iterable[Any]:
     """The installed entry points of the extension group, ordered by name."""
     found = metadata.entry_points(group=EXTENSION_ENTRY_POINT_GROUP)
@@ -129,6 +164,7 @@ def discover_and_register_extensions(
     """
     if discovery_enabled() is False:
         _LOGGER.info("pychestrate.extensions.discovery_disabled: %s is off.", LOAD_EXTENSIONS_VARIABLE)
+        _remember(enabled=False, results=[])
         return []
 
     stop_on_failure = strict_mode() if strict is None else strict
@@ -149,6 +185,7 @@ def discover_and_register_extensions(
             results.append(ExtensionLoadResult(name=name, target=target, loaded=False, error=failure))
             _LOGGER.error("pychestrate.extensions.load_failed: name=%s target=%s error=%s", name, target, failure)
             if stop_on_failure is True:
+                _remember(enabled=True, results=results)
                 raise ExtensionLoadError(
                     "Extension '{}' ({}) failed to load and {} is set: {}".format(
                         name, target, STRICT_EXTENSIONS_VARIABLE, failure)
@@ -157,6 +194,7 @@ def discover_and_register_extensions(
         results.append(ExtensionLoadResult(name=name, target=target, loaded=True))
         _LOGGER.info("pychestrate.extensions.loaded: name=%s target=%s", name, target)
 
+    _remember(enabled=True, results=results)
     return results
 
 
@@ -168,5 +206,7 @@ __all__ = [
     "STRICT_EXTENSIONS_VARIABLE",
     "discover_and_register_extensions",
     "discovery_enabled",
+    "load_report",
+    "reset_load_report_for_testing",
     "strict_mode",
 ]

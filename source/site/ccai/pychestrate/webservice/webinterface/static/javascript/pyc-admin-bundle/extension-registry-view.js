@@ -75,8 +75,24 @@ function mount_state_words(dynamic_mount) {
   }
   return { label: "Unknown", hint: "The service did not say whether the extensions' routes are attached." };
 }
+/**
+ * The installed extension packs the listing reports, as ``{name, target, loaded, error}`` rows; anything else in the list is dropped.
+ */
+function clean_packs(packs) {
+  if (Array.isArray(packs) === false) {
+    return [];
+  }
+  return packs.filter((pack) => pack !== null && typeof pack === "object" && typeof pack.name === "string" && pack.name.length > 0).map((pack) => ({
+    name: pack.name,
+    target: typeof pack.target === "string" ? pack.target : "",
+    loaded: pack.loaded === true,
+    error: typeof pack.error === "string" ? pack.error : ""
+  }));
+}
 class PycExtensionRegistry extends HTMLElement {
   _extensions;
+  _packs;
+  _packsEnabled;
   _mountState;
   _loading;
   _errored;
@@ -87,6 +103,8 @@ class PycExtensionRegistry extends HTMLElement {
   constructor() {
     super();
     this._extensions = [];
+    this._packs = [];
+    this._packsEnabled = true;
     this._mountState = "";
     this._loading = false;
     this._errored = false;
@@ -202,6 +220,8 @@ class PycExtensionRegistry extends HTMLElement {
       return;
     }
     this._extensions = group_routes_by_extension(listing.items);
+    this._packs = clean_packs(listing.packs);
+    this._packsEnabled = listing.packs_enabled !== false;
     this._mountState = listing.dynamic_mount;
     this._loading = false;
     this._errored = false;
@@ -238,7 +258,7 @@ class PycExtensionRegistry extends HTMLElement {
     }
     if (this._extensions.length === 0) {
       const empty = build_empty_state({ class_name: "pyc-admin__notice", message: "No extensions contribute REST routes." });
-      region.replaceChildren(empty);
+      region.replaceChildren(this._build_packs_block(), empty);
       return;
     }
     const self = this;
@@ -311,8 +331,81 @@ class PycExtensionRegistry extends HTMLElement {
     status_badge.textContent = mount_words.label;
     status_badge.setAttribute("title", mount_words.hint);
     registry_status.appendChild(status_badge);
-    region.replaceChildren(registry_status, table);
+    region.replaceChildren(registry_status, this._build_packs_block(), table);
     return;
+  }
+  /**
+   * The installed extension packs and what became of each at startup. A pack that did not load is named with its error:
+   * the service starts without it, so this is the only place besides the log where a person can see that it is missing.
+   */
+  _build_packs_block() {
+    const block = document.createElement("section");
+    block.classList.add("pyc-admin__packs");
+    block.setAttribute("data-role", "packs");
+    block.setAttribute("aria-label", "Extension packs");
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-admin__subheading");
+    heading.textContent = "Extension packs";
+    block.appendChild(heading);
+    const note = (text, role, error) => {
+      const line = document.createElement("p");
+      line.classList.add("pyc-admin__lede");
+      if (error === true) {
+        line.classList.add("pyc-admin__notice", "pyc-admin__notice--error");
+      }
+      line.setAttribute("data-role", role);
+      line.textContent = text;
+      block.appendChild(line);
+    };
+    if (this._packsEnabled === false) {
+      note("Loading installed extension packs is turned off on this service, so none were loaded.", "packs-off", false);
+      return block;
+    }
+    if (this._packs.length === 0) {
+      note("No extension packs are installed.", "packs-none", false);
+      return block;
+    }
+    const failed = this._packs.filter((pack) => pack.loaded !== true).length;
+    const total = this._packs.length;
+    const noun = total === 1 ? "pack" : "packs";
+    if (failed === 0) {
+      note(total === 1 ? "The installed pack loaded." : "All " + String(total) + " installed packs loaded.", "packs-summary", false);
+    } else {
+      note(String(failed) + " of " + String(total) + " installed " + noun + " did not load. The service started without " + (failed === 1 ? "it" : "them") + ".", "packs-summary", true);
+    }
+    const list = document.createElement("ul");
+    list.classList.add("pyc-admin__pack-list");
+    list.setAttribute("data-role", "pack-list");
+    for (const pack of this._packs) {
+      const item = document.createElement("li");
+      item.classList.add("pyc-admin__pack");
+      item.setAttribute("data-role", "pack-row");
+      item.setAttribute("data-state", pack.loaded === true ? "loaded" : "failed");
+      const name = document.createElement("strong");
+      name.textContent = pack.name;
+      item.appendChild(name);
+      const chip = document.createElement("mj-chip");
+      chip.classList.add("pyc-admin__badge");
+      chip.setAttribute("data-tone", pack.loaded === true ? "ok" : "error");
+      chip.textContent = pack.loaded === true ? "Loaded" : "Did not load";
+      item.appendChild(chip);
+      if (pack.target.length > 0) {
+        const target = document.createElement("code");
+        target.classList.add("pyc-admin__pack-target");
+        target.textContent = pack.target;
+        item.appendChild(target);
+      }
+      if (pack.loaded !== true && pack.error.length > 0) {
+        const reason = document.createElement("span");
+        reason.classList.add("pyc-admin__pack-error");
+        reason.setAttribute("data-role", "pack-error");
+        reason.textContent = pack.error;
+        item.appendChild(reason);
+      }
+      list.appendChild(item);
+    }
+    block.appendChild(list);
+    return block;
   }
   _render_detail(extension) {
     if (this._detail_region === null) {

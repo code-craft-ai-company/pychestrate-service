@@ -395,9 +395,12 @@ Step 5 — Restart the service
 ----------------------------
 
 There is nothing to wire. The pack's entry point (Step 1) makes the service call
-``register()`` at start. Restart it and look for the line
-``pychestrate.extensions.loaded: name=auth-argon2id`` in the log; a pack that could
-not load is reported as ``pychestrate.extensions.load_failed`` with the error.
+``register()`` at start. Restart it and open Admin, Extension Registry: the
+*Extension packs* section lists each installed pack as *Loaded*, or as *Did not
+load* with the error it raised (the service starts without a pack that fails). The
+log has the same result: ``pychestrate.extensions.loaded: name=auth-argon2id`` for
+a pack that loaded and ``pychestrate.extensions.load_failed`` with the error for one
+that did not. The listing is also in the API as ``packs`` in ``GET /api/v1/ext``.
 
 If you run the service from your own start-up code instead (or in a test), call
 ``pychestrate_ext_auth_argon2id.register()`` yourself after the service's own
@@ -630,9 +633,12 @@ Check, in this order: that the pack is installed in the *same environment* the
 service runs in; that its ``pyproject.toml`` declares the entry point in the group
 ``pychestrate.extensions`` (``[tool.poetry.plugins."pychestrate.extensions"]``) and
 that it points at a callable (``module:register``); that ``PYCHESTRATE_LOAD_EXTENSIONS``
-is not ``0``; and the service log, which names every pack it loaded
-(``pychestrate.extensions.loaded``) or could not load
-(``pychestrate.extensions.load_failed``, with the error). After changing an entry
+is not ``0``; and the *Extension packs* section of Admin, Extension Registry, which
+names every installed pack as *Loaded* or *Did not load* with the error (it says
+"No extension packs are installed" when the service found none, and that loading is
+turned off when ``PYCHESTRATE_LOAD_EXTENSIONS`` is ``0``). The service log carries
+the same result (``pychestrate.extensions.loaded`` or
+``pychestrate.extensions.load_failed``, with the error). After changing an entry
 point, reinstall the pack: entry points are read from the installed metadata.
 
 **Tests interact with each other through global registry state.**

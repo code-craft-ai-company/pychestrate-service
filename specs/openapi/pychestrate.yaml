@@ -2890,6 +2890,9 @@ paths:
         route requires a signed-in caller holding the route's
         `required_permissions`, and the extension must hold its
         `required_capabilities` in the extension sandbox (else 403).
+        `packs` says what became of each installed extension pack
+        (loaded, or the error it failed with) and `packs_enabled`
+        whether loading installed packs is on.
         RBAC-gated on `system:plugin_api.read`.
       operationId: plugin_api_list_ext
       responses:
@@ -2899,7 +2902,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, total, dynamic_mount]
+                required: [items, total, dynamic_mount, packs, packs_enabled]
                 properties:
                   items:
                     type: array
@@ -2908,6 +2911,12 @@ paths:
                   dynamic_mount:
                     type: string
                     enum: [deferred, mounted]
+                  packs:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExtensionPack' }
+                  packs_enabled:
+                    type: boolean
+                    description: "False when loading installed packs is turned off (`PYCHESTRATE_LOAD_EXTENSIONS=0`)."
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /ext/example/echo:
@@ -8223,6 +8232,22 @@ components:
         capabilities:
           type: array
           items: { type: string }
+
+    ExtensionPack:
+      type: object
+      description: What became of one installed extension pack at startup.
+      required: [name, target, loaded, error]
+      properties:
+        name:
+          type: string
+          description: "The entry point's name in the pack's pyproject.toml."
+        target:
+          type: string
+          description: "The `module:attribute` the entry point names."
+        loaded: { type: boolean }
+        error:
+          type: string
+          description: "The failure, as `ExceptionType: message`, when the pack did not load; empty when it did."
 
     ExtensionRoute:
       type: object

@@ -245,6 +245,15 @@ preview tag.
 
 ### Added
 
+- The Extension Registry lists the installed extension packs and what became of each (DOC-11). A pack that fails to load is logged and the
+  service starts without it, so a person who installed a pack and saw none of its routes had only the log to look at. The loader now keeps
+  what it did (`load_report()`), `GET /api/v1/ext` returns it as `packs` (each with `name`, `target`, `loaded` and the `error` when it did not
+  load) and `packs_enabled` (false when `PYCHESTRATE_LOAD_EXTENSIONS=0`), both added to the OpenAPI document, and the Admin, Extension
+  Registry page has an *Extension packs* section: how many loaded, and a row per pack with a *Loaded* or *Did not load* chip, its entry point
+  and the error. The section shows even when no extension adds a route, which is the likeliest result of a failed pack. The extension guide's
+  Step 5 and troubleshooting entry point to it. The report is about this process: it is not a health check, and a failed pack does not make the
+  service report not-ready.
+
 - The product has one brand colour and a mark (XC-24). The header showed the name as plain text, the sign-in page nothing, and the
   favicon was a teal (`#0e6b86`) used nowhere else in the interface. The brand colour is now the interface's own accent blue
   (`--pyc-color-accent`, `#2563eb`): the favicon is drawn in it and the same mark (the "P" in a rounded square) stands beside
