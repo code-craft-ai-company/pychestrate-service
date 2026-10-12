@@ -46,7 +46,7 @@
                     {{ spec.name }}
                 </a>
             </td>
-            <td><span class="badge badge-secondary">{{ spec.framework.value }}</span></td>
+            <td><span class="badge badge-secondary">{{ spec.framework | state_words }}</span></td>
             <td class="mono">{{ spec.test_command }}</td>
             <td>v{{ spec.version }}</td>
             <td>{{ spec.timeout_minutes }}m</td>

@@ -71,7 +71,7 @@
         </tr>
         <tr>
             <th scope="row">Trigger Type</th>
-            <td><span class="badge badge-secondary">{{ build.trigger_type.value }}</span></td>
+            <td><span class="badge badge-secondary">{{ build.trigger_type | state_words }}</span></td>
         </tr>
         <tr>
             <th scope="row">Triggered By</th>

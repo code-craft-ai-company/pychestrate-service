@@ -29,6 +29,16 @@ preview tag.
 
 ### Fixed
 
+- Server-rendered pages say a state or kind in words (ADM-27). The glossary says a stored value is not a label, and the bundle pages followed that,
+  but the server-rendered pages printed what was stored: the API Tokens page showed a service account as `ACTIVE`, and a variable's type
+  would read `SECRET_REF`. A new `state_words` filter (underscores read as spaces, a value stored in capitals reads in lowercase) is now used
+  by the `status_badge` macro and by every badge that printed an enum's `.value` (member roles, trigger types, frameworks, providers, secret
+  and variable types, artifact types, job actions, a reservation's mode and a variable's read-only Type field); an infrastructure job's
+  state goes through `status_badge`, so it has a tone; and the enrollment token list uses `status_badge` instead of its own capitalised
+  badge. A lint fails when a template prints an enum's `.value` unfiltered. The glossary also records the three things the audit found
+  unwritten: `local_datetime` (the same format in the viewer's time zone, for times a person chooses), the full id on a detail page's ID
+  row, and a pool manager's `Release` on an IP pool.
+
 - Delete sits below the content on every detail page (PRJ-32). Eight detail pages (roles, variables, release templates, watches, both pool kinds,
   resources) already kept Delete below the content; the project, repository, build specification and RPA job type pages put it in the header,
   in a row with Edit. A destructive button beside the everyday ones is one slip from a lost project, and its place moved from page to page. It

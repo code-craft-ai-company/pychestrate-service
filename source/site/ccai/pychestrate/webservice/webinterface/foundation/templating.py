@@ -162,6 +162,7 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
     environment.filters["enum_value"] = enum_value_filter
+    environment.filters["state_words"] = state_words_filter
     environment.filters["permission_groups"] = group_permissions
     return
 
@@ -204,6 +205,26 @@ def enum_value_filter(value: Any) -> Any:
     if isinstance(value, enum.Enum):
         return value.value
     return value
+
+
+def state_words_filter(value: Any) -> Any:
+    """
+        Say a stored state or kind the way a person would: an Enum member
+        reads as its value, underscores read as spaces and a value stored
+        in capitals reads in lowercase (``IN_USE`` is *in use*,
+        ``dispatch_unconfirmed`` is *dispatch unconfirmed*). The stored
+        value is still what filters send and what tones follow; only the
+        words on the page change (UI glossary, "States and technical
+        terms"). ``None`` and anything that is not text pass through, so
+        ``display`` can still turn an absent value into a dash.
+    """
+    raw = enum_value_filter(value)
+    if isinstance(raw, str) is False:
+        return raw
+    words = raw.replace("_", " ")
+    if words == words.upper() and words != words.lower():
+        words = words.lower()
+    return words
 
 
 def status_tone_filter(value: Any) -> str:

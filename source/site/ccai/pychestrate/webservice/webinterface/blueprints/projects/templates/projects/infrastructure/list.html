@@ -73,8 +73,8 @@
                 </a>
             </td>
             <td>{{ job.spec_name }}</td>
-            <td><span class="badge badge-info">{{ job.action.value }}</span></td>
-            <td><span class="badge badge-secondary">{{ job.state.value }}</span></td>
+            <td><span class="badge badge-info">{{ job.action | state_words }}</span></td>
+            <td>{{ ui.status_badge(job.state) }}</td>
             <td>
                 {{ bm.build_status(job.status) }}
             </td>

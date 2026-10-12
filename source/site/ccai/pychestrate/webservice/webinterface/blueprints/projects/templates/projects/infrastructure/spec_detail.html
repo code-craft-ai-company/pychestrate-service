@@ -25,7 +25,7 @@
 <div class="stat-grid">
     <div class="card">
         <div class="muted">Provider</div>
-        <div><span class="badge badge-secondary badge-lg">{{ spec.provider.value }}</span></div>
+        <div><span class="badge badge-secondary badge-lg">{{ spec.provider | state_words }}</span></div>
     </div>
     <div class="card">
         <div class="muted">Version</div>
@@ -72,8 +72,8 @@
             {% for job in recent_jobs %}
             <tr>
                 <td><a href="{{ url_for('projects.infra_job_detail', project_id=project.id, job_id=job.id) }}">#{{ job.id }}</a></td>
-                <td><span class="badge badge-info">{{ job.action.value }}</span></td>
-                <td><span class="badge badge-secondary">{{ job.state.value }}</span></td>
+                <td><span class="badge badge-info">{{ job.action | state_words }}</span></td>
+                <td>{{ ui.status_badge(job.state) }}</td>
                 <td>
                     {{ bm.build_status(job.status) }}
                 </td>

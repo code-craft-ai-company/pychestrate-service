@@ -16,7 +16,7 @@
 <div class="page-header page-header--split">
     <div>
         <h1>Infrastructure Job #{{ job.id }}</h1>
-        <p>{{ job.spec_name }} - {{ job.action.value }}</p>
+        <p>{{ job.spec_name }} - {{ job.action | state_words }}</p>
     </div>
     <div class="actions-row">
         <a href="{{ url_for('projects.infra_job_logs', project_id=project.id, job_id=job.id) }}" class="btn btn-secondary">
@@ -34,11 +34,11 @@
     </div>
     <div class="card">
         <div class="muted">Action</div>
-        <div><span class="badge badge-info badge-lg">{{ job.action.value }}</span></div>
+        <div><span class="badge badge-info badge-lg">{{ job.action | state_words }}</span></div>
     </div>
     <div class="card">
         <div class="muted">State</div>
-        <div><span class="badge badge-secondary badge-lg">{{ job.state.value }}</span></div>
+        <div>{{ ui.status_badge(job.state) }}</div>
     </div>
     <div class="card">
         <div class="muted">Duration</div>

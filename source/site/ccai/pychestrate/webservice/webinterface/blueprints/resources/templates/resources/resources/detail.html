@@ -146,7 +146,7 @@
                         <td><a href="{{ url_for('resources.reservation_detail', reservation_id=res.id) }}">{{ res.id }}</a></td>
                         <td>{{ res.username or '—' }}</td>
                         <td>{{ res.job_id or '—' }}</td>
-                        <td>{{ res.mode }}</td>
+                        <td>{{ res.mode | state_words }}</td>
                         <td>{{ res.start_time | local_datetime(false, '—') }}</td>
                         <td>{{ res.end_time | local_datetime(false, '—') }}</td>
                     </tr>

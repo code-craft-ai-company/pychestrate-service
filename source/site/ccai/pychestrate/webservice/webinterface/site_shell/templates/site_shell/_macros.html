@@ -18,7 +18,7 @@
     vocabulary; the tone comes from the status_tone filter so a build
     that is "pending" is amber on every page, not grey on some. #}
 {% macro status_badge(status, size="") -%}
-{%- set label = status | enum_value -%}
+{%- set label = status | state_words -%}
 <span class="badge badge-{{ status | status_tone }}"{% if size %} style="font-size: {{ size }};"{% endif %}>{{ label | display }}</span>
 {%- endmacro %}
 

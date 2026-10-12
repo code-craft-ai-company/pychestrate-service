@@ -39,7 +39,7 @@
         {% for variable in variables %}
         <tr>
             <td><a href="{{ url_for('config.variable_detail', name=variable.name) }}">{{ variable.name }}</a>{% if variable.name in system_owners %} <span class="badge badge-secondary" data-role="system-owned" title="Changed on the {{ system_owners[variable.name].label }} page">system</span>{% endif %}</td>
-            <td><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
+            <td><span class="badge badge-info">{{ variable.var_type | state_words }}</span></td>
             {# Values are masked by default -- they may hold credentials.
                The reveal toggle swaps the mask for the real value per row. #}
             <td class="narrow-sm">

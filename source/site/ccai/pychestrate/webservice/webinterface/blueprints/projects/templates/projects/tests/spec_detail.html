@@ -25,7 +25,7 @@
 <div class="stat-grid">
     <div class="card">
         <div class="muted">Framework</div>
-        <div><span class="badge badge-secondary badge-lg">{{ spec.framework.value }}</span></div>
+        <div><span class="badge badge-secondary badge-lg">{{ spec.framework | state_words }}</span></div>
     </div>
     <div class="card">
         <div class="muted">Version</div>
@@ -37,7 +37,7 @@
     </div>
     <div class="card">
         <div class="muted">Result Format</div>
-        <div class="strong">{{ spec.result_format.value }}</div>
+        <div class="strong">{{ spec.result_format | state_words }}</div>
     </div>
 </div>
 

@@ -43,7 +43,7 @@
                     {{ spec.name }}
                 </a>
             </td>
-            <td><span class="badge badge-secondary">{{ spec.provider.value }}</span></td>
+            <td><span class="badge badge-secondary">{{ spec.provider | state_words }}</span></td>
             <td>{{ spec.resources|length }}</td>
             <td>v{{ spec.version }}</td>
             <td>{{ spec.timeout_minutes }}m</td>

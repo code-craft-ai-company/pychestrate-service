@@ -17,7 +17,7 @@
 <div class="page-header page-header--split">
     <div>
         <h1>Infrastructure Job #{{ job.id }} Logs</h1>
-        <p>{{ job.spec_name }} - {{ job.action.value }}</p>
+        <p>{{ job.spec_name }} - {{ job.action | state_words }}</p>
     </div>
     <div>
         {{ ui.status_badge(job.status) }}

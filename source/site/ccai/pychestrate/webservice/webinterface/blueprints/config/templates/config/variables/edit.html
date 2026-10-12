@@ -21,7 +21,7 @@
         
         <div class="form-group">
             <label for="ro-type">Type</label>
-            <input type="text" class="form-control" value="{{ variable.var_type.value }}" id="ro-type" disabled>
+            <input type="text" class="form-control" value="{{ variable.var_type | state_words }}" id="ro-type" disabled>
         </div>
         
         <div class="form-group">

@@ -39,7 +39,11 @@ Verbs
 ``Check out`` / ``Check in``
     Taking and returning a resource or IP address from a pool for the
     current user. ``Reserve`` is the scheduled, future-dated form of
-    check out; ``Release`` is not used.
+    check out; ``Release`` is not used for a person returning their own.
+    The one use is a pool manager's ``Release`` on an IP pool: it frees
+    an address someone else still holds, asks for a reason and records it
+    in the audit log. An allocation that ended that way is shown as
+    *released*.
 
 ``Sign in`` / ``Sign out``
     The session verbs on every surface (login page, shell header,
@@ -213,7 +217,19 @@ Dates and identifiers
   ``<time>`` element with the ISO value, the visible text in
   ``YYYY-MM-DD HH:MM`` (seconds only on detail pages), and the zone
   spelled out.
+* Where a person chooses the time (a reservation, an allocation, an
+  enrollment token's expiry) the page uses ``local_datetime``: the same
+  format, shown in the viewer's own time zone, with the UTC time as the
+  tooltip. It is the one other timestamp filter; a page uses one or the
+  other, never a bare value.
 * Absent values render as an em dash, never as ``None``, ``N/A``, or
   an empty cell.
 * Long identifiers (commit SHAs, checksums, UUIDs) render through
   ``truncate_id``: twelve characters, the full value in the title.
+  A detail page's own ID row is the exception: it shows the full value,
+  so it can be copied.
+* A state or kind is said in words on every page, not printed as stored:
+  the ``status_badge`` macro and the ``state_words`` filter read
+  underscores as spaces and a value stored in capitals in lowercase
+  (``ACTIVE`` is *active*, ``SECRET_REF`` is *secret ref*). A template
+  that prints an enum's ``.value`` as it is fails the lint.

@@ -174,7 +174,7 @@ def test_the_list_shows_short_ids_local_times_a_status_colour_and_the_newest_fir
 
     testbase.assert_equal(
         (row is not None, re.search(r'<code class="mono" title="[0-9a-f-]{36}">[0-9a-f]{8}…</code>', row_text) is not None,
-         row_text.count("<time data-pyc-local"), 'class="badge badge-warning">Pending<' in row_text,
+         row_text.count("<time data-pyc-local"), 'class="badge badge-warning">pending<' in row_text,
          page.index(later) < page.index(earlier) if page.count(later) and page.count(earlier) else None),
         (True, True, 2, True, True),
     )
