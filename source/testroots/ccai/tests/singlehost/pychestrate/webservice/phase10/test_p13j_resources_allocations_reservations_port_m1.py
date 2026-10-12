@@ -535,8 +535,9 @@ def _register_url_for_endpoints() -> None:
 def test_register_allocations_routes_attaches_documented_routes():
     """
     **Feature: webworks resources port T7.1 (E3)**
-    **Property: register_allocations_routes attaches the five
-    allocation routes at /resources/allocations*.**
+    **Property: register_allocations_routes attaches the six
+    allocation routes at /resources/allocations* (the utilization
+    report is the sixth).**
     """
     _reset_global_state()
     try:
@@ -548,6 +549,7 @@ def test_register_allocations_routes_attaches_documented_routes():
         expected = {
             ("/resources/allocations", ("GET",)),
             ("/resources/allocations/history", ("GET",)),
+            ("/resources/allocations/utilization", ("GET",)),
             ("/resources/allocations/{allocation_id}", ("GET",)),
             (
                 "/resources/allocations/{allocation_id}/checkin",

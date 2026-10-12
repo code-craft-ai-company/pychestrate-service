@@ -138,6 +138,24 @@ way. An administrator can: choose **Force check in**, enter the reason
 checkout under the holder's name, and the lists say how many rows there are and
 keep their filters from page to page.
 
+To see which devices are busy and which sit idle, open **Resources**,
+**Utilization**. Choose the last 7, 30, 90 or 365 days (30 by default). The page
+gives the number of allocations, how many devices were used, the time in use in
+total, the average allocation and the most held at once, then one row per device,
+busiest first: its allocations, hours in use, its share of the period (a bar and a
+percentage), when it was last checked out and a mark if it is in use now. A device
+nobody checked out has a row of zeros, so idle equipment is easy to spot.
+
+*Time in use* is measured, not counted. An allocation that began before the
+period counts only for the part inside it, one still held counts up to now, an
+allocation with no check-in time that has ended counts until its lease was meant
+to end, and allocations of one device that overlap (a shared device) count once, so a
+device shared by three people at the same hour is in use for one hour.
+**Download CSV** saves the same table for the period you chose, one row per
+device, ready for a spreadsheet; a name that a spreadsheet could read as a formula
+is written as text. The page reads up to 1,000 devices and the latest 50,000
+allocations in the period and says so when it hits either limit.
+
 
 Reserve a device for later
 ==========================

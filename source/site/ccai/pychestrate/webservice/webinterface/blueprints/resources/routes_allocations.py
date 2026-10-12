@@ -44,7 +44,7 @@ __version__ = "1.0.0"
 
 import logging
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -70,6 +70,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _require_permission_or_redirect,
     _resolve_authenticated_request,
 )
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import utilization
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
@@ -98,6 +99,12 @@ _ROUTE_TABLE = (
         "/allocations/history",
         ("GET",),
     ),
+    # Before the ``{allocation_id}`` route, so "utilization" is not read as an id.
+    (
+        "resources.allocation_utilization",
+        "/allocations/utilization",
+        ("GET",),
+    ),
     (
         "resources.allocation_detail",
         "/allocations/{allocation_id}",
@@ -117,6 +124,13 @@ _ROUTE_TABLE = (
 
 
 _ADMIN_PERMISSION = "system:resources.manage"
+
+_READ_PERMISSION = "system:resources.read"
+
+#: The most resources, and the most allocations, one utilization report reads. A report that hit a
+#: limit says so on the page; the figures for the busiest resources may then be low.
+_UTILIZATION_RESOURCE_LIMIT = 1000
+_UTILIZATION_ALLOCATION_LIMIT = 50000
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +310,126 @@ def handle_allocation_list(request: Request) -> Response:
 
         response = _render(
             template_name="resources/allocations/list.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _load_utilization_inputs(*, db_session: Any, window_start: Any, window_end: Any) -> Dict[str, Any]:
+    """
+        Read what the utilization report needs: the resources, and the allocations that overlap the
+        period (checked out before its end and not checked in before its start).
+
+        :param db_session: Open SQLAlchemy session.
+        :param window_start: Start of the period (UTC).
+        :param window_end: End of the period (UTC).
+
+        :returns: ``{"resources": [ResourceRef], "spans": [AllocationSpan], "notes": [str]}``; ``notes`` names
+                  each limit that cut the data short.
+    """
+    from sqlalchemy import or_  # noqa: E402
+
+    from ccai.pychestrate.core.orm import Allocation, Resource  # noqa: E402
+
+    resource_rows = db_session.query(Resource).order_by(Resource.name).limit(_UTILIZATION_RESOURCE_LIMIT + 1).all()
+    allocation_rows = (
+        db_session.query(Allocation)
+        .filter(Allocation.checkout_time <= window_end)
+        .filter(or_(Allocation.actual_checkin.is_(None), Allocation.actual_checkin >= window_start))
+        .order_by(Allocation.checkout_time.desc())
+        .limit(_UTILIZATION_ALLOCATION_LIMIT + 1)
+        .all()
+    )
+    notes: List[str] = []
+    if len(resource_rows) > _UTILIZATION_RESOURCE_LIMIT:
+        resource_rows = resource_rows[:_UTILIZATION_RESOURCE_LIMIT]
+        notes.append("Showing the first {} resources.".format(_UTILIZATION_RESOURCE_LIMIT))
+    if len(allocation_rows) > _UTILIZATION_ALLOCATION_LIMIT:
+        allocation_rows = allocation_rows[:_UTILIZATION_ALLOCATION_LIMIT]
+        notes.append(
+            "Only the latest {} allocations in this period were read, so the figures for the busiest resources may be low.".format(
+                _UTILIZATION_ALLOCATION_LIMIT
+            )
+        )
+    resources = [
+        utilization.ResourceRef(
+            resource_id=row.id, name=str(row.name), pool=str(row.pool.name) if getattr(row, "pool", None) is not None else "",
+        )
+        for row in resource_rows
+    ]
+    spans = [
+        utilization.AllocationSpan(
+            resource_id=row.resource_id, checkout_time=row.checkout_time, actual_checkin=row.actual_checkin,
+            expected_checkin=row.expected_checkin, status=str(row.status),
+        )
+        for row in allocation_rows
+    ]
+    return {"resources": resources, "spans": spans, "notes": notes}
+
+
+def handle_allocation_utilization(request: Request) -> Response:
+    """
+        ``GET /resources/allocations/utilization`` -- how long each resource was in use over the last
+        7, 30, 90 or 365 days (``?days=``, 30 by default), or the same as a spreadsheet with
+        ``?format=csv`` (ORG-F22).
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        deny_response = _require_permission_or_redirect(
+            auth=auth,
+            permission=_READ_PERMISSION,
+            deny_message=_denial_message(action="see resource utilization"),
+            deny_redirect_url=_url_for_module.url_for("resources.dashboard"),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        period_days = utilization.parse_period_days(request.query_params.get("days", None))
+        window_end = datetime.now(timezone.utc)
+        inputs = _load_utilization_inputs(
+            db_session=db_session, window_start=window_end - timedelta(days=period_days), window_end=window_end,
+        )
+        report = utilization.compute_utilization(
+            resources=inputs["resources"], spans=inputs["spans"], period_days=period_days, now=window_end,
+        )
+
+        if (request.query_params.get("format", "") or "").strip().lower() == "csv":
+            from ccai.pychestrate.webservice.csv_export import csv_response, render_csv  # noqa: E402
+
+            stamp = window_end.strftime("%Y%m%d-%H%M")
+            return csv_response(
+                filename="pychestrate-utilization-{}d-{}.csv".format(period_days, stamp),
+                body=render_csv(columns=utilization.EXPORT_COLUMNS, rows=utilization.export_records(report)),
+                truncated=len(inputs["notes"]) > 0,
+            )
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="resources.allocation_utilization",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context.update(_resources_permission_flags(auth=auth))
+        context["utilization"] = report
+        context["period_days"] = period_days
+        context["period_choices"] = utilization.PERIOD_CHOICES
+        context["truncation_notes"] = inputs["notes"]
+
+        response = _render(
+            template_name="resources/allocations/utilization.html",
             context=context,
         )
         _attach_session_to_response(
@@ -658,6 +792,7 @@ def handle_allocation_force_checkin(request: Request) -> Response:
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "resources.allocation_list": handle_allocation_list,
     "resources.allocation_history": handle_allocation_history,
+    "resources.allocation_utilization": handle_allocation_utilization,
     "resources.allocation_detail": handle_allocation_detail,
     "resources.allocation_checkin": handle_allocation_checkin,
     "resources.allocation_force_checkin": handle_allocation_force_checkin,
@@ -684,6 +819,7 @@ __all__ = [
     "register_allocations_routes",
     "handle_allocation_list",
     "handle_allocation_history",
+    "handle_allocation_utilization",
     "handle_allocation_detail",
     "handle_allocation_checkin",
     "handle_allocation_force_checkin",

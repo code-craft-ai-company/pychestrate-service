@@ -46,6 +46,7 @@ from ccai.testshared.factories.webui.dataclass_fixtures import (
 )
 
 from ccai.pychestrate.webservice.webinterface.blueprints.resources import availability_view
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import utilization as resource_utilization
 from ccai.pychestrate.core.managers.allocation_manager import (
     AllocationResponse,
     ReservationResponse,
@@ -384,6 +385,31 @@ def _import_columns(mode: str) -> Any:
     return resource_import.DOCUMENTED_COLUMNS
 
 
+def _utilization_report(mode: str) -> Any:
+    """The utilization report: two resources in the populated mode (one in use now), none otherwise."""
+    window_end = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
+    window_start = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
+    if mode != MODE_POPULATED:
+        return resource_utilization.UtilizationReport(
+            period_days=30, window_start=window_start, window_end=window_end, rows=[], allocations=0, resources_total=0,
+            resources_used=0, hours_in_use=0.0, average_hours=0.0, peak_at_once=0,
+        )
+    rows = [
+        resource_utilization.ResourceUsage(
+            resource_id=7, name="bench-1", pool="Lab A", allocations=3, hours_in_use=36.5, percent_in_use=5.1,
+            last_checked_out=datetime(2026, 5, 3, 9, 30, tzinfo=timezone.utc), in_use_now=True,
+        ),
+        resource_utilization.ResourceUsage(
+            resource_id=8, name="bench-2", pool="", allocations=0, hours_in_use=0.0, percent_in_use=0.0,
+            last_checked_out=None, in_use_now=False,
+        ),
+    ]
+    return resource_utilization.UtilizationReport(
+        period_days=30, window_start=window_start, window_end=window_end, rows=rows, allocations=3, resources_total=2,
+        resources_used=1, hours_in_use=36.5, average_hours=12.2, peak_at_once=2,
+    )
+
+
 def _my_allocation(mode: str) -> Any:
     """The current person's own active allocation of the resource, or None."""
     if mode == MODE_SPARSE:
@@ -527,6 +553,10 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "selected_status": _by_mode("running", ""),
     "selected_spec_id": _by_mode(7, None),
     "selected_resource_id": _by_mode(7, None),
+    "utilization": _utilization_report,
+    "period_days": _const(30),
+    "period_choices": _const(resource_utilization.PERIOD_CHOICES),
+    "truncation_notes": _by_mode(["Showing the first 1000 resources."], []),
     "selected_user_id": _by_mode("user_id-7", ""),
     "selected_scope_id": _by_mode(7, None),
     "selected_channel_id": _by_mode(7, None),

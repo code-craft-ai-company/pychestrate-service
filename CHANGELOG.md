@@ -245,6 +245,16 @@ preview tag.
 
 ### Added
 
+- A lab utilization report (ORG-F22). The allocation pages list who holds what and what was held, but nothing answered a lab manager's first
+  questions: which devices are busy, which sit idle, how long people keep them. **Resources, Utilization** (`GET /resources/allocations/utilization`,
+  `?days=` 7, 30, 90 or 365; 30 by default) gives the allocations, devices used, total time in use, the average allocation and the most held at once,
+  then a row per device, busiest first: allocations, hours in use, share of the period, when it was last checked out and whether it is in use now.
+  Idle devices have a row of zeros. Time in use is measured, not counted: each allocation is clipped to the period and overlapping allocations of
+  one device are merged, so a device shared by three people at the same hour is in use for one hour (the unused `get_utilization_metrics` counts
+  by check-out time and would double-count that, which is why the report does its own sums, in `blueprints/resources/utilization.py`, in plain
+  functions tested without a database). `?format=csv` downloads the same rows (`pychestrate-utilization-<days>d-<date>.csv`; spreadsheet-safe cells;
+  cut and flagged at 1,000 devices or 50,000 allocations). Both need `system:resources.read`.
+
 - The Extension Registry lists the installed extension packs and what became of each (DOC-11). A pack that fails to load is logged and the
   service starts without it, so a person who installed a pack and saw none of its routes had only the log to look at. The loader now keeps
   what it did (`load_report()`), `GET /api/v1/ext` returns it as `packs` (each with `name`, `target`, `loaded` and the `error` when it did not

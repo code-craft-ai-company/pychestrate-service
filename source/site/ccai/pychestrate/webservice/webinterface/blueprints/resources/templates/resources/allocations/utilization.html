@@ -1,0 +1,84 @@
+{% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Utilization - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Utilization</h1>
+    <p>How long each resource was in use over the last {{ period_days }} days. A resource shared by several people at once counts once.</p>
+</div>
+
+<div class="toolbar">
+    <nav class="actions-row" aria-label="Period" data-role="period-choices">
+        {% for choice in period_choices %}
+        <a href="{{ url_for('resources.allocation_utilization') }}?days={{ choice }}" class="btn {% if choice == period_days %}btn-primary{% else %}btn-secondary{% endif %}"{% if choice == period_days %} aria-current="true"{% endif %}>{{ choice }} days</a>
+        {% endfor %}
+    </nav>
+
+    <div class="push-end">
+        <a href="{{ url_for('resources.allocation_utilization') }}?days={{ period_days }}&amp;format=csv" class="btn btn-secondary" data-role="download-csv">
+            {{ ui.icon("download") }} Download CSV
+        </a>
+    </div>
+</div>
+
+<div class="stat-grid stat-grid--dense" data-role="summary">
+    <div class="stat-card">
+        <div class="stat-value">{{ utilization.allocations }}</div>
+        <div class="stat-label">Allocations</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ utilization.resources_used }} of {{ utilization.resources_total }}</div>
+        <div class="stat-label">Resources used</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ '%.1f' | format(utilization.hours_in_use) }} h</div>
+        <div class="stat-label">Time in use</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ '%.1f' | format(utilization.average_hours) }} h</div>
+        <div class="stat-label">Average allocation</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ utilization.peak_at_once }}</div>
+        <div class="stat-label">Most held at once</div>
+    </div>
+</div>
+
+{% for note in truncation_notes %}
+<p class="muted" data-role="truncation-note">{{ note }}</p>
+{% endfor %}
+
+{% if utilization.resources_total > 0 and utilization.allocations == 0 %}
+<p class="muted" data-role="idle-note">No resource was checked out in the last {{ period_days }} days: every one was idle.</p>
+{% endif %}
+
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <thead>
+        <tr>
+            <th scope="col" class="min-name">Resource</th>
+            <th scope="col">Pool</th>
+            <th scope="col">Allocations</th>
+            <th scope="col">Time in use</th>
+            <th scope="col">Share of period</th>
+            <th scope="col">Last checked out</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in utilization.rows %}
+        <tr data-role="usage-row">
+            <td class="min-name"><a href="{{ url_for('resources.resource_detail', resource_id=row.resource_id) }}">{{ row.name }}</a>{% if row.in_use_now %} <span class="badge badge-info" data-role="in-use-now">in use now</span>{% endif %}</td>
+            <td>{{ row.pool or '—' }}</td>
+            <td>{{ row.allocations }}</td>
+            <td class="nowrap">{{ '%.1f' | format(row.hours_in_use) }} h</td>
+            <td class="nowrap"><meter min="0" max="100" value="{{ row.percent_in_use }}" aria-label="{{ row.name }} was in use {{ '%.0f' | format(row.percent_in_use) }}% of the period"></meter> {{ '%.0f' | format(row.percent_in_use) }}%</td>
+            <td class="nowrap">{{ row.last_checked_out | local_datetime(false, '—') }}</td>
+        </tr>
+        {% else %}
+        {{ ui.empty_state("No resources registered yet", hint="Register a device and its use will be reported here.", colspan=6) }}
+        {% endfor %}
+    </tbody>
+</table></div>
+{% include "site_shell/_local_times.html" %}
+{% endblock %}

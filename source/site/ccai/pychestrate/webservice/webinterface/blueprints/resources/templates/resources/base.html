@@ -64,6 +64,9 @@
                 <li><a href="{{ url_for('resources.allocation_history') }}" {% if request_endpoint == 'resources.allocation_history' %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("history") }} Allocation History
                 </a></li>
+                <li><a href="{{ url_for('resources.allocation_utilization') }}" {% if request_endpoint == 'resources.allocation_utilization' %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("monitoring") }} Utilization
+                </a></li>
                 <li><a href="{{ url_for('resources.reservation_list') }}" {% if request_endpoint.startswith('resources.reservation_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("event") }} Reservations
                 </a></li>
