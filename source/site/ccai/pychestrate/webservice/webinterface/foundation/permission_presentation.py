@@ -210,6 +210,35 @@ def menu_requirements() -> Dict[str, Any]:
     return {"entries": entries, "groups": group_keys}
 
 
+@lru_cache(maxsize=1)
+def menu_preview_data() -> Dict[str, Any]:
+    """
+        What the role form needs to say, as the person ticks permissions, which menu entries the role would show.
+
+        :returns: ``{"entries": [{"label": "Admin › Users", "needs": [keys]}], "phrases": {key: how the picker
+                  names it}}`` for every menu entry that depends on a permission; ``needs`` is the entry's own keys
+                  and its group's.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell import nav_manifest  # noqa: E402
+
+    groups = {group.group_id: group for group in nav_manifest.NAV_GROUPS}
+    entries: List[Dict[str, Any]] = []
+    phrases: Dict[str, str] = {}
+    for entry in nav_manifest.NAV_ENTRIES:
+        group = groups.get(entry.group_id)
+        needed: List[str] = []
+        for key in list(entry.required_permissions) + (list(group.required_permissions) if group is not None else []):
+            if key not in needed:
+                needed.append(key)
+        if len(needed) == 0:
+            continue
+        label = entry.label.replace(nav_manifest.PREVIEW_LABEL_SUFFIX, "")
+        entries.append({"label": "{} › {}".format(group.label, label) if group is not None else label, "needs": needed})
+        for key in needed:
+            phrases[key] = _permission_phrase(key)
+    return {"entries": entries, "phrases": phrases}
+
+
 def menu_hint(key: str) -> str:
     """
         The sentence the role picker shows under a permission that a menu entry needs together with others.
@@ -276,6 +305,7 @@ __all__ = [
     "group_permissions",
     "humanize",
     "menu_hint",
+    "menu_preview_data",
     "menu_requirements",
     "plain_description",
     "split_key",

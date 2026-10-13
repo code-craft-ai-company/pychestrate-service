@@ -253,6 +253,13 @@ preview tag.
 
 ### Added
 
+- The role forms preview the menu a role would get (ADM-06). Above the permission list, *Menu entries this role shows* names the entries the
+  ticked permissions open ("Admin › Users", "Fleet › Resources and Pools") and *Not shown yet* names the ones that have only part of what they need,
+  each with the permission still missing ("Admin › Users (needs Interface › Admin · see in the menu)"), updating as boxes are ticked and on
+  load when a role is edited. A menu entry shows only for someone who holds every permission it needs, so this answers "what will this role
+  actually see?" and catches a half-built pair before the role is saved. It is computed from the navigation manifest (the `menu_preview_data()`
+  template global), so it cannot disagree with the menu. Without script the preview stays hidden and the form works as before.
+
 - A lab utilization report (ORG-F22). The allocation pages list who holds what and what was held, but nothing answered a lab manager's first
   questions: which devices are busy, which sit idle, how long people keep them. **Resources, Utilization** (`GET /resources/allocations/utilization`,
   `?days=` 7, 30, 90 or 365; 30 by default) gives the allocations, devices used, total time in use, the average allocation and the most held at once,

@@ -51,7 +51,10 @@ import jinja2
 
 from ccai.webworks.routing.response import HTMLResponse
 
-from ccai.pychestrate.webservice.webinterface.foundation.permission_presentation import group_permissions
+from ccai.pychestrate.webservice.webinterface.foundation.permission_presentation import (
+    group_permissions,
+    menu_preview_data,
+)
 
 
 _default_environment: Optional[jinja2.Environment] = None
@@ -164,6 +167,8 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     environment.filters["enum_value"] = enum_value_filter
     environment.filters["state_words"] = state_words_filter
     environment.filters["permission_groups"] = group_permissions
+    # ``menu_preview_data()`` -- the menu entries and the permissions each needs, for the role forms' live preview.
+    environment.globals["menu_preview_data"] = menu_preview_data
     return
 
 

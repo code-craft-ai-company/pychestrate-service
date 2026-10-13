@@ -1,7 +1,11 @@
 {#-
-    Filter box and selected count for ``ui.permission_picker`` (audit ADM-06).
-    Include once per page, after the form. Without script every permission
-    stays visible and selectable.
+    Filter box, selected count and the menu preview for ``ui.permission_picker``
+    (audit ADM-06). Include once per page, after the form. Without script every
+    permission stays visible and selectable, and the preview stays hidden.
+
+    The preview says which menu entries the ticked permissions would show, and
+    which are not shown yet because only part of what they need is ticked: a menu
+    entry shows only for someone who holds every permission it needs.
 -#}
 <script nonce="{{ csp_nonce() }}">
 (function () {
@@ -15,6 +19,43 @@
     var groups = picker.querySelectorAll("[data-permission-group]");
     var boxes = picker.querySelectorAll("input[type='checkbox']");
 
+    var preview = picker.querySelector("[data-role='menu-preview']");
+    var shownLine = picker.querySelector("[data-role='menu-shown']");
+    var heldLine = picker.querySelector("[data-role='menu-held']");
+    var island = picker.querySelector("[data-role='menu-preview-data']");
+    var menu = null;
+    try {
+        menu = island === null ? null : JSON.parse(island.textContent);
+    } catch (error) {
+        menu = null;
+    }
+
+    function refreshPreview() {
+        if (menu === null || preview === null || shownLine === null || heldLine === null) {
+            return;
+        }
+        var ticked = {};
+        for (var b = 0; b < boxes.length; b++) {
+            if (boxes[b].checked) {
+                ticked[boxes[b].value] = true;
+            }
+        }
+        var shown = [];
+        var held = [];
+        menu.entries.forEach(function (entry) {
+            var missing = entry.needs.filter(function (key) { return !ticked[key]; });
+            if (missing.length === 0) {
+                shown.push(entry.label);
+            } else if (missing.length < entry.needs.length) {
+                held.push(entry.label + " (needs " + missing.map(function (key) { return menu.phrases[key] || key; }).join(" and ") + ")");
+            }
+        });
+        shownLine.textContent = "Menu entries this role shows: " + (shown.length > 0 ? shown.join(", ") : "none yet") + ".";
+        heldLine.textContent = held.length > 0 ? "Not shown yet: " + held.join("; ") + "." : "";
+        heldLine.hidden = held.length === 0;
+        preview.hidden = false;
+    }
+
     function refreshCount() {
         var selected = 0;
         for (var b = 0; b < boxes.length; b++) {
@@ -23,6 +64,7 @@
             }
         }
         count.textContent = selected + " of " + boxes.length + " selected";
+        refreshPreview();
     }
 
     function applyFilter() {

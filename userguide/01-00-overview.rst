@@ -141,7 +141,10 @@ Users, roles, and permissions
     Pools** needs *Resources, View* and *Resource pools, View*; **Dashboards**
     needs *Metrics, View* and *Dashboards, View*. A role with only one half
     gets no entry and no message, so the form says it under each permission
-    involved ("In the menu, Users also needs ..."). A role's
+    involved ("In the menu, Users also needs ..."), and above the list a
+    **preview** updates as you tick: *Menu entries this role shows* names the
+    entries the ticked permissions open, and *Not shown yet* names the ones that
+    have part of what they need, each with the permission still missing. A role's
     page lists who has it (name, username, and whether it applies everywhere or in
     one project) for anyone who may view users; others see only the count.
     For an access review, **Download CSV** on the **Users** page saves every user the

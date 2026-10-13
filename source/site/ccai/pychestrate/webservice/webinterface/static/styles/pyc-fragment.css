@@ -1226,6 +1226,23 @@
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
+/* The menu entries the ticked permissions would show, and the ones held back by a missing half (ADM-06). */
+.pyc-admin-page-fragment .pyc-permissions__preview {
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-inline-start: 3px solid var(--pyc-color-accent, hsl(215, 100%, 61%));
+    background: var(--pyc-color-surface-hover, hsla(0, 0%, 50%, 0.06));
+}
+
+.pyc-admin-page-fragment .pyc-permissions__preview p {
+    margin: 0.125rem 0;
+}
+
+.pyc-admin-page-fragment .pyc-permissions__preview[hidden],
+.pyc-admin-page-fragment .pyc-permissions__preview p[hidden] {
+    display: none;
+}
+
 /* What the menu also needs beside this permission (ADM-06): said under the permission, in the same quiet style. */
 .pyc-admin-page-fragment .pyc-permissions__hint {
     display: block;

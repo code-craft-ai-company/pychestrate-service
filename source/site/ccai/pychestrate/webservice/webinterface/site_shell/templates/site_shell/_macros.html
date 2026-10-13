@@ -253,6 +253,11 @@
         <input type="search" class="form-control w-md" data-role="permission-filter" placeholder="Filter permissions" aria-label="Filter permissions">
         <span class="muted" data-role="permission-count" role="status" aria-live="polite"></span>
     </div>
+    <div class="pyc-permissions__preview" data-role="menu-preview" role="status" aria-live="polite" hidden>
+        <p class="muted" data-role="menu-shown"></p>
+        <p class="muted pyc-permissions__preview-held" data-role="menu-held" hidden></p>
+    </div>
+    <script type="application/json" data-role="menu-preview-data">{{ menu_preview_data() | tojson }}</script>
     <div class="pyc-permissions__groups">
     {%- for group in permissions | permission_groups %}
         <fieldset class="pyc-permissions__group" data-permission-group>
