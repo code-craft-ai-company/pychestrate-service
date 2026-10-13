@@ -22,6 +22,7 @@ __version__ = "1.0.0"
 
 import re
 
+from functools import lru_cache
 from typing import Any, Dict, List, Tuple
 
 
@@ -168,6 +169,69 @@ def _action_rank(action: str) -> Tuple[int, str]:
     return (rank, action)
 
 
+def _permission_phrase(key: str) -> str:
+    """A permission named the way the picker shows it: ``Interface › Admin · view``."""
+    prefix, area, action = split_key(key)
+    return "{} › {}".format(area_label(prefix, area), action_label(action))
+
+
+@lru_cache(maxsize=1)
+def menu_requirements() -> Dict[str, Any]:
+    """
+        What the navigation menu asks of a role, beyond the one permission a person ticks.
+
+        A menu entry is shown only to someone who holds *every* key it needs: its own, and its group's
+        (the whole Admin menu needs ``system:ui.admin.view``). A role that holds only one of them gets no
+        entry and no message saying why, so the picker says it next to each permission involved.
+
+        :returns: ``{"entries": {key: [(entry label, [other keys needed with it])]}, "groups": {key: group
+                  label}}``; ``entries`` lists only entries that need more than one key, ``groups`` the
+                  group-level keys.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell import nav_manifest  # noqa: E402
+
+    groups = {group.group_id: group for group in nav_manifest.NAV_GROUPS}
+    entries: Dict[str, List[Tuple[str, List[str]]]] = {}
+    group_keys: Dict[str, str] = {}
+    for entry in nav_manifest.NAV_ENTRIES:
+        group = groups.get(entry.group_id)
+        needed: List[str] = []
+        for key in list(entry.required_permissions) + (list(group.required_permissions) if group is not None else []):
+            if key not in needed:
+                needed.append(key)
+        if len(needed) < 2:
+            continue
+        label = entry.label.replace(nav_manifest.PREVIEW_LABEL_SUFFIX, "")
+        for key in needed:
+            entries.setdefault(key, []).append((label, [other for other in needed if other != key]))
+        if group is not None:
+            for key in group.required_permissions:
+                group_keys[key] = group.label
+    return {"entries": entries, "groups": group_keys}
+
+
+def menu_hint(key: str) -> str:
+    """
+        The sentence the role picker shows under a permission that a menu entry needs together with others.
+
+        :param key: A canonical permission key.
+
+        :returns: The hint, or ``""`` when no menu entry needs this key together with another.
+    """
+    requirements = menu_requirements()
+    if key in requirements["groups"]:
+        return "Shows the {} menu. Each entry in it also needs its own permission.".format(requirements["groups"][key])
+    sentences: List[str] = []
+    by_others: Dict[Tuple[str, ...], List[str]] = {}
+    for label, others in requirements["entries"].get(key, []):
+        by_others.setdefault(tuple(others), []).append(label)
+    for others, labels in by_others.items():
+        sentences.append("In the menu, {} also needs {}.".format(
+            " and ".join(labels), " and ".join(_permission_phrase(other) for other in others),
+        ))
+    return " ".join(sentences)
+
+
 def group_permissions(permissions: Any) -> List[Dict[str, Any]]:
     """
         Group permission entries by area for the role forms.
@@ -180,7 +244,7 @@ def group_permissions(permissions: Any) -> List[Dict[str, Any]]:
 
         :returns: ``[{"area": <group key>, "label": <heading>, "items": [
                   {"permission": <entry>, "label": <checkbox text>,
-                  "description": <plain description>}]}]``.
+                  "description": <plain description>, "menu_hint": <what the menu also needs, or "">}]}]``.
     """
     groups: Dict[str, Dict[str, Any]] = {}
     for permission in permissions or []:
@@ -195,6 +259,7 @@ def group_permissions(permissions: Any) -> List[Dict[str, Any]]:
             "permission": permission,
             "label": action_label(action),
             "description": plain_description(str(getattr(permission, "description", "") or "")),
+            "menu_hint": menu_hint(key),
             "_action": action,
         })
     rtnval = sorted(groups.values(), key=lambda entry: entry["label"].lower())
@@ -210,6 +275,8 @@ __all__ = [
     "area_label",
     "group_permissions",
     "humanize",
+    "menu_hint",
+    "menu_requirements",
     "plain_description",
     "split_key",
 ]

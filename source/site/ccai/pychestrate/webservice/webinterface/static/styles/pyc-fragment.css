@@ -1226,6 +1226,13 @@
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
+/* What the menu also needs beside this permission (ADM-06): said under the permission, in the same quiet style. */
+.pyc-admin-page-fragment .pyc-permissions__hint {
+    display: block;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-style: italic;
+}
+
 .pyc-admin-page-fragment .pyc-permissions__area {
     margin: 1rem 0 0.25rem;
     font-size: var(--pyc-font-size-body, 1rem);

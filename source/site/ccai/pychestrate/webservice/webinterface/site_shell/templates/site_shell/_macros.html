@@ -263,6 +263,7 @@
                 <span class="pyc-permissions__text">
                     <span class="pyc-permissions__name">{{ item.label }}</span>
                     {%- if item.description %}<span class="muted pyc-permissions__description">{{ item.description }}</span>{% endif %}
+                    {%- if item.menu_hint %}<span class="muted pyc-permissions__hint" data-role="menu-hint">{{ item.menu_hint }}</span>{% endif %}
                 </span>
             </label>
             {%- endfor %}

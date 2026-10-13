@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- The role picker says what the menu also needs beside a permission (ADM-06). A menu entry is shown only to someone who holds every permission it
+  needs, its own and its group's: Admin, Users needs `system:users.read` and also `system:ui.admin.view` (the whole Admin menu does); Resources
+  and Pools needs `resources.read` and `resource_pools.read`; Dashboards needs `metrics.read` and `dashboards.read`. A role built with one half got
+  no entry and no message saying why. The picker now says, under each permission involved, which entry also needs which other permission, named as the
+  picker shows it ("In the menu, Users also needs Interface › Admin · see in the menu."), and under the Admin menu permission that it only shows the
+  menu and each entry in it also needs its own. The hints are computed from the navigation manifest, so a new entry with two requirements is covered
+  without a second list to keep, and a test fails if a pair is left unexplained.
+
 - The deployment helpers name no particular host (DOC-12). `renew-cert.sh`, `install-deploy-sudoers.sh` and `bootstrap-client-ca.sh`, and the
   `deploy` workflow's `target_host` and `target_user` inputs, still defaulted to the maintainers' host and account, so someone who left a
   flag out would have renewed a certificate on, or installed sudo rules on, a machine that was not theirs to touch. Each helper now requires

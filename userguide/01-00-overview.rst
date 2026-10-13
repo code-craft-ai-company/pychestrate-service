@@ -134,7 +134,14 @@ Users, roles, and permissions
     the list), or pick it under *Start from an existing role* on the create
     form: its permissions come ticked, the copy is named "<name> copy", and
     nothing is saved until you choose **Create Role**. A built-in role cannot
-    be edited, so copying it is how to get a version you can change. A role's
+    be edited, so copying it is how to get a version you can change. A menu
+    entry shows only for someone who holds *every* permission it needs, so some
+    permissions work in pairs: **Users**, **Roles** and the other entries under
+    **Admin** also need *Interface, Admin: see in the menu*; **Resources and
+    Pools** needs *Resources, View* and *Resource pools, View*; **Dashboards**
+    needs *Metrics, View* and *Dashboards, View*. A role with only one half
+    gets no entry and no message, so the form says it under each permission
+    involved ("In the menu, Users also needs ..."). A role's
     page lists who has it (name, username, and whether it applies everywhere or in
     one project) for anyone who may view users; others see only the count.
     For an access review, **Download CSV** on the **Users** page saves every user the
