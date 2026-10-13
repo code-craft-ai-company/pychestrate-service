@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- The permission catalog describes what a permission allows, not how it is reached (ADM-06). Fifty-one of the 73 core descriptions ended "... via the
+  REST surface", which told a person building a role nothing; the role form cleaned the words at display time, but the catalog itself, the REST
+  catalog (`GET /api/v1/rbac/permissions`) and the permission-denied page still carried them. They are now written plainly at the source ("Read
+  resources, resource health, and usage history"). The display-time cleaning stays as a safety net for a pack installed later. **Behaviour
+  change:** the `description` text in the REST catalog changed for those permissions; keys and everything else are unchanged.
+
 - The role picker says what the menu also needs beside a permission (ADM-06). A menu entry is shown only to someone who holds every permission it
   needs, its own and its group's: Admin, Users needs `system:users.read` and also `system:ui.admin.view` (the whole Admin menu does); Resources
   and Pools needs `resources.read` and `resource_pools.read`; Dashboards needs `metrics.read` and `dashboards.read`. A role built with one half got
