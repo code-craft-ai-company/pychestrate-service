@@ -130,7 +130,7 @@ def test_no_bridged_project_means_no_activity_and_the_labels_read_as_words():
             activity.state_label("dispatch_failed"), activity.state_tone("dispatch_failed"), activity.state_tone("completed"), activity.state_tone("running"), activity.state_tone("progress_stalled"),
         ),
         (
-            {"attention": [], "recent": [], "last_by_project": {}}, "Build · makefile", "Test · testbase", "RPA · onboard", "Run",
+            {"attention": [], "recent": [], "last_by_project": {}, "attention_by_project": {}}, "Build · makefile", "Test · testbase", "RPA · onboard", "Run",
             "Dispatch failed", "danger", "success", "info", "warning",
         ),
     )

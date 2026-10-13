@@ -76,6 +76,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.dashboard_activity import (
+    attention_first,
     collect_run_activity,
 )
 from ccai.pychestrate.webservice.projects.bridge import bridge_tables_present
@@ -715,7 +716,7 @@ def handle_dashboard(request: Request) -> Response:
         # What is broken first (PRJ-21): the runs that failed this week, the
         # latest runs and each listed project's last run, read from the runs the
         # service holds through the registry projects the web UI's are bridged to.
-        run_activity = {"attention": [], "recent": [], "last_by_project": {}}
+        run_activity = {"attention": [], "recent": [], "last_by_project": {}, "attention_by_project": {}}
         if bridge_tables_present(db_session=db_session) is True:
             run_activity = collect_run_activity(
                 db_session=db_session,
@@ -730,8 +731,12 @@ def handle_dashboard(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        # The projects with runs that need attention come first (PRJ-21); the rest keep their order.
+        needing = run_activity["attention_by_project"]
+        projects = attention_first(projects, needing)
         context["projects"] = projects
         context["project_total"] = project_total
+        context["dashboard_attention_counts"] = needing
         context["recent_builds"] = recent_activity["builds"]
         context["recent_tests"] = recent_activity["tests"]
         context["dashboard_attention_runs"] = run_activity["attention"]

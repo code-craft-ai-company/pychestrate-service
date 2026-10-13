@@ -152,6 +152,24 @@ administrator can cancel any run.
 A run that has already finished cannot be cancelled.
 
 
+See what is broken across your projects
+=======================================
+
+Open **Projects**, **Projects Dashboard**. **Needs attention** comes first: the
+runs that failed, were lost, could not be sent to a pod or need someone to look
+at them in the last seven days, newest first, each a link to the run with its
+project. If none did it says so; on a new installation it says there are no runs
+yet.
+
+Below it the **Projects** table lists each project with its latest run (the
+state, linking to the run, and when). A project that has runs needing attention
+shows how many beside its latest run ("2 need attention"), even when its latest
+run succeeded, and those projects are listed first. The table shows the first
+ten projects by name and says how many there are; a project past the tenth
+still appears under **Needs attention**, but has no count in the table until you
+open the full list under **All Projects**.
+
+
 Be told when a run fails
 ========================
 

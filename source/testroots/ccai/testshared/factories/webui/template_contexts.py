@@ -734,6 +734,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "dashboard_attention_runs": _by_mode([_DASHBOARD_RUN_ROW], []),
     "dashboard_recent_runs": _by_mode([_DASHBOARD_RUN_ROW], []),
     "dashboard_last_runs": _by_mode({1: _DASHBOARD_RUN_ROW}, {}),
+    "dashboard_attention_counts": _by_mode({1: 2}, {}),
     "dashboard_project_names": _by_mode({1: "Alpha"}, {}),
     "recent_tests": _many(TestJobResponse),
     "recent_runs": _many(PipelineRunResponse),

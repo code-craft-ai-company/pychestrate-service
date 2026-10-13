@@ -41,6 +41,9 @@
     </div>
     
     {% if projects %}
+    {% if dashboard_attention_counts %}
+    <p class="muted" data-role="projects-order">Projects with runs that need attention (failed, lost or needing a look in the last 7 days) are listed first.</p>
+    {% endif %}
     <div class="table-scroll" tabindex="0"><table class="data-table">
         <thead>
             <tr>
@@ -70,6 +73,10 @@
                     <span class="muted nowrap-inline">{{ last.at | format_datetime('%Y-%m-%d %H:%M', '') }}</span>
                     {% else %}
                     <span class="muted" data-role="no-last-run">&mdash;</span>
+                    {% endif %}
+                    {% set needing = dashboard_attention_counts.get(project.id, 0) %}
+                    {% if needing %}
+                    <div><span class="badge badge-danger" data-role="project-attention">{{ needing }} {{ 'needs' if needing == 1 else 'need' }} attention</span></div>
                     {% endif %}
                 </td>
                 <td>

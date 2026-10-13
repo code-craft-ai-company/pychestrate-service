@@ -167,6 +167,18 @@ def _projects_by_uuid(*, db_session: DbSession, uuids: Iterable[Any]) -> Dict[st
     }
 
 
+def attention_first(projects: Iterable[Any], attention_by_project: Dict[Any, int]) -> List[Any]:
+    """
+        List the projects with runs that need attention first, most first; the rest keep their order.
+
+        :param projects: The listed projects (each has an ``id``).
+        :param attention_by_project: ``{legacy id: count}`` from :func:`collect_run_activity`.
+
+        :returns: A new list.
+    """
+    return sorted(projects, key=lambda project: -attention_by_project.get(project.id, 0))
+
+
 def collect_run_activity(
         *,
         db_session: DbSession,
@@ -183,12 +195,14 @@ def collect_run_activity(
         :param listed_legacy_ids: The projects the dashboard's table lists (each gets a last run).
         :param now: The moment "the last week" is counted back from (tests pass one).
 
-        :returns: ``{"attention": [...], "recent": [...], "last_by_project": {legacy id: row}}``
-                  where a row has ``run_id``, ``project_legacy_id``, ``project_name``, ``kind``,
-                  ``state``, ``state_label``, ``tone`` and ``at``.
+        :returns: ``{"attention": [...], "recent": [...], "last_by_project": {legacy id: row},
+                  "attention_by_project": {legacy id: count}}`` where a row has ``run_id``,
+                  ``project_legacy_id``, ``project_name``, ``kind``, ``state``, ``state_label``,
+                  ``tone`` and ``at``, and the count is how many of a listed project's runs are in
+                  an attention state from the last week (a project with none is left out).
     """
     moment = now if now is not None else datetime.now(timezone.utc)
-    empty: Dict[str, Any] = {"attention": [], "recent": [], "last_by_project": {}}
+    empty: Dict[str, Any] = {"attention": [], "recent": [], "last_by_project": {}, "attention_by_project": {}}
     if accessible_legacy_ids is None:
         # Every bridged project: a subquery, so nothing is loaded per project.
         scope = Run.project_id.in_(sa.select(Project.project_id).where(Project.legacy_proj_id.isnot(None)))
@@ -228,10 +242,28 @@ def collect_run_activity(
         )
         if last is not None:
             last_by_project[info["legacy_id"]] = _row(last, named)
+    # How many of each listed project's runs need attention (one grouped query), so the table can say
+    # which projects are in trouble and list them first (PRJ-21), not only name the latest run.
+    attention_by_project: Dict[Any, int] = {}
+    if len(listed) > 0:
+        counted = (
+            db_session.query(Run.project_id, sa.func.count(Run.run_id))
+            .filter(
+                Run.project_id.in_(list(listed.keys())), Run.state.in_(ATTENTION_STATES),
+                Run.entered_state_at >= moment - timedelta(days=ATTENTION_WINDOW_DAYS),
+            )
+            .group_by(Run.project_id)
+            .all()
+        )
+        by_uuid = {str(project_id): int(total) for project_id, total in counted}
+        for uuid_text, info in listed.items():
+            if by_uuid.get(uuid_text, 0) > 0:
+                attention_by_project[info["legacy_id"]] = by_uuid[uuid_text]
     return {
         "attention": [_row(run, named) for run in attention],
         "recent": [_row(run, named) for run in recent],
         "last_by_project": last_by_project,
+        "attention_by_project": attention_by_project,
     }
 
 
@@ -240,6 +272,7 @@ __all__ = [
     "ATTENTION_STATES",
     "ATTENTION_WINDOW_DAYS",
     "RECENT_LIMIT",
+    "attention_first",
     "collect_run_activity",
     "registry_projects",
     "run_kind_label",

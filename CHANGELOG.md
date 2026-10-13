@@ -259,6 +259,13 @@ preview tag.
 
 ### Added
 
+- The projects dashboard says which projects are in trouble and lists them first (PRJ-21). The table showed each project's latest run, so a project with
+  three failures this week and a green latest run looked fine, and the order helped no one. Each listed project now carries how many of its runs
+  need attention (failed, dispatch failed, dispatch lost or needing a look in the last seven days, the same states and window as the "Needs attention"
+  card) as a red "2 need attention" badge in its last-run cell, and the projects with some come first, most first. The count is one grouped query over the
+  listed projects. The table still lists the first ten projects by name, so a project in trouble past the tenth is in the "Needs attention" card (which reads
+  every reachable project) but has no count in the table; the dashboard says how many projects there are and links to the full list.
+
 - The role forms preview the menu a role would get (ADM-06). Above the permission list, *Menu entries this role shows* names the entries the
   ticked permissions open ("Admin › Users", "Fleet › Resources and Pools") and *Not shown yet* names the ones that have only part of what they need,
   each with the permission still missing ("Admin › Users (needs Interface › Admin · see in the menu)"), updating as boxes are ticked and on
