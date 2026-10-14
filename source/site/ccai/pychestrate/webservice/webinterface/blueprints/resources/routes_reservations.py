@@ -72,14 +72,17 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _not_found_redirect,
     _redirect_with_flash,
     _render,
+    _require_permission_or_redirect,
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources import (
     availability_view,
+    exports,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _denial_message,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -89,6 +92,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import
 
 
 _LOGGER = logging.getLogger("pychestrate.ui.resources.reservations")
+
+_READ_PERMISSION = "system:resources.read"
 
 
 # Upper bound for the resource-selector source list. When more
@@ -426,6 +431,29 @@ def handle_reservation_list(request: Request) -> Response:
         resource_manager = _build_resource_manager(db_session=db_session)
 
         statuses = statuses_by_filter[status_filter]
+        if exports.wants_csv(request.query_params.get("format", None)):
+            # Every reservation the filters match, as a spreadsheet (ORG-F22), not one page of it.
+            deny_response = _require_permission_or_redirect(
+                auth=auth,
+                permission=_READ_PERMISSION,
+                deny_message=_denial_message(action="export reservations"),
+                deny_redirect_url=_url_for_module.url_for("resources.dashboard"),
+            )
+            if deny_response is not None:
+                return deny_response
+
+            def _fetch_reservations(page_offset: int, page_limit: int) -> Any:
+                page_response = allocation_manager.list_reservations(
+                    resource_id=resource_id, start_after=start_after, end_before=end_before,
+                    statuses=list(statuses) if statuses is not None else None, offset=page_offset, limit=page_limit,
+                )
+                return page_response.reservations, page_response.total
+
+            export_rows, export_truncated = exports.collect_rows(_fetch_reservations)
+            return exports.csv_download(
+                base_name="reservations", columns=exports.RESERVATION_COLUMNS,
+                records=exports.reservation_records(export_rows), truncated=export_truncated,
+            )
         reservations_response = allocation_manager.list_reservations(
             resource_id=resource_id,
             start_after=start_after,
@@ -462,6 +490,11 @@ def handle_reservation_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context.update(_resources_permission_flags(auth=auth))
+        context["csv_url"] = exports.export_url(
+            RESOURCES_PATH + "/reservations",
+            [("resource_id", resource_id), ("start_after", start_after_str), ("end_before", end_before_str),
+             ("tz", request.query_params.get("tz", "")), ("status", status_filter)],
+        )
         context["reservations"] = reservations
         context["resources"] = resources
         context["resource_total"] = resources_response.total

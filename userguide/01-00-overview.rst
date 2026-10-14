@@ -147,7 +147,9 @@ Users, roles, and permissions
     have part of what they need, each with the permission still missing. A role's
     page lists who has it (name, username, and whether it applies everywhere or in
     one project) for anyone who may view users; others see only the count.
-    For an access review, **Download CSV** on the **Users** page saves every user the
+    For an access review, **Download CSV** on the **Roles** page saves every role with its
+    type (built-in or custom), how many permissions and people it has and the permission
+    keys themselves, and **Download CSV** on the **Users** page saves every user the
     search matches (not one page) as a spreadsheet: username, email, display name,
     whether the account is active, invited or inactive, the roles held everywhere, and
     when it was created (at most 5,000 users; a longer list is cut and the download says

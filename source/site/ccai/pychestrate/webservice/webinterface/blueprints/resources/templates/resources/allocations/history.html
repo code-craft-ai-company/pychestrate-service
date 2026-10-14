@@ -31,6 +31,9 @@
     </form>
 
     <div class="push-end">
+        <a href="{{ csv_url }}" class="btn btn-secondary" data-role="download-csv" title="Every allocation the filters match, not one page">
+            {{ ui.icon("download") }} Download CSV
+        </a>
         <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
             {{ ui.icon("assignment") }} Active Allocations
         </a>

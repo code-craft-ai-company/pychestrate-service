@@ -554,6 +554,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "selected_spec_id": _by_mode(7, None),
     "selected_resource_id": _by_mode(7, None),
     "utilization": _utilization_report,
+    "csv_url": _const("/resources/list?format=csv"),
     "period_days": _const(30),
     "period_choices": _const(resource_utilization.PERIOD_CHOICES),
     "truncation_notes": _by_mode(["Showing the first 1000 resources."], []),

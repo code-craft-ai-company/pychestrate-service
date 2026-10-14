@@ -136,7 +136,14 @@ way. An administrator can: choose **Force check in**, enter the reason
 **Resources**, **Active Allocations** lists everything now checked out and
 **Allocation History** what has been returned; both show the reason given at
 checkout under the holder's name, and the lists say how many rows there are and
-keep their filters from page to page.
+keep their filters from page to page. **Resources**, **Resource list**,
+**Allocation History** and **Reservations** each have a **Download CSV** button that
+saves every row the current filters match (not just the page you are on), up to 5,000,
+as a spreadsheet: for the devices their type, pool, health, how many are in use, tags and
+description; for allocations and reservations who held or booked what, when, in which
+mode and why. A device's metadata (addresses, credentials) is never in the file, and a
+name that a spreadsheet could read as a formula is written as text. If more rows match
+than the limit, the file holds the first 5,000 and the response says it was cut.
 
 To see which devices are busy and which sit idle, open **Resources**,
 **Utilization**. Choose the last 7, 30, 90 or 365 days (30 by default). The page

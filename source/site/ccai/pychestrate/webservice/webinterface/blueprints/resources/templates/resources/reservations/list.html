@@ -38,6 +38,9 @@
     </form>
 
     <div class="push-end">
+        <a href="{{ csv_url }}" class="btn btn-secondary" data-role="download-csv" title="Every reservation the filters match, not one page">
+            {{ ui.icon("download") }} Download CSV
+        </a>
         <a href="{{ url_for('resources.availability_calendar') }}" class="btn btn-secondary" data-role="open-calendar">
             {{ ui.icon("calendar_today") }} Availability
         </a>

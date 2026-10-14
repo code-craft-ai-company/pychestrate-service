@@ -64,16 +64,19 @@
         <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Clear</a>
     </form>
 
-    {% if can_manage %}
     <div class="push-end">
+        <a href="{{ csv_url }}" class="btn btn-secondary" data-role="download-csv" title="Every device the filters match, not one page">
+            {{ ui.icon("download") }} Download CSV
+        </a>
+        {% if can_manage %}
         <a href="{{ url_for('resources.resource_import') }}" class="btn btn-secondary" data-role="import-resources">
             {{ ui.icon("add_circle") }} Import
         </a>
         <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
             {{ ui.icon("add") }} Create Resource
         </a>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <div class="table-scroll" tabindex="0"><table class="data-table">

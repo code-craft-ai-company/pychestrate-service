@@ -70,7 +70,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _require_permission_or_redirect,
     _resolve_authenticated_request,
 )
-from ccai.pychestrate.webservice.webinterface.blueprints.resources import utilization
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import exports, utilization
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
@@ -473,6 +473,31 @@ def handle_allocation_history(request: Request) -> Response:
         start_date = _parse_iso_datetime_or_none(raw=start_date_str)
         end_date = _parse_iso_datetime_or_none(raw=end_date_str)
 
+        if exports.wants_csv(request.query_params.get("format", None)):
+            # Every allocation the filters match, as a spreadsheet (ORG-F22), not one page of it.
+            deny_response = _require_permission_or_redirect(
+                auth=auth,
+                permission=_READ_PERMISSION,
+                deny_message=_denial_message(action="export allocation history"),
+                deny_redirect_url=_url_for_module.url_for("resources.dashboard"),
+            )
+            if deny_response is not None:
+                return deny_response
+            export_manager = _build_allocation_manager(db_session=db_session)
+
+            def _fetch_allocations(page_offset: int, page_limit: int) -> Any:
+                page_response = export_manager.get_allocation_history(
+                    resource_id=resource_id, user_id=user_id, start_date=start_date, end_date=end_date,
+                    offset=page_offset, limit=page_limit,
+                )
+                return page_response.allocations, page_response.total
+
+            export_rows, export_truncated = exports.collect_rows(_fetch_allocations)
+            return exports.csv_download(
+                base_name="allocation-history", columns=exports.ALLOCATION_COLUMNS,
+                records=exports.allocation_records(export_rows), truncated=export_truncated,
+            )
+
         allocation_manager = _build_allocation_manager(
             db_session=db_session
         )
@@ -512,6 +537,10 @@ def handle_allocation_history(request: Request) -> Response:
             request_endpoint="resources.allocation_history",
             flashes=flashes,
             csrf_token=auth.csrf_token,
+        )
+        context["csv_url"] = exports.export_url(
+            RESOURCES_PATH + "/allocations/history",
+            [("resource_id", resource_id), ("user_id", user_id), ("start_date", start_date_str), ("end_date", end_date_str)],
         )
         context.update(_resources_permission_flags(auth=auth))
         context["allocations"] = allocations

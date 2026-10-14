@@ -44,6 +44,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -364,9 +365,36 @@ def _copy_form_for(*, db_session: Any, copy_from: str) -> Optional[Any]:
 # ---------------------------------------------------------------------------
 
 
+#: Columns of the roles export: what an access review asks of each role (who may do what, and how many hold it).
+ROLES_EXPORT_COLUMNS = ("name", "description", "type", "permissions", "assigned", "permission_keys")
+
+
+def _roles_csv_response(*, roles: List[Any]) -> Response:
+    """
+        Every role as a CSV attachment for an access review (ORG-F22): its name and description, whether it is built in or
+        custom, how many permissions it grants, how many people hold it, and the permission keys themselves.
+
+        :param roles: The ``AdminRoleView`` list the page shows.
+
+        :returns: A CSV download.
+    """
+    from ccai.pychestrate.webservice.csv_export import csv_response, render_csv  # noqa: E402
+
+    records = [
+        {
+            "name": role.name, "description": role.description or "", "type": "built-in" if role.is_system else "custom",
+            "permissions": len(role.permissions), "assigned": role.binding_count,
+            "permission_keys": "; ".join(sorted(permission.name for permission in role.permissions)),
+        }
+        for role in roles
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return csv_response(filename="pychestrate-roles-{}.csv".format(stamp), body=render_csv(columns=ROLES_EXPORT_COLUMNS, rows=records))
+
+
 def handle_role_list(request: Request) -> Response:
     """
-        ``GET /admin/roles`` -- list every RBAC role.
+        ``GET /admin/roles`` -- list every RBAC role, or ``?format=csv`` for the same as a spreadsheet.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -375,6 +403,8 @@ def handle_role_list(request: Request) -> Response:
     db_session = auth.db_session
     try:
         roles = _svc_list_roles(db_session=db_session)
+        if (request.query_params.get("format", "") or "").strip().lower() == "csv":
+            return _roles_csv_response(roles=roles)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,

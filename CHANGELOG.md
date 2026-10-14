@@ -259,6 +259,15 @@ preview tag.
 
 ### Added
 
+- Roles, resources, reservations and allocation history download as spreadsheets (ORG-F22). Runs, the audit log, the users list and the utilization report
+  already did; a lab manager or an auditor also wants who may do what, the device inventory, the bookings and the allocation history without reading
+  them a page at a time. `?format=csv` (and a **Download CSV** button that carries the page's filters) on `/admin/roles`, `/resources/list`,
+  `/resources/reservations` and `/resources/allocations/history` returns every row the filters match, not one page, up to 5,000 (cut and flagged with
+  `X-Export-Truncated: true` beyond that), with cells a spreadsheet cannot read as a formula, behind the same permission as the page (the three lab exports
+  check `system:resources.read` themselves; Roles keeps the page's `system:rbac.read`). The roles file has each role's name, description, type
+  (built-in or custom), permission count, holders and permission keys. A device's metadata, which can hold addresses and credentials, is never exported.
+  The paging, row shaping and address building are plain functions in `blueprints/resources/exports.py`.
+
 - The projects dashboard says which projects are in trouble and lists them first (PRJ-21). The table showed each project's latest run, so a project with
   three failures this week and a green latest run looked fine, and the order helped no one. Each listed project now carries how many of its runs
   need attention (failed, dispatch failed, dispatch lost or needing a look in the last seven days, the same states and window as the "Needs attention"

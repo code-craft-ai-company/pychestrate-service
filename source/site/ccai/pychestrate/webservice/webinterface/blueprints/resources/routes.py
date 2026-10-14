@@ -84,6 +84,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     form_errors,
     url_for as _url_for_module,
 )
+from ccai.pychestrate.webservice.webinterface.blueprints.resources import exports
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     MultiFormView,
     _attach_session_to_response,
@@ -197,6 +198,8 @@ _FUTURE_ENDPOINT_PATTERNS: tuple = ()
 
 
 _ADMIN_PERMISSION = "system:resources.manage"
+
+_READ_PERMISSION = "system:resources.read"
 
 
 def _denial_message(*, action: str) -> str:
@@ -1045,6 +1048,29 @@ def handle_resource_list(request: Request) -> Response:
         if len(availability) > 0:
             filter_kwargs["availability"] = availability
 
+        if exports.wants_csv(request.query_params.get("format", None)):
+            # The whole filtered inventory as a spreadsheet (ORG-F22): every matching device, not a page.
+            deny_response = _require_permission_or_redirect(
+                auth=auth,
+                permission=_READ_PERMISSION,
+                deny_message=_denial_message(action="export resources"),
+                deny_redirect_url=_url_for_module.url_for("resources.dashboard"),
+            )
+            if deny_response is not None:
+                return deny_response
+            export_manager = _build_resource_manager(db_session=db_session)
+            export_filters = {key: value for key, value in filter_kwargs.items() if key not in ("offset", "limit")}
+
+            def _fetch_resources(page_offset: int, page_limit: int) -> Any:
+                page_response = export_manager.list_resources(offset=page_offset, limit=page_limit, **export_filters)
+                return page_response.resources, page_response.total
+
+            export_rows, export_truncated = exports.collect_rows(_fetch_resources)
+            return exports.csv_download(
+                base_name="resources", columns=exports.RESOURCE_COLUMNS,
+                records=exports.resource_records(export_rows), truncated=export_truncated,
+            )
+
         resource_manager = _build_resource_manager(db_session=db_session)
         resources_response = resource_manager.list_resources(
             **filter_kwargs
@@ -1079,6 +1105,11 @@ def handle_resource_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context.update(_resources_permission_flags(auth=auth))
+        context["csv_url"] = exports.export_url(
+            RESOURCES_PATH + "/list",
+            [("pool_id", pool_id), ("resource_type", resource_type_str), ("health_status", health_status_str), ("search", search),
+             ("availability", availability)] + [("tags", tag) for tag in tag_query],
+        )
         context["resources"] = resources
         context["resource_total"] = resources_response.total
         context["pools"] = pools

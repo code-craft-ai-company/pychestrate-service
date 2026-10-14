@@ -9,13 +9,16 @@
     <p>Configure roles and their permissions</p>
 </div>
 
-{% if may_change_roles %}
 <div class="toolbar toolbar--end">
+    <a href="{{ url_for('config.role_list') }}?format=csv" class="btn btn-secondary" data-role="download-csv" title="Every role with its permissions, for an access review">
+        {{ ui.icon("download") }} Download CSV
+    </a>
+    {% if may_change_roles %}
     <a href="{{ url_for('config.role_create') }}" class="btn btn-primary">
         {{ ui.icon("add") }} Create Role
     </a>
+    {% endif %}
 </div>
-{% endif %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
