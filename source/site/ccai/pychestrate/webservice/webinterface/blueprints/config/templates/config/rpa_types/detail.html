@@ -156,7 +156,7 @@
 
 {% if can_manage and job_type.state.value == 'active' %}
 <div class="mt">
-    <form action="{{ url_for('config.rpa_type_retire', type_id=job_type.type_id) }}" method="post" data-confirm="Retire this job type? New runs will be refused and every version retired.">
+    <form action="{{ url_for('config.rpa_type_retire', type_id=job_type.type_id) }}" method="post" data-confirm-type="{{ job_type.type_id }}" data-confirm="Retire this job type? New runs will be refused and every version retired.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger">{{ ui.icon("block") }} Retire type</button>
     </form>

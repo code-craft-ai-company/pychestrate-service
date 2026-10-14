@@ -51,7 +51,7 @@
             <td>
                 <div class="row-actions">
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.allocated_count > 0 %}This pool has {{ pool.allocated_count }} active IP allocation(s) -- deletion will fail until they are checked in. {% endif %}Delete this IP pool?">
+                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm-type="{{ pool.name }}" data-confirm="{% if pool.allocated_count > 0 %}This pool has {{ pool.allocated_count }} active IP allocation(s) -- deletion will fail until they are checked in. {% endif %}Delete this IP pool?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-quiet-danger">Delete</button>
                 </form>

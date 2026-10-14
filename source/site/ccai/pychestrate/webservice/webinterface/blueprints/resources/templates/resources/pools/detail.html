@@ -143,7 +143,7 @@
                     {{ ui.icon("add") }} Add Resource
                 </a>
                 {% if not pool.is_default %}
-                <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?">
+                <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" data-confirm-type="{{ pool.name }}" data-confirm="{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger btn-block">
                         {{ ui.icon("delete") }} Delete Pool

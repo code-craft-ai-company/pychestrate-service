@@ -110,7 +110,7 @@
     {% if not role.is_system %}
     <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn btn-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">
+        <button type="submit" class="btn btn-danger" data-confirm-type="{{ role.name }}" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">
             {{ ui.icon("delete") }} Delete Role
         </button>
     </form>

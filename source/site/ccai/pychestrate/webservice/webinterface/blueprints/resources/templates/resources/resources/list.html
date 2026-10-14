@@ -144,7 +144,7 @@
             <td>
                 <div class="row-actions">
                 <a href="{{ url_for('resources.resource_edit', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm="Delete this resource?">
+                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm-type="{{ resource.name }}" data-confirm="Delete the resource &quot;{{ resource.name | e }}&quot;? Its allocation, reservation and health history is deleted with it. This cannot be undone.">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-quiet-danger">Delete</button>
                 </form>

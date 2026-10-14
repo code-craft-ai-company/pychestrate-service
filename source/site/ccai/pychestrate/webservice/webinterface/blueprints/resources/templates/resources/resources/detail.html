@@ -172,7 +172,7 @@
                     {{ ui.icon("monitor_heart") }} Health History
                 </a>
                 {% if can_manage %}
-                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm="{% if active_allocations %}This resource has {{ active_allocations | length }} active allocation(s) -- deletion will fail until they are checked in. {% elif upcoming_reservations %}Its {{ upcoming_reservations | length }} upcoming reservation(s) will be cancelled. {% endif %}Its allocation, reservation and health history is deleted with it. Delete this resource?">
+                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm-type="{{ resource.name }}" data-confirm="{% if active_allocations %}This resource has {{ active_allocations | length }} active allocation(s) -- deletion will fail until they are checked in. {% elif upcoming_reservations %}Its {{ upcoming_reservations | length }} upcoming reservation(s) will be cancelled. {% endif %}Its allocation, reservation and health history is deleted with it. Delete this resource?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger btn-block">
                         {{ ui.icon("delete") }} Delete Resource

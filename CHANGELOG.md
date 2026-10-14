@@ -29,6 +29,14 @@ preview tag.
 
 ### Fixed
 
+- Permanent deletions on the server-rendered pages ask for the name to be typed (XC-15). Deleting a project, a pool or a secret in the bundle views
+  already did; the same deletions elsewhere used the ordinary confirm. The rule, decided and pinned by a lint over every template: a deletion asks for the
+  name when it is permanent, removes something other records depend on or that holds history, and is rare enough that typing costs nothing. That is now
+  a role (its holders lose it), a device (its allocation, reservation and health history goes with it), a resource pool, an IP pool, a secret (every
+  version) and retiring an RPA job type. Reversible or small actions keep the plain confirm: removing a member, revoking a token, cancelling a
+  reservation, deleting a tag or a variable (its history is kept), deactivating a user. The generic messages for a device, an IP pool and a secret now name
+  what they delete.
+
 - The permission catalog describes what a permission allows, not how it is reached (ADM-06). Fifty-one of the 73 core descriptions ended "... via the
   REST surface", which told a person building a role nothing; the role form cleaned the words at display time, but the catalog itself, the REST
   catalog (`GET /api/v1/rbac/permissions`) and the permission-denied page still carried them. They are now written plainly at the source ("Read

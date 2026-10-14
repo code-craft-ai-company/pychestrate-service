@@ -303,3 +303,10 @@ that is checked out cannot be deleted until it is checked in, and the
 confirmation warns you when that is the case; use **Force check in** if the
 holder cannot. A pool that still holds devices cannot be deleted: move or
 delete them first.
+
+Deleting a device, a resource pool or an IP pool is permanent, so the
+confirmation asks you to **type its name** before the Delete button turns on
+(the same goes for deleting a role, a project and a secret, and for retiring an
+RPA job type, each with its own name). Cancel, or Escape, submits nothing.
+Smaller or reversible actions, such as removing a member, revoking a token,
+cancelling a reservation or deleting a tag, ask a plain yes or no.

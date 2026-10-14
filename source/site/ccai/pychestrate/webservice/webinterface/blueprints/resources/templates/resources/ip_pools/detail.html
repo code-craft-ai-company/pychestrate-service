@@ -155,7 +155,7 @@
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-secondary">
                     {{ ui.icon("edit") }} Edit Pool
                 </a>
-                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm="Delete this IP pool?">
+                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm-type="{{ pool.name }}" data-confirm="Delete the IP pool &quot;{{ pool.name | e }}&quot;? This cannot be undone.">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger btn-block">
                         {{ ui.icon("delete") }} Delete Pool
