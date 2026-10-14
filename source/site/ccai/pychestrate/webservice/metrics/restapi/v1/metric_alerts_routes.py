@@ -42,6 +42,7 @@ from ccai.pychestrate.webservice.metrics.alerts.errors import (
     AlertRuleConfigInvalidError,
     AlertRuleConflictError,
     AlertRuleKindUnknownError,
+    AlertRuleNotFoundError,
 )
 from ccai.pychestrate.webservice.metrics.alerts.models import (
     AlertSeverity,
@@ -557,6 +558,125 @@ def handle_create_metric_alert(request: Request) -> Response:
     return rtnval
 
 
+def _rule_in_project_or_abort(*, request: Request, db_session: Any, project_id: str, rule_id: str) -> Any:
+    """
+        The rule, or a 404 problem when it does not exist or belongs to another project.
+    """
+    try:
+        existing = alerts_service.get_alert_rule(db_session=db_session, rule_id=rule_id)
+    except AlertRuleNotFoundError as xcpt:
+        _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"rule_id": rule_id})
+        existing = None  # unreachable
+    if str(existing.project_id) != str(project_id):
+        _abort_problem(
+            request=request, status=404, detail="Alert rule does not belong to this project.",
+            extensions={"project_id": project_id, "rule_id": rule_id},
+        )
+    return existing
+
+
+def handle_update_metric_alert(request: Request) -> Response:
+    """
+        ``PUT /api/v1/projects/{project_id}/metric-alerts/{rule_id}``
+
+        Changes a metric-alert rule. The body is the create body; fields left out keep their stored
+        values. ``kind`` may be sent but must be the rule's own (a different kind is a different rule:
+        create a new one); the project cannot change. ``409`` for a name another rule in the project has;
+        ``422`` for an invalid value or a config the kind refuses; ``404`` for an unknown rule or one in
+        another project. Nothing is written when nothing differs.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the ``MetricAlertRule`` shape, or a problem response.
+    """
+    project_id = request.path_params.get("project_id", "")
+    rule_id = request.path_params.get("rule_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(request=request, db_session=db_session, permission_key=METRIC_ALERTS_WRITE_PERMISSION_KEY)
+        _require_project_exists(request=request, db_session=db_session, project_id=project_id)
+        body = _decode_json_object_or_abort(request=request)
+        existing = _rule_in_project_or_abort(request=request, db_session=db_session, project_id=project_id, rule_id=rule_id)
+
+        kind = body.get("kind", None)
+        if kind is not None and kind != existing.kind:
+            _abort_problem(
+                request=request, status=422,
+                detail="The kind of an alert rule cannot be changed ('{}'): create a new rule for a different kind.".format(existing.kind),
+                extensions={"invalid_fields": ["kind"], "kind": existing.kind},
+            )
+        name = body.get("name", None)
+        if name is not None and (not isinstance(name, str) or len(name) == 0):
+            _abort_problem(request=request, status=422, detail="Field 'name' must be a non-empty string.", extensions={"invalid_fields": ["name"]})
+        config = body.get("config", None)
+        if config is not None and isinstance(config, dict) is False:
+            _abort_problem(request=request, status=422, detail="Field 'config' must be an object.")
+        description = body.get("description", None)
+        if description is not None and isinstance(description, str) is False:
+            _abort_problem(request=request, status=422, detail="Field 'description' must be a string.")
+        severity = None if body.get("severity", None) is None else _resolve_severity(request=request, raw=body.get("severity"))
+        enabled = body.get("enabled", None)
+        if enabled is not None and isinstance(enabled, bool) is False:
+            _abort_problem(request=request, status=422, detail="Field 'enabled' must be a boolean.")
+        targets = body.get("notification_targets", None)
+        if targets is not None and isinstance(targets, list) is False:
+            _abort_problem(request=request, status=422, detail="Field 'notification_targets' must be an array.")
+
+        actor_id: Optional[str] = None
+        principal_user_id = getattr(principal, "user_id", None)
+        if principal_user_id is not None:
+            actor_id = str(principal_user_id)
+
+        try:
+            view = alerts_service.update_alert_rule(
+                db_session=db_session, rule_id=rule_id, name=name, description=description,
+                config=dict(config) if config is not None else None, severity=severity, enabled=enabled,
+                notification_targets=list(targets) if targets is not None else None, actor_id=actor_id,
+            )
+        except AlertRuleConflictError as xcpt:
+            _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"name": name})
+            view = None  # unreachable
+        except (AlertRuleConfigInvalidError, AlertRuleKindUnknownError) as xcpt:
+            _abort_problem(request=request, status=422, detail=str(xcpt), extensions={"kind": existing.kind})
+            view = None  # unreachable
+
+        _LOGGER.info("pychestrate.metric_alerts.update project_id=%s rule_id=%s", project_id, rule_id)
+        rtnval: Response = JSONResponse(content=_rule_to_dict(db_session=db_session, view=view), status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+def handle_delete_metric_alert(request: Request) -> Response:
+    """
+        ``DELETE /api/v1/projects/{project_id}/metric-alerts/{rule_id}``
+
+        Removes a metric-alert rule and its live state. Permanent: ``enabled: false`` (``PUT``) stops a rule
+        without losing it. ``404`` for an unknown rule or one in another project.
+
+        :param request: Incoming webworks request.
+
+        :returns: Empty 204 response, or a problem response.
+    """
+    project_id = request.path_params.get("project_id", "")
+    rule_id = request.path_params.get("rule_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(request=request, db_session=db_session, permission_key=METRIC_ALERTS_WRITE_PERMISSION_KEY)
+        _require_project_exists(request=request, db_session=db_session, project_id=project_id)
+        _rule_in_project_or_abort(request=request, db_session=db_session, project_id=project_id, rule_id=rule_id)
+        actor_id: Optional[str] = None
+        principal_user_id = getattr(principal, "user_id", None)
+        if principal_user_id is not None:
+            actor_id = str(principal_user_id)
+        alerts_service.delete_alert_rule(db_session=db_session, rule_id=rule_id, actor_id=actor_id)
+        _LOGGER.info("pychestrate.metric_alerts.delete project_id=%s rule_id=%s", project_id, rule_id)
+        rtnval: Response = JSONResponse(content=None, status_code=204)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -580,6 +700,12 @@ def register_metric_alerts_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + ALERTS_PATH_SUFFIX, methods=["POST"],
     )(handle_create_metric_alert)
+    app.attach_route(
+        base + ALERTS_PATH_SUFFIX + "/{rule_id}", methods=["PUT"],
+    )(handle_update_metric_alert)
+    app.attach_route(
+        base + ALERTS_PATH_SUFFIX + "/{rule_id}", methods=["DELETE"],
+    )(handle_delete_metric_alert)
     return
 
 
@@ -590,4 +716,6 @@ __all__ = [
     "register_metric_alerts_routes",
     "handle_list_metric_alerts",
     "handle_create_metric_alert",
+    "handle_update_metric_alert",
+    "handle_delete_metric_alert",
 ]

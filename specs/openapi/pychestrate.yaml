@@ -4512,6 +4512,54 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
+  /projects/{project_id}/metric-alerts/{rule_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: rule_id
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [metric_alerts]
+      summary: Change a metric-alert rule.
+      operationId: metric_alerts_update
+      description: |
+        Changes a rule. The body is the create body; a field left out keeps its stored value. The `kind` may be
+        sent but must be the rule's own: a different kind is a different rule, so it is created anew (`422`).
+        The same rules as create apply (`409` for a name another rule in the project has; `422` for a config
+        the kind refuses). A change that alters nothing records nothing; otherwise `updated_at` is stamped and
+        `entity.alert.rule_updated` names the fields that changed. Needs `system:metric_alerts.write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricAlertRuleUpdateRequest'
+      responses:
+        '200':
+          description: The rule after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricAlertRule' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [metric_alerts]
+      summary: Delete a metric-alert rule.
+      operationId: metric_alerts_delete
+      description: |
+        Removes the rule and its live state. Permanent: set `enabled` to false with `PUT` to stop a rule without
+        losing it. `404` for an unknown rule or one in another project. Needs `system:metric_alerts.write`.
+      responses:
+        '204':
+          description: The rule is gone.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /environment-kinds:
     get:
       tags: [environments]
@@ -10712,6 +10760,26 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         kind: { type: string, minLength: 1 }
+        description: { type: string }
+        config:
+          type: object
+          additionalProperties: true
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        enabled: { type: boolean }
+        notification_targets:
+          type: array
+          items: { type: string }
+
+    MetricAlertRuleUpdateRequest:
+      type: object
+      description: A change to a rule. Every field is optional; one left out keeps its stored value.
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          type: string
+          description: Must be the rule's own kind if sent; a rule's kind cannot change.
         description: { type: string }
         config:
           type: object

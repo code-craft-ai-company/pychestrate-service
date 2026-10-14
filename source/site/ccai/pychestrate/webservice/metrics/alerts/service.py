@@ -232,6 +232,120 @@ def list_alert_rules_for_project(
     return rtnval
 
 
+def update_alert_rule(
+        *,
+        db_session: DbSession,
+        rule_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        config: Optional[Mapping[str, Any]] = None,
+        severity: Optional[AlertSeverity] = None,
+        enabled: Optional[bool] = None,
+        notification_targets: Optional[List[str]] = None,
+        actor_id: Optional[str] = None
+    ) -> AlertRuleView:
+    """
+        Change an alert rule (``PUT``). Fields left out (``None``) keep their stored values. The kind and
+        the project cannot change: a different kind is a different rule, so it is created anew. The same rules
+        as :func:`create_alert_rule` apply (a non-empty name, unique in the project; a config the kind accepts).
+        When nothing differs from what is stored nothing is written; otherwise ``updated_at`` is stamped and
+        ``entity.alert.rule_updated`` names the fields that changed.
+
+        :raises: AlertRuleNotFoundError, AlertRuleConflictError, AlertRuleConfigInvalidError.
+    """
+    row = _require_rule(db_session=db_session, rule_id=rule_id)
+    wanted: Dict[str, Any] = {}
+    if name is not None:
+        if len(name) == 0:
+            err_msg = os.linesep.join(["Alert rule name must be non-empty."])
+            raise AlertRuleConfigInvalidError(err_msg) from None
+        if name != row.name:
+            clash = repository.find_rule_by_name(db_session=db_session, project_id=str(row.project_id), name=name)
+            if clash is not None and str(clash.rule_id) != str(row.rule_id):
+                err_lines = ["Alert rule name already exists in project."]
+                err_lines.append("PROJECT_ID: {}".format(row.project_id))
+                err_lines.append("NAME: {}".format(name))
+                raise AlertRuleConflictError(os.linesep.join(err_lines)) from None
+        wanted["name"] = name
+    if description is not None:
+        wanted["description"] = description
+    if config is not None:
+        kind_cls = _resolve_kind(kind=row.kind)
+        ok, issues = kind_cls.validate_config(config=config)
+        if ok is False:
+            err_lines = ["Alert rule config failed validation: {} issue(s).".format(len(issues))]
+            err_lines.append("KIND: {}".format(row.kind))
+            for index, issue in enumerate(issues):
+                err_lines.append("  [{}] {}".format(index + 1, issue))
+            raise AlertRuleConfigInvalidError(os.linesep.join(err_lines)) from None
+        wanted["config"] = dict(config)
+    if severity is not None:
+        wanted["severity"] = severity
+    if enabled is not None:
+        wanted["enabled"] = bool(enabled)
+    if notification_targets is not None:
+        wanted["notification_targets"] = list(notification_targets)
+
+    changed = [
+        field_name for field_name, value in wanted.items()
+        if (list(getattr(row, field_name) or []) if field_name == "notification_targets" else getattr(row, field_name)) != value
+    ]
+    if len(changed) == 0:
+        rtnval = _rule_to_view(row=row)
+        return rtnval
+
+    repository.update_rule_row(
+        db_session=db_session, row=row, values={field_name: wanted[field_name] for field_name in changed}, updated_at=utc_now(),
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=AlertEventTopics.RULE_UPDATED,
+            payload={
+                "rule_id": str(row.rule_id),
+                "project_id": str(row.project_id),
+                "name": row.name,
+                "kind": row.kind,
+                "changed": changed,
+                "actor_id": actor_id,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _rule_to_view(row=row)
+    return rtnval
+
+
+def delete_alert_rule(
+        *,
+        db_session: DbSession,
+        rule_id: str,
+        actor_id: Optional[str] = None
+    ) -> None:
+    """
+        Remove an alert rule and its live state. Permanent: ``disable_alert_rule`` is the way to stop a rule
+        without losing it.
+
+        :raises: AlertRuleNotFoundError on miss.
+    """
+    row = _require_rule(db_session=db_session, rule_id=rule_id)
+    payload = {
+        "rule_id": str(row.rule_id),
+        "project_id": str(row.project_id),
+        "name": row.name,
+        "kind": row.kind,
+        "actor_id": actor_id,
+    }
+    repository.delete_rule(db_session=db_session, row=row)
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(topic=AlertEventTopics.RULE_DELETED, payload=payload, source_event_id=new_uuid()),
+    )
+    db_session.commit()
+    return
+
+
 def disable_alert_rule(
         *,
         db_session: DbSession,

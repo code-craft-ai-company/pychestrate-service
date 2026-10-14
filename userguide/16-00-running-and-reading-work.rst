@@ -220,6 +220,25 @@ messages, and it does not change the run. Failures are also in the service log
 (``pychestrate.notifications.delivery_failed``).
 
 
+Change or remove an alert rule
+==============================
+
+Open **Insights**, **Alert Rules** and choose the project. Each rule has an **Edit**
+and a **Delete** button if you may change alert rules; without that permission the
+page only reads.
+
+**Edit** opens the same form you used to create the rule, filled in with its name,
+metric, comparison, threshold, window, severity, notification targets and whether it
+is enabled. Change what you need and choose **Save changes**. The kind of rule cannot
+change (to alert on something different, create a new rule), and a name another rule
+in the project already has is refused with a message that says so; your form stays open
+so nothing you typed is lost. Saving a rule exactly as it is changes nothing.
+
+To stop a rule without losing it, edit it and untick **Enabled**. **Delete** removes the
+rule and its current state for good, after a confirmation that names the rule; it
+cannot be undone.
+
+
 What the states mean
 ====================
 

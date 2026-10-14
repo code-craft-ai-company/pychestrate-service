@@ -10,7 +10,7 @@ __version__ = "1.0.0"
 
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -55,6 +55,39 @@ def insert_rule(
     db_session.add(row)
     db_session.flush()
     return row
+
+
+def update_rule_row(
+        *,
+        db_session: DbSession,
+        row: AlertRule,
+        values: Mapping[str, Any],
+        updated_at: datetime
+    ) -> None:
+    """
+        Apply the changed fields and stamp the time.
+    """
+    for field_name, value in values.items():
+        setattr(row, field_name, value)
+    row.updated_at = updated_at
+    db_session.flush()
+    return
+
+
+def delete_rule(
+        *,
+        db_session: DbSession,
+        row: AlertRule
+    ) -> None:
+    """
+        Remove a rule and its live state (nothing else holds a foreign key to it).
+    """
+    state = find_live_state(db_session=db_session, rule_id=str(row.rule_id))
+    if state is not None:
+        db_session.delete(state)
+    db_session.delete(row)
+    db_session.flush()
+    return
 
 
 def find_rule_by_id(

@@ -62,6 +62,7 @@ from ccai.pychestrate.webservice.metrics.alerts.service import (
     AlertLiveStateView,
     AlertRuleView,
     create_alert_rule,
+    delete_alert_rule,
     disable_alert_rule,
     evaluate_alert_rule,
     evaluate_enabled_alert_rules,
@@ -69,6 +70,7 @@ from ccai.pychestrate.webservice.metrics.alerts.service import (
     get_live_state,
     list_alert_kinds,
     list_alert_rules_for_project,
+    update_alert_rule,
 )
 
 

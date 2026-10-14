@@ -18,6 +18,7 @@ class AlertEventTopics:
     RULE_CREATED = "entity.alert.rule_created"
     RULE_UPDATED = "entity.alert.rule_updated"
     RULE_DISABLED = "entity.alert.rule_disabled"
+    RULE_DELETED = "entity.alert.rule_deleted"
     EVALUATED = "entity.alert.evaluated"
     STATE_CHANGED = "entity.alert.state_changed"
     FIRED = "entity.alert.fired"

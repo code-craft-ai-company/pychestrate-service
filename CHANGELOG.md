@@ -267,6 +267,16 @@ preview tag.
 
 ### Added
 
+- Alert rules can be changed and deleted (ORC-26). A rule could be created and disabled but not fixed: a mistyped threshold meant creating a second rule and
+  leaving the first disabled for ever. `PUT /api/v1/projects/{id}/metric-alerts/{rule_id}` (`metric_alerts_update`) changes the fields it is given (a field left
+  out keeps its stored value) under the rules of create (a non-empty name unique in the project, a config the rule's kind accepts); the kind and the project cannot
+  change (`422` saying to create a new rule; `404` for another project's rule; `409` for a name clash); a change that alters nothing writes nothing, otherwise
+  `updated_at` is stamped and `entity.alert.rule_updated` names the changed fields. `DELETE` on the same path (`metric_alerts_delete`, `204`) removes the rule and its
+  live state and publishes the new `entity.alert.rule_deleted`; `enabled: false` stops a rule without losing it. Both need `system:metric_alerts.write`. The
+  Alert Rules page has **Edit** (the create form filled in; a retired metric stays chosen; a refusal keeps the form open) and **Delete** (a confirmation naming the
+  rule and how to stop it without losing it) on each row for those who may write. Alert rules are the first of the three things #447 named without edit or delete
+  (environments and release channels are not done).
+
 - Roles, resources, reservations and allocation history download as spreadsheets (ORG-F22). Runs, the audit log, the users list and the utilization report
   already did; a lab manager or an auditor also wants who may do what, the device inventory, the bookings and the allocation history without reading
   them a page at a time. `?format=csv` (and a **Download CSV** button that carries the page's filters) on `/admin/roles`, `/resources/list`,

@@ -4004,6 +4004,10 @@ function build_alert_rules_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH4 + "/" + encodeURIComponent(project_id) + ALERT_RULES_ROUTE;
   return rtnval;
 }
+function build_alert_rule_url(project_id, rule_id) {
+  const rtnval = build_alert_rules_collection_url(project_id) + "/" + encodeURIComponent(rule_id);
+  return rtnval;
+}
 function problem_detail_of(body) {
   if (body === null || typeof body !== "object") {
     const rtnval2 = "";
@@ -4036,6 +4040,55 @@ function alert_create_message_for_status(status, detail) {
     return rtnval2;
   }
   const rtnval = "Failed to create alert rule (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function alert_update_message_for_status(status, detail, name) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
+  if (status === 200) {
+    const rtnval2 = "Alert rule \u201C" + name + "\u201D saved.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "Another alert rule already has that name.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = reason.length > 0 ? "The change was rejected: " + reason : "The change was rejected \u2014 check the fields.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That alert rule no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to edit alert rules.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to save.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to save the alert rule (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function alert_delete_message_for_status(status, name) {
+  if (status === 204 || status === 200) {
+    const rtnval2 = "Alert rule \u201C" + name + "\u201D deleted.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That alert rule no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to delete alert rules.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to delete.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to delete the alert rule (HTTP " + String(status) + ").";
   return rtnval;
 }
 function comparison_label(value) {
@@ -4235,6 +4288,7 @@ var PycAlertRules = class extends HTMLElement {
   _table_region;
   _create_region;
   _toast_region;
+  _editing;
   constructor() {
     super();
     this._state = {
@@ -4251,6 +4305,7 @@ var PycAlertRules = class extends HTMLElement {
     this._table_region = null;
     this._create_region = null;
     this._toast_region = null;
+    this._editing = null;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the
@@ -4632,6 +4687,40 @@ var PycAlertRules = class extends HTMLElement {
           enabled_badge.textContent = rule.enabled === true ? "Enabled" : "Disabled";
           return enabled_badge;
         }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "12rem",
+        sortable: false,
+        render: (rule) => {
+          const actions = document.createElement("span");
+          actions.classList.add("pyc-metrics__row-actions");
+          actions.style.display = "inline-flex";
+          actions.style.flexWrap = "wrap";
+          actions.style.gap = "0.5rem";
+          const edit_button = document.createElement("mj-button");
+          edit_button.classList.add("pyc-metrics__button");
+          edit_button.setAttribute("type", "button");
+          edit_button.setAttribute("data-role", "edit-rule");
+          hide_unless_may(edit_button, "system:metric_alerts.write");
+          edit_button.textContent = "Edit";
+          edit_button.addEventListener("click", () => {
+            self._open_edit_form(rule);
+          });
+          actions.appendChild(edit_button);
+          const delete_button = document.createElement("mj-button");
+          delete_button.classList.add("pyc-metrics__button");
+          delete_button.setAttribute("type", "button");
+          delete_button.setAttribute("data-role", "delete-rule");
+          hide_unless_may(delete_button, "system:metric_alerts.write");
+          delete_button.textContent = "Delete";
+          delete_button.addEventListener("click", () => {
+            void self._on_delete(rule, delete_button);
+          });
+          actions.appendChild(delete_button);
+          return actions;
+        }
       }
     ];
     table.rows = this._rules;
@@ -4654,7 +4743,8 @@ var PycAlertRules = class extends HTMLElement {
       return;
     }
     const region = this._create_region;
-    if (region.hidden === true) {
+    if (region.hidden === true || this._editing !== null) {
+      this._editing = null;
       this._render_create_form();
       region.hidden = false;
       reveal(region);
@@ -4663,17 +4753,46 @@ var PycAlertRules = class extends HTMLElement {
     }
     return;
   }
+  /**
+   * Open the form on an existing rule to change its name, condition, severity, targets or whether it is enabled.
+   * The kind cannot change (a different kind is a different rule: create a new one).
+   *
+   * @param rule The rule row to edit.
+   */
+  _open_edit_form(rule) {
+    if (this._create_region === null) {
+      return;
+    }
+    this._editing = rule;
+    this._render_create_form();
+    this._create_region.hidden = false;
+    reveal(this._create_region);
+    return;
+  }
+  /**
+   * Render the create form into the create region, or, when a rule is being edited, the same form filled in with
+   * that rule's values.
+   */
   _render_create_form() {
     if (this._create_region === null) {
       return;
     }
+    const editing = this._editing;
+    const prefix = editing === null ? "create" : "edit";
     const form = document.createElement("form");
     form.classList.add("pyc-metrics__form");
-    form.setAttribute("data-role", "create-form");
+    form.setAttribute("data-role", prefix + "-form");
+    if (editing !== null) {
+      const heading = document.createElement("h3");
+      heading.classList.add("pyc-metrics__form-heading");
+      heading.setAttribute("data-role", "edit-heading");
+      heading.textContent = "Edit alert rule \u201C" + editing.name + "\u201D";
+      form.appendChild(heading);
+    }
     const name_input = this._build_text_field(
       form,
       "Name",
-      "create-name",
+      prefix + "-name",
       "checkout error rate"
     );
     const metric_label = document.createElement("label");
@@ -4681,7 +4800,7 @@ var PycAlertRules = class extends HTMLElement {
     metric_label.textContent = "Metric";
     const metric_select = document.createElement("mj-select");
     metric_select.classList.add("pyc-metrics__select");
-    metric_select.setAttribute("data-role", "create-metric");
+    metric_select.setAttribute("data-role", prefix + "-metric");
     if (this._catalog.length === 0) {
       const option = document.createElement("mj-option");
       option.setAttribute("value", "");
@@ -4696,6 +4815,13 @@ var PycAlertRules = class extends HTMLElement {
       }
       metric_select.value = this._catalog[0].name;
     }
+    const edited_metric = editing !== null && editing.config !== null && typeof editing.config === "object" ? String(editing.config.metric_name ?? "") : "";
+    if (edited_metric.length > 0 && this._catalog.every((entry) => entry.name !== edited_metric)) {
+      const kept = document.createElement("mj-option");
+      kept.setAttribute("value", edited_metric);
+      kept.textContent = edited_metric;
+      metric_select.appendChild(kept);
+    }
     metric_label.appendChild(metric_select);
     form.appendChild(metric_label);
     const comparison_label_el = document.createElement("label");
@@ -4703,7 +4829,7 @@ var PycAlertRules = class extends HTMLElement {
     comparison_label_el.textContent = "Comparison";
     const comparison_select = document.createElement("mj-select");
     comparison_select.classList.add("pyc-metrics__select");
-    comparison_select.setAttribute("data-role", "create-comparison");
+    comparison_select.setAttribute("data-role", prefix + "-comparison");
     for (const option of COMPARISON_OPTIONS) {
       const opt = document.createElement("mj-option");
       opt.setAttribute("value", option.value);
@@ -4716,13 +4842,13 @@ var PycAlertRules = class extends HTMLElement {
     const threshold_input = this._build_text_field(
       form,
       "Threshold",
-      "create-threshold",
+      prefix + "-threshold",
       "0.95"
     );
     const window_input = this._build_text_field(
       form,
       "Window (seconds)",
-      "create-window",
+      prefix + "-window",
       String(DEFAULT_ALERT_WINDOW_SECONDS)
     );
     window_input.value = String(DEFAULT_ALERT_WINDOW_SECONDS);
@@ -4735,7 +4861,7 @@ var PycAlertRules = class extends HTMLElement {
     severity_label.textContent = "Severity";
     const severity_select = document.createElement("mj-select");
     severity_select.classList.add("pyc-metrics__select");
-    severity_select.setAttribute("data-role", "create-severity");
+    severity_select.setAttribute("data-role", prefix + "-severity");
     for (const severity of SEVERITY_OPTIONS) {
       const opt = document.createElement("mj-option");
       opt.setAttribute("value", severity);
@@ -4748,7 +4874,7 @@ var PycAlertRules = class extends HTMLElement {
     const targets_input = this._build_text_field(
       form,
       "Notification targets (comma-separated)",
-      "create-targets",
+      prefix + "-targets",
       "ops-pager, slack:#alerts"
     );
     targets_input.setAttribute(
@@ -4760,7 +4886,7 @@ var PycAlertRules = class extends HTMLElement {
     enabled_label.classList.add("pyc-metrics__field--inline");
     const enabled_checkbox = document.createElement("input");
     enabled_checkbox.setAttribute("type", "checkbox");
-    enabled_checkbox.setAttribute("data-role", "create-enabled");
+    enabled_checkbox.setAttribute("data-role", prefix + "-enabled");
     enabled_checkbox.checked = true;
     enabled_label.appendChild(enabled_checkbox);
     const enabled_text = document.createElement("span");
@@ -4770,12 +4896,26 @@ var PycAlertRules = class extends HTMLElement {
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-metrics__button");
     submit_button.setAttribute("type", "submit");
-    submit_button.setAttribute("data-role", "create-submit");
-    submit_button.textContent = "Create Alert Rule";
+    submit_button.setAttribute("data-role", prefix + "-submit");
+    submit_button.textContent = editing === null ? "Create Alert Rule" : "Save changes";
     form.appendChild(submit_button);
+    if (editing !== null) {
+      const cancel_button = document.createElement("mj-button");
+      cancel_button.classList.add("pyc-metrics__button");
+      cancel_button.setAttribute("type", "button");
+      cancel_button.setAttribute("data-role", "edit-cancel");
+      cancel_button.textContent = "Cancel";
+      cancel_button.addEventListener("click", () => {
+        this._editing = null;
+        if (this._create_region !== null) {
+          this._create_region.hidden = true;
+        }
+      });
+      form.appendChild(cancel_button);
+    }
     const status = document.createElement("p");
     status.classList.add("pyc-metrics__form-status");
-    status.setAttribute("data-role", "create-status");
+    status.setAttribute("data-role", prefix + "-status");
     form.appendChild(status);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -4793,6 +4933,19 @@ var PycAlertRules = class extends HTMLElement {
       );
     });
     this._create_region.replaceChildren(form);
+    if (editing !== null) {
+      const config = editing.config !== null && typeof editing.config === "object" ? editing.config : {};
+      name_input.value = editing.name;
+      if (edited_metric.length > 0) {
+        metric_select.value = edited_metric;
+      }
+      comparison_select.value = typeof config.op === "string" ? config.op : COMPARISON_OPTIONS[0].value;
+      threshold_input.value = config.threshold === void 0 || config.threshold === null ? "" : String(config.threshold);
+      window_input.value = typeof config.window_seconds === "number" ? String(config.window_seconds) : String(DEFAULT_ALERT_WINDOW_SECONDS);
+      severity_select.value = typeof editing.severity === "string" ? editing.severity : "warning";
+      targets_input.value = Array.isArray(editing.notification_targets) ? editing.notification_targets.join(", ") : "";
+      enabled_checkbox.checked = editing.enabled === true;
+    }
     return;
   }
   _build_text_field(form, label_text, role, placeholder) {
@@ -4809,7 +4962,8 @@ var PycAlertRules = class extends HTMLElement {
     return input;
   }
   async _submit_create(form, name_input, metric_select, comparison_select, threshold_input, window_input, severity_select, targets_input, enabled_checkbox, submit_button) {
-    const status = form.querySelector('[data-role="create-status"]');
+    const editing = this._editing;
+    const status = form.querySelector('[data-role="' + (editing === null ? "create" : "edit") + '-status"]');
     const name = name_input.value.trim();
     const metric = metric_select.value.trim();
     if (name.length === 0) {
@@ -4847,9 +5001,16 @@ var PycAlertRules = class extends HTMLElement {
     const targets = parse_notification_targets(targets_input.value);
     submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
-      status.textContent = "Creating alert rule\u2026";
+      status.textContent = editing === null ? "Creating alert rule\u2026" : "Saving\u2026";
     }
-    const outcome = await this._do_create(
+    const outcome = editing === null ? await this._do_create(
+      name,
+      config,
+      severity_select.value,
+      enabled_checkbox.checked,
+      targets
+    ) : await this._do_update(
+      editing,
       name,
       config,
       severity_select.value,
@@ -4865,10 +5026,139 @@ var PycAlertRules = class extends HTMLElement {
       outcome.ok === true ? "ok" : "error"
     );
     if (outcome.ok === true) {
-      this._toggle_create_form();
+      if (editing === null) {
+        this._toggle_create_form();
+      } else {
+        this._editing = null;
+        if (this._create_region !== null) {
+          this._create_region.hidden = true;
+        }
+      }
       await this._refresh();
     }
     return;
+  }
+  /**
+   * ``PUT`` a change to one rule. Exposed so unit tests can drive it without a form-submit event.
+   *
+   * @param rule The rule being changed (its kind is sent back, as the API requires the rule's own).
+   * @param name The name.
+   * @param config The threshold config (metric_name, op, threshold, window_seconds).
+   * @param severity ``info`` / ``warning`` / ``critical``.
+   * @param enabled Whether the rule is enabled.
+   * @param notification_targets The target list.
+   *
+   * @returns ``{ok, status, ruleId, message}``.
+   */
+  async updateAlertRule(rule, name, config, severity, enabled, notification_targets) {
+    const rtnval = await this._do_update(rule, name, config, severity, enabled, notification_targets);
+    return rtnval;
+  }
+  async _do_update(rule, name, config, severity, enabled, notification_targets) {
+    if (this._state.projectId.length === 0) {
+      return { ok: false, status: 0, ruleId: rule.rule_id, message: "Select a project before editing an alert rule." };
+    }
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(build_alert_rule_url(this._state.projectId, rule.rule_id), {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name,
+          kind: rule.kind,
+          config: {
+            metric_name: config.metric_name,
+            op: config.op,
+            threshold: config.threshold,
+            window_seconds: config.window_seconds
+          },
+          severity,
+          enabled,
+          notification_targets
+        })
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+      if (response.ok !== true) {
+        try {
+          detail = problem_detail_of(await response.json());
+        } catch (parse_reason) {
+          detail = "";
+        }
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.metrics.alert_rule_update_failed", { reason: String(reason) });
+      return { ok: false, status: 0, ruleId: rule.rule_id, message: "Failed to reach the alert-rules service." };
+    }
+    return {
+      ok: status === 200,
+      status,
+      ruleId: rule.rule_id,
+      message: alert_update_message_for_status(status, detail, name)
+    };
+  }
+  /**
+   * Delete one rule after asking. The dialog names what goes with it and how to stop a rule without losing it.
+   *
+   * @param rule The rule to delete.
+   * @param button The row action button, disabled while the request runs.
+   */
+  async _on_delete(rule, button) {
+    const confirmed = await confirm_action(
+      this,
+      "Delete the alert rule \u201C" + rule.name + "\u201D?\nIts current state is removed too. This cannot be undone; to stop a rule without losing it, edit it and untick Enabled.",
+      "Delete alert rule"
+    );
+    if (confirmed !== true) {
+      return;
+    }
+    button.toggleAttribute("disabled", true);
+    const outcome = await this._do_delete(rule);
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true || outcome.status === 404) {
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * ``DELETE`` one rule. Exposed so unit tests can drive it without a dialog.
+   *
+   * @param rule The rule to delete.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async deleteAlertRule(rule) {
+    const rtnval = await this._do_delete(rule);
+    return rtnval;
+  }
+  async _do_delete(rule) {
+    if (this._state.projectId.length === 0) {
+      return { ok: false, status: 0, message: "Select a project before deleting an alert rule." };
+    }
+    let status = 0;
+    try {
+      const response = await fetch(build_alert_rule_url(this._state.projectId, rule.rule_id), {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.metrics.alert_rule_delete_failed", { reason: String(reason) });
+      return { ok: false, status: 0, message: "Failed to reach the alert-rules service." };
+    }
+    return { ok: status === 204 || status === 200, status, message: alert_delete_message_for_status(status, rule.name) };
   }
   /**
    * POST a ``MetricAlertRule`` create request. Exposed so unit

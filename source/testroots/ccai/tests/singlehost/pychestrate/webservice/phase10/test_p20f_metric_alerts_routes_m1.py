@@ -209,11 +209,12 @@ def _make_rule_view(
 # ---------------------------------------------------------------------------
 
 
-def test_register_metric_alerts_routes_attaches_two_endpoints():
+def test_register_metric_alerts_routes_attaches_the_endpoints():
     """
     **Feature: 7-alerts-budgets PR p20f**
-    **Property: register_metric_alerts_routes attaches the two
-    method+path pairs from the OpenAPI spec.**
+    **Property: register_metric_alerts_routes attaches the method+path
+    pairs from the OpenAPI spec (list, create, and since ORC-26 change
+    and delete one rule).**
     """
     app = _FakeApp()
     metric_alerts_routes.register_metric_alerts_routes(
@@ -222,6 +223,8 @@ def test_register_metric_alerts_routes_attaches_two_endpoints():
     expected_pairs = (
         ("/api/v1/projects/{project_id}/metric-alerts", ("GET",)),
         ("/api/v1/projects/{project_id}/metric-alerts", ("POST",)),
+        ("/api/v1/projects/{project_id}/metric-alerts/{rule_id}", ("PUT",)),
+        ("/api/v1/projects/{project_id}/metric-alerts/{rule_id}", ("DELETE",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)
