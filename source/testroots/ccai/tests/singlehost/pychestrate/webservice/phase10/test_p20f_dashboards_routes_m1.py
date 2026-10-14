@@ -179,11 +179,12 @@ def _make_dashboard_view(
 # ---------------------------------------------------------------------------
 
 
-def test_register_dashboards_routes_attaches_four_endpoints():
+def test_register_dashboards_routes_attaches_the_endpoints():
     """
     **Feature: 7-project-dashboards PR p20f**
-    **Property: register_dashboards_routes attaches the four
-    method+path pairs from the OpenAPI spec.**
+    **Property: register_dashboards_routes attaches the method+path
+    pairs from the OpenAPI spec (list, create, read, update and, since
+    ORC-26, delete one dashboard).**
     """
     app = _FakeApp()
     dashboards_routes.register_dashboards_routes(
@@ -199,6 +200,10 @@ def test_register_dashboards_routes_attaches_four_endpoints():
         (
             "/api/v1/projects/{project_id}/dashboards/{dashboard_id}",
             ("PATCH",),
+        ),
+        (
+            "/api/v1/projects/{project_id}/dashboards/{dashboard_id}",
+            ("DELETE",),
         ),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)

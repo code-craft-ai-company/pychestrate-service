@@ -762,6 +762,42 @@ def handle_update_dashboard(request: Request) -> Response:
     return rtnval
 
 
+def handle_delete_dashboard(request: Request) -> Response:
+    """
+        ``DELETE /api/v1/projects/{project_id}/dashboards/{dashboard_id}``
+
+        Removes a dashboard and its tiles. Permanent: there is no trash to restore it from, so it
+        is a decision for the person, not something a script should do lightly. ``404`` for an unknown
+        dashboard or one in another project. Needs ``system:dashboards.write``.
+
+        :param request: Incoming webworks request.
+
+        :returns: Empty 204 response, or a problem response.
+    """
+    project_id = request.path_params.get("project_id", "")
+    dashboard_id = request.path_params.get("dashboard_id", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(request=request, db_session=db_session, permission_key=DASHBOARDS_WRITE_PERMISSION_KEY)
+        _require_project_exists(request=request, db_session=db_session, project_id=project_id)
+        try:
+            view = dashboards_service.get_dashboard(db_session=db_session, dashboard_id=dashboard_id)
+        except DashboardNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"dashboard_id": dashboard_id})
+            view = None  # unreachable
+        if str(view.project_id) != str(project_id):
+            _abort_problem(
+                request=request, status=404, detail="Dashboard does not belong to this project.",
+                extensions={"project_id": project_id, "dashboard_id": dashboard_id},
+            )
+        dashboards_service.delete_dashboard(db_session=db_session, dashboard_id=dashboard_id)
+        _LOGGER.info("pychestrate.dashboards.delete project_id=%s dashboard_id=%s", project_id, dashboard_id)
+        rtnval: Response = JSONResponse(content=None, status_code=204)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -791,6 +827,9 @@ def register_dashboards_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + DASHBOARDS_PATH_SUFFIX + "/{dashboard_id}", methods=["PATCH"],
     )(handle_update_dashboard)
+    app.attach_route(
+        base + DASHBOARDS_PATH_SUFFIX + "/{dashboard_id}", methods=["DELETE"],
+    )(handle_delete_dashboard)
     return
 
 
@@ -803,4 +842,5 @@ __all__ = [
     "handle_create_dashboard",
     "handle_read_dashboard",
     "handle_update_dashboard",
+    "handle_delete_dashboard",
 ]

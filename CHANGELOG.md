@@ -267,6 +267,12 @@ preview tag.
 
 ### Added
 
+- Dashboards can be deleted (ORC-26). A dashboard could be created, renamed and re-tiled but never removed, although the service already deleted one on request.
+  `DELETE /api/v1/projects/{id}/dashboards/{dashboard_id}` (`dashboards_delete`, `204`) removes the dashboard and its tiles (`404` for an unknown dashboard or
+  another project's; `403` without `system:dashboards.write`; the existing `entity.dashboard.deleted` is published). The Dashboards page has a **Delete** button
+  beside **Edit** for those who may write: a confirmation names the dashboard, says how many tiles go with it and that it cannot be undone; a dashboard someone else
+  already deleted says so and the list catches up. Environments, release channels and in-place pipeline edits are still not done (#447).
+
 - Alert rules can be changed and deleted (ORC-26). A rule could be created and disabled but not fixed: a mistyped threshold meant creating a second rule and
   leaving the first disabled for ever. `PUT /api/v1/projects/{id}/metric-alerts/{rule_id}` (`metric_alerts_update`) changes the fields it is given (a field left
   out keeps its stored value) under the rules of create (a non-empty name unique in the project, a config the rule's kind accepts); the kind and the project cannot

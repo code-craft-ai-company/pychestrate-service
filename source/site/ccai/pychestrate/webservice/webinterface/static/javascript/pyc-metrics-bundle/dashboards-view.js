@@ -1,4 +1,5 @@
 import { may } from "../shared/permissions.js";
+import { confirm_action } from "../shared/confirm.js";
 import { reveal } from "../shared/reveal.js";
 import { message_with_detail, read_problem_detail } from "../shared/problem-detail.js";
 import { keep_list_state_on_back, mirror_to_query, query_value } from "../shared/view-state.js";
@@ -129,6 +130,34 @@ function update_message_for_status(status, detail, name) {
     return rtnval2;
   }
   const rtnval = "Failed to save the dashboard (HTTP " + String(status) + ").";
+  return rtnval;
+}
+/**
+ * Say how a delete went, in words.
+ *
+ * @param status The HTTP status.
+ * @param name The dashboard's name.
+ *
+ * @returns The message.
+ */
+function delete_message_for_status(status, name) {
+  if (status === 204 || status === 200) {
+    const rtnval2 = "Dashboard \u201C" + name + "\u201D deleted.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "That dashboard no longer exists.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to delete dashboards.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to delete.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to delete the dashboard (HTTP " + String(status) + ").";
   return rtnval;
 }
 function tile_metric_name(tile) {
@@ -568,22 +597,41 @@ class PycDashboardsList extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
-        width: "8rem",
+        width: "12rem",
         sortable: false,
         render: (dashboard) => {
+          // Table cells render inside the table's shadow root, out of reach of
+          // the bundle stylesheet, so the layout is set on the element itself.
+          const actions = document.createElement("span");
+          actions.classList.add("pyc-metrics__row-actions");
+          actions.style.display = "inline-flex";
+          actions.style.flexWrap = "wrap";
+          actions.style.gap = "0.5rem";
           const edit_button = document.createElement("mj-button");
           edit_button.classList.add("pyc-metrics__button");
           edit_button.setAttribute("type", "button");
           edit_button.setAttribute("data-role", "edit-dashboard");
           edit_button.textContent = "Edit";
           edit_button.hidden = true;
+          const delete_button = document.createElement("mj-button");
+          delete_button.classList.add("pyc-metrics__button");
+          delete_button.setAttribute("type", "button");
+          delete_button.setAttribute("data-role", "delete-dashboard");
+          delete_button.textContent = "Delete";
+          delete_button.hidden = true;
           void may(DASHBOARDS_WRITE_PERMISSION).then((allowed) => {
             edit_button.hidden = allowed === false;
+            delete_button.hidden = allowed === false;
           });
           edit_button.addEventListener("click", () => {
             this._open_edit_form(dashboard);
           });
-          return edit_button;
+          delete_button.addEventListener("click", () => {
+            void this._on_delete(dashboard, delete_button);
+          });
+          actions.appendChild(edit_button);
+          actions.appendChild(delete_button);
+          return actions;
         }
       }
     ];
@@ -696,6 +744,64 @@ class PycDashboardsList extends HTMLElement {
       desc_input.value = typeof editing.description === "string" ? editing.description : "";
     }
     return;
+  }
+  /**
+   * Delete one dashboard after asking. The dialog names it, says its tiles go with it and that it cannot be undone.
+   *
+   * @param dashboard The dashboard to delete.
+   * @param button The row action button, disabled while the request runs.
+   */
+  async _on_delete(dashboard, button) {
+    const tile_count = Array.isArray(dashboard.tiles) ? dashboard.tiles.length : -1;
+    const goes = tile_count < 0 ? "Its tiles go with it." : tile_count === 0 ? "It has no tiles." : "Its " + String(tile_count) + (tile_count === 1 ? " tile goes" : " tiles go") + " with it.";
+    const confirmed = await confirm_action(
+      this,
+      "Delete the dashboard \u201C" + dashboard.name + "\u201D?\n" + goes + " This cannot be undone.",
+      "Delete dashboard"
+    );
+    if (confirmed !== true) {
+      return;
+    }
+    button.toggleAttribute("disabled", true);
+    const outcome = await this._do_delete(dashboard);
+    button.toggleAttribute("disabled", false);
+    this._render_notice(outcome.message, outcome.ok === false);
+    if (outcome.ok === true || outcome.status === 404) {
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * ``DELETE`` one dashboard. Exposed so unit tests can drive it without a dialog.
+   *
+   * @param dashboard The dashboard to delete.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async deleteDashboard(dashboard) {
+    const rtnval = await this._do_delete(dashboard);
+    return rtnval;
+  }
+  async _do_delete(dashboard) {
+    if (this._state.projectId.length === 0) {
+      return { ok: false, status: 0, message: "Select a project before deleting a dashboard." };
+    }
+    let status = 0;
+    try {
+      const response = await fetch(build_dashboard_detail_url(this._state.projectId, dashboard.dashboard_id), {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      status = response.status;
+      if (status === 401) {
+        announce_session_expired();
+      }
+    } catch (reason) {
+      console.warn("pychestrate.ui.metrics.dashboard_delete_failed", { reason: String(reason) });
+      return { ok: false, status: 0, message: "Failed to reach the dashboards service." };
+    }
+    return { ok: status === 204 || status === 200, status, message: delete_message_for_status(status, dashboard.name) };
   }
   /**
    * PATCH a dashboard's name and/or description (only what changed), guarded by the version the list showed
@@ -1265,5 +1371,6 @@ export {
   project_id_for_page,
   short_metric_id,
   tile_metric_name,
+  delete_message_for_status,
   update_message_for_status
 };

@@ -4464,6 +4464,19 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [dashboards]
+      summary: Delete a dashboard.
+      operationId: dashboards_delete
+      description: |
+        Removes the dashboard and its tiles. Permanent: there is no trash to restore it from. `404` for an
+        unknown dashboard or one in another project. Needs `system:dashboards.write`.
+      responses:
+        '204':
+          description: The dashboard is gone.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{project_id}/metric-alerts:
     parameters:

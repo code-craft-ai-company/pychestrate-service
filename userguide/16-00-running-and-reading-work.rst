@@ -239,6 +239,16 @@ rule and its current state for good, after a confirmation that names the rule; i
 cannot be undone.
 
 
+Remove a dashboard
+==================
+
+Open **Insights**, **Dashboards** and choose the project. If you may change dashboards,
+each one has a **Delete** button beside **Edit**. The confirmation names the dashboard
+and says how many tiles go with it; choosing **Delete** removes it for good, so if you
+only want to change what it shows, use **Edit** or the layout editor instead. Without the
+permission the buttons are not shown.
+
+
 What the states mean
 ====================
 
