@@ -984,6 +984,10 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "logs": _many(AuditLogEntry),
         "history": _many(VariableChangeLog),
     },
+    "config/secrets/": {
+        "legacy_count": _by_mode(2, 0),
+        "can_import": _by_mode(True, False),
+    },
     "config/notifications/": {
         "channels": _notification_channels,
         "rules": _by_mode([_NOTIFICATION_RULE_ROW], []),

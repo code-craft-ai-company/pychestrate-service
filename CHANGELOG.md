@@ -293,6 +293,13 @@ preview tag.
 
 ### Added
 
+- **The legacy secrets say what they are, and can be carried into the vault (ADM-07, `specs/model-convergence.md` section 9).** Admin, Secrets and Admin, Secret Scopes wrote an older store that
+  nothing in the product reads (repository credentials, webhooks and notification channels all use the vault; the legacy manager is built only by those two pages), and both were titled "Secrets", so a
+  secret created in one never appeared in the other. The pages are now titled "(legacy)" (so is the Secret Scopes menu entry) and carry a notice that nothing reads them and where secrets belong. On the
+  legacy list, an administrator (`system:secrets.admin`) can choose **Import N secrets into the vault**: each is decrypted with the legacy key and stored service-wide as `scope/name` through the vault's
+  own service (its access rules and audit apply, and `audit.secret.created` is recorded); a name the vault already holds is left as it is, a secret that cannot be decrypted is reported by name with no
+  value, nothing is shown or logged, and the legacy rows stay (delete them there afterwards). Making the legacy pages read-only and then removing them are the next steps.
+
 - **"Learn more" links from the forms that need explaining to the user guide (DOC-20).** The audit found no outbound link on any page; the service already serves its own guide
   at `/docs`, but nothing led there from the place a person is stuck. `ui.learn_more(chapter, section)` draws a link beside the title of the create-role and edit-role,
   create-project, create-device, create-pool, create-IP-pool, create-reservation, health-check, register-RPA-job-type and notification (overview, add-channel, add-rule) pages. It

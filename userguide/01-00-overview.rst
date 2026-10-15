@@ -201,7 +201,13 @@ Secrets and variables
     page is the one the service and ``/api/v1/variables/effective`` read, one set
     through the API appears on the page, and each change (page or API) is in the
     variable's history. A variable the product owns, such as the interface profile,
-    is shown read-only on the page.
+    is shown read-only on the page. Secrets live in the vault under **System**,
+    **Secrets**: repositories, webhooks and notification channels all use it.
+    **Admin**, **Secrets (legacy)** and **Secret Scopes (legacy)** are an older store
+    that nothing reads. If it holds secrets, an administrator (``system:secrets.admin``)
+    can choose **Import into the vault** on the legacy list: each secret is stored in the
+    vault, service-wide, as ``scope/name``; a name the vault already has is left as it is,
+    and the legacy copies stay until you delete them there.
 
 Extensions
     Pychestrate's pluggable parts -- password hashers, auth providers,

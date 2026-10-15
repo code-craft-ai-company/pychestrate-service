@@ -455,7 +455,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="admin.scopes",
-        label="Secret Scopes",
+        label="Secret Scopes (legacy)",
         route="/admin/scopes",
         group_id=GROUP_ADMIN,
         required_permissions=["system:secrets.admin"],

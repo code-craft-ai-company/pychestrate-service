@@ -279,6 +279,23 @@
 </div>
 {%- endmacro %}
 
+{#- legacy_store_notice(what, import_url="", count=0, csrf_token="") -- the notice on the pages of the older secrets store (audit ADM-07): nothing in the
+    product reads what is written there, the vault is where secrets belong, and, when there are legacy secrets and the viewer may import them, the button that
+    carries them across. ``what`` is "secrets" or "secret scopes". #}
+{% macro legacy_store_notice(what, import_url="", count=0, csrf_token="") -%}
+<div class="pyc-preview-notice" role="note" data-role="legacy-notice">
+    <p><strong>These are legacy {{ what }}.</strong> Nothing in Pychestrate reads them: repositories, webhooks and notification channels use the secrets vault under
+        <a href="/secrets">System, Secrets</a>, and new secrets belong there.</p>
+    {%- if import_url and count %}
+    <form action="{{ import_url }}" method="post" class="actions-row" data-role="import-legacy">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary">Import {{ count }} secret{{ '' if count == 1 else 's' }} into the vault</button>
+        <span class="muted">Each is stored service-wide as <code>scope/name</code>; one the vault already has is left as it is.</span>
+    </form>
+    {%- endif %}
+</div>
+{%- endmacro %}
+
 {#- learn_more(page, anchor="", label="Learn more") -- a link from a form to the section of the user guide that explains it (DOC-20). It draws
     nothing when the guide is not installed or has no such page (``guide_link`` answers ""), so it never leads nowhere. It opens in a new tab so a
     half-filled form is not lost, and says so to a screen reader. ``page`` is the chapter's file name without ``.html``; ``anchor`` is the section's id. #}

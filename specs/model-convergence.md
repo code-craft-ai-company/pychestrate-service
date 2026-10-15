@@ -23,7 +23,7 @@ two.
 | RES-05 (#365) | Fleet → Resources is the registry resource plane. The legacy `/resources/*` pages stay under the names they have today until their data has moved (§3), and the two sub-navigations stop competing. | §3 |
 | RES-04 (#402) | The registry resource plane (`/resource-pools`, `/api/v1/resources`) is the one model jobs use. Add the missing "register a resource" call first, then `requires:` in job specs. | §3 |
 | RES-21 (#368) | Same model; its empty states point at the step that fills them. | §3 |
-| ADM-07 (#366) | Same rule: the modern secrets store survives; one secret picker for every consumer, then the legacy page becomes read-only, then goes. | Later |
+| ADM-07 (#366) | Same rule: the modern secrets store survives. Nothing reads the legacy store, so the legacy pages say so and offer an import into the vault (§9); then they become read-only, then go. | §9 |
 | ADM-08 (#367) | Same rule: the modern variables service survives. Step 1 (system-owned keys read-only) is done; step 2 makes the Admin Variables pages manage the modern store, so a variable created there is the one the runtime resolves (§8). Step 3 removes the legacy store. | §8 |
 | ADM-22 (#513) | A missing entity or an unknown path is a real 404 inside the shell, with a link back to the list. It is not a redirect with a flash. | §4 |
 | XC-08 (#529) | Sign the first administrator in when setup finishes, through the ordinary sign-in path. | §5 |
@@ -149,3 +149,26 @@ default change.
 
 **Not part of this step.** Editing PROJECT-, PIPELINE- or JOB-scope variables on the page (the API has them); removing the legacy store and its tests (step 3); a
 secret-valued variable type on the page (the modern store has `SECRET_REF`; the legacy page never offered it).
+
+## 9. Secrets: one vault (ADM-07, #366), step 1
+
+**Finding.** Admin, Secrets (legacy) and Admin, Secret Scopes write the legacy `secrets` / `secret_scopes` tables; System, Secrets is the vault (`/secrets`, the KEK/DEK store).
+A secret created in either never appears in the other. The audit also said the consumers point at the legacy store.
+
+**What is true now (checked 2026-10-15).** Nothing in the product reads the legacy store. The only places that construct the legacy `SecretManager` are the two legacy pages
+themselves. Repository credentials resolve through the vault (the legacy manager is an optional fallback no builder configures), inbound webhooks and notification channels
+store their secrets in the vault, and the secret pickers the forms offer list vault secrets. The legacy store is an island: what is written there is read by nothing.
+
+**Decisions (2026-10-15).**
+
+1. **No consumer has to change**, because none reads the legacy store. "One secret picker for every consumer" is already the case for the forms that ask for a secret
+   (they list vault secrets).
+2. **The legacy pages say what they are** and point at the vault: titled "(legacy)" (the Secret Scopes entry too), with a notice that nothing reads these secrets and that new
+   secrets belong in System, Secrets.
+3. **An import carries what exists into the vault**, on request: an administrator (`system:secrets.admin`) chooses *Import into the vault* on the legacy list. Each legacy secret is decrypted
+   with the legacy key and stored in the vault, service-wide (ORG scope), under `<scope>/<name>` (the form the legacy references and the repository form used), through the
+   vault's own service, so its access rules and audit apply. A name the vault already holds is skipped, never overwritten; a secret that cannot be decrypted is reported by name and
+   changes nothing. The result says how many were imported, skipped and failed. The import never shows or logs a value, and it leaves the legacy rows alone (deleting them is the person's
+   choice, afterwards, on the same page). The legacy description and type are not carried (the vault records neither).
+4. **Then the pages become read-only, then go** (step 2 and step 3, not part of this step): creating a legacy secret or scope is refused with a pointer to the vault; the pages and their
+   tables are removed once the import has run everywhere.

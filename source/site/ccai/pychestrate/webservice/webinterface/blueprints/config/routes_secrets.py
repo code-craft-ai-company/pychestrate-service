@@ -53,6 +53,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _has_permission,
     _not_found_redirect,
     _redirect_with_flash,
     _render,
@@ -81,6 +82,7 @@ _ROUTE_TABLE = (
         "/secrets/{scope_id}/{name}/delete",
         ("POST",),
     ),
+    ("config.secret_import", "/secrets/import", ("POST",)),
 )
 
 # Permission each route enforces server-side (see
@@ -90,6 +92,7 @@ _ROUTE_PERMISSIONS = {
     "config.secret_create": "system:secrets.write",
     "config.secret_edit": "system:secrets.write",
     "config.secret_delete": "system:secrets.write",
+    "config.secret_import": "system:secrets.admin",
 }
 
 
@@ -113,6 +116,20 @@ def _build_secret_manager(*, db_session: Any) -> Any:
     encryption_key = _resolve_secret_encryption_key()
     rtnval = SecretManager(db_session, encryption_key)
     return rtnval
+
+
+def _legacy_secret_count(*, db_session: Any) -> int:
+    """
+        How many legacy secrets there are, for the import button. The notice must never stop the list from rendering, so a count that cannot be read is zero.
+
+        :param db_session: Open SQLAlchemy session.
+    """
+    from ccai.pychestrate.webservice.secrets import legacy_import  # noqa: E402
+
+    try:
+        return legacy_import.count_legacy_secrets(db_session=db_session)
+    except Exception:  # noqa: BLE001 -- see above
+        return 0
 
 
 def _resolve_secret_type(*, secret_type_str: str) -> Any:
@@ -345,6 +362,8 @@ def handle_secret_list(request: Request) -> Response:
         context["secrets"] = secrets
         context["scopes"] = scopes
         context["selected_scope_id"] = scope_id
+        context["legacy_count"] = _legacy_secret_count(db_session=db_session)
+        context["can_import"] = _has_permission(auth=auth, permission="system:secrets.admin")
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total"] = total
@@ -696,11 +715,55 @@ def handle_secret_delete(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def handle_secret_import(request: Request) -> Response:
+    """
+        ``POST /admin/secrets/import`` -- copy the legacy secrets into the secrets vault (audit ADM-07, ``specs/model-convergence.md`` section 9). Needs
+        ``system:secrets.admin``. Says how many were imported, skipped (already in the vault) and failed (by name, never a value).
+    """
+    from ccai.pychestrate.webservice.secrets import legacy_import  # noqa: E402
+    from ccai.pychestrate.webservice.security.auth.models import AuthProviderKind  # noqa: E402
+    from ccai.pychestrate.webservice.security.auth.session_service import AuthPrincipal  # noqa: E402
+
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        single_form = _parse_form_or_empty(request=request)
+        list_url = _url_for_module.url_for("config.secret_list")
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(form=single_form, session=auth.session, fallback_url=list_url)
+        if csrf_redirect is not None:
+            _attach_session_to_response(response=csrf_redirect, session=auth.session)
+            return csrf_redirect
+
+        principal = AuthPrincipal(user_id=str(auth.user_id), session_id="", provider_kind=AuthProviderKind.LOCAL, provider_name="local")
+        result = legacy_import.import_legacy_secrets(
+            db_session=db_session, principal=principal, secret_manager=_build_secret_manager(db_session=db_session),
+        )
+        parts = ["{} imported into the vault".format(len(result.imported))]
+        if len(result.skipped) > 0:
+            parts.append("{} already there and left as they are".format(len(result.skipped)))
+        if len(result.failed) > 0:
+            parts.append("{} could not be imported ({})".format(len(result.failed), "; ".join("{}: {}".format(name, why) for name, why in result.failed)))
+        category = flash.CATEGORY_ERROR if len(result.failed) > 0 and len(result.imported) == 0 else flash.CATEGORY_SUCCESS
+        message = "Legacy secrets: " + ", ".join(parts) + "."
+        if len(result.imported) > 0:
+            message += " They are under System, Secrets; delete the legacy copies here when you no longer need them."
+        return _redirect_with_flash(session=auth.session, url=list_url, message=message, category=category)
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.secret_list": handle_secret_list,
     "config.secret_create": handle_secret_create,
     "config.secret_edit": handle_secret_edit,
     "config.secret_delete": handle_secret_delete,
+    "config.secret_import": handle_secret_import,
 }
 
 
@@ -729,4 +792,5 @@ __all__ = [
     "handle_secret_create",
     "handle_secret_edit",
     "handle_secret_delete",
+    "handle_secret_import",
 ]

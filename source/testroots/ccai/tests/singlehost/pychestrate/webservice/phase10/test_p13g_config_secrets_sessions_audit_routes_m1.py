@@ -499,7 +499,8 @@ def test_register_secrets_routes_attaches_documented_routes():
     """
     **Feature: webworks config secrets port T4.1 (D4)**
     **Property: register_secrets_routes attaches the four
-    secret-management routes at /admin/secrets*.**
+    secret-management routes at /admin/secrets* and the import into the vault
+    (audit ADM-07).**
     """
     _reset_global_state()
     try:
@@ -519,6 +520,7 @@ def test_register_secrets_routes_attaches_documented_routes():
                 "/admin/secrets/{scope_id}/{name}/delete",
                 ("POST",),
             ),
+            ("/admin/secrets/import", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
