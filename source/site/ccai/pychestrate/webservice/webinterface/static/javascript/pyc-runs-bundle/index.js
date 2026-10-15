@@ -2239,7 +2239,7 @@ var PycRunDetail = class extends HTMLElement {
     id_value.classList.add("pyc-run-detail__run-id");
     id_value.setAttribute("data-role", "run-id");
     id_value.textContent = short_run_id(run.run_id);
-    set_entity_title("Run " + short_run_id(run.run_id));
+    set_entity_title(typeof run.job_name === "string" && run.job_name.trim().length > 0 ? run.job_name.trim() + " " + short_run_id(run.run_id) : "Run " + short_run_id(run.run_id));
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

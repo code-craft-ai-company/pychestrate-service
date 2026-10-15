@@ -80,6 +80,51 @@ def test_a_provisioning_run_page_is_titled_by_its_run(browser: Browser):
     return
 
 
+def _title_of(browser: Browser, *, path: str, bundle: str, stubs: Dict[str, Any], ready: str, starts_with: str) -> str:
+    page = open_shell_page(browser, path=path, bundle_names=["pyc-site-shell", bundle], api_stubs=stubs, **DESKTOP)
+    try:
+        page.wait_for_selector(ready, state="attached", timeout=8000)
+        page.wait_for_function("(prefix) => document.title.startsWith(prefix)", arg=starts_with, timeout=5000)
+        return page.title()
+    finally:
+        page.context.close()
+
+
+def test_a_run_is_titled_by_its_job_name_and_short_id_and_a_pod_by_its_name(browser: Browser):
+    """
+    **Feature: entity page titles (ORC-35)**
+    **Property: a run's tab reads "<job name> 0f6c2c1e · Runs ·" when the run has a job name and "Run 0f6c2c1e ·" when it has none; a pod's reads
+    "Pod <its name> ·" and "Pod 0f6c2c1e ·" when it has no name.**
+    """
+    projects = {"/api/v1/projects": {"items": [{"project_id": PROJECT_ID, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}}}
+
+    def _run(job_name: Any) -> str:
+        run = {"run_id": RUN_ID, "project_id": PROJECT_ID, "state": "running", "job_type": "testbase", "job_name": job_name, "created_at": "2026-09-29T10:00:00+00:00", "started_at": None}
+        prefix = (job_name + " 0f6c2c1e") if job_name else "Run 0f6c2c1e"
+        return _title_of(
+            browser, path="/runs/" + RUN_ID, bundle="pyc-runs-bundle", stubs=dict(projects, **{"/api/v1/runs/" + RUN_ID: run}),
+            ready='[data-role="progress-section"]', starts_with=prefix,
+        )
+
+    def _pod(pod_name: Any) -> str:
+        definition = {"pod_id": RUN_ID, "project_id": PROJECT_ID, "pod_name": pod_name, "current_version": 1, "spec": {}, "spec_hash": "ab" * 32, "created_at": "2026-09-29T10:00:00+00:00"}
+        prefix = ("Pod " + pod_name) if pod_name else "Pod 0f6c2c1e"
+        return _title_of(
+            browser, path="/pods/{}?project_id={}".format(RUN_ID, PROJECT_ID), bundle="pyc-pods-bundle",
+            stubs=dict(projects, **{"/api/v1/projects/{}/pod-definitions/{}".format(PROJECT_ID, RUN_ID): definition}),
+            ready='[data-role="pod-id"]', starts_with=prefix,
+        )
+
+    named_run, unnamed_run, named_pod, unnamed_pod = _run("nightly-regression"), _run(None), _pod("lab-pod-2"), _pod("")
+
+    testbase.assert_equal(
+        (named_run.startswith("nightly-regression 0f6c2c1e \u00b7 "), named_run.count("nightly-regression"), unnamed_run.startswith("Run 0f6c2c1e \u00b7 "),
+         named_pod.startswith("Pod lab-pod-2 \u00b7 "), unnamed_pod.startswith("Pod 0f6c2c1e \u00b7 ")),
+        (True, 1, True, True, True),
+    )
+    return
+
+
 def test_a_second_render_replaces_the_entity_instead_of_stacking_a_second_one(browser: Browser):
     """
     **Feature: entity page titles (ORC-35)**

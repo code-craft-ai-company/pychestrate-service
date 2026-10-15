@@ -29,6 +29,9 @@ preview tag.
 
 ### Fixed
 
+- **A run's tab is titled by what it ran, and a pod's by its name (ORC-35).** Seen on real pages in the lab: the tabs read "Run 13032fb3 · Runs" and "Pod e4353688 · Pods", although the run has a job name
+  and the pod a name, so several open tabs of the same kind were indistinguishable. A run is now "test_pass 13032fb3 · Runs · Pychestrate" (its job name and short id; "Run 13032fb3" when it has no job
+  name), a pod "Pod lab-pod-2 · Pods · Pychestrate" (its short id when it has no name). Builds, provisioning runs and clients keep their short ids (a build's job name is just "build:makefile").
 - **A test that requires a capability tag can now be dispatched to a pod that advertises it (E2E-18).** Found with a real pod once it could advertise at all (`pychestrate-client` 6710ad7 makes the
   capabilities call itself, because the published REST client package lacks it, so the Clients page now lists what a pod advertised): the pod advertised `lab-browser`, the service held it, and a catalog
   entry requiring `lab-browser` was still refused with "No candidate pod satisfies the catalog entry's required capabilities", because the test-run route built every dispatch candidate with no tags. Each
