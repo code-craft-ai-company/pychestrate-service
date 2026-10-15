@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **The RPA jobs table fits and no longer breaks a job's id into three lines (ORC-35).** With real jobs, nine columns did not fit the content area and every cell could break anywhere: "bed / 376 / e1" for an
+  id, "tasker / -demo" for a type, the time over three lines. The short-value cells are now one line each (the specification's name absorbs the squeeze), the version sits beside the job type, the mode (shown on
+  the job's page, and as a hover on the type) and a second "View" button (the id already links to the job) are gone, and Logs is a plain link. It fits at 1440 px; narrower, the table scrolls inside its own box
+  and the page does not.
 - **A confirmation for a harmless action no longer has the red "cannot be taken back" button (XC-15).** Seen when running an RPA job from its page on a real pod: "Dispatch an RPA job with this work packet?" had the same red
   confirming button as "Delete the project", because every server-rendered `data-confirm` form got the danger style (the pipeline page's Run dialog was already blue). A form or button can now say
   `data-confirm-tone="neutral"`; the RPA run form and the check-in and check-out forms for resources and addresses do (forced check-in, and every delete, revoke, remove, retire, terminate and deactivate, stay red). A test

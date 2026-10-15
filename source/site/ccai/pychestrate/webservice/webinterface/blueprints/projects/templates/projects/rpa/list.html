@@ -48,18 +48,16 @@
             <th scope="col">Job</th>
             <th scope="col">Specification</th>
             <th scope="col">Type</th>
-            <th scope="col">Version</th>
-            <th scope="col">Mode</th>
             <th scope="col">Status</th>
             <th scope="col">Duration</th>
             <th scope="col">Started</th>
-            <th scope="col">Actions</th>
+            <th scope="col">Logs</th>
         </tr>
     </thead>
     <tbody>
         {% for job in jobs %}
         <tr>
-            <td>
+            <td class="nowrap">
                 <a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=job.job_id) }}" class="strong mono">
                     {{ job.job_id[:8] }}
                 </a>
@@ -71,20 +69,17 @@
                 {{ job.spec_name | display }}
                 {% endif %}
             </td>
-            <td class="mono">{{ job.type_id }}</td>
-            <td class="mono">{{ job.resolved_version }}</td>
-            <td><span class="badge badge-secondary">{{ job.execution_mode | enum_value }}</span></td>
-            <td>{{ ui.status_badge(job.status) }}</td>
-            <td>{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</td>
-            <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
-            <td>
-                <a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=job.job_id) }}" class="btn btn-sm btn-secondary">View</a>
-                <a href="{{ url_for('projects.rpa_logs', project_id=project.id, job_id=job.job_id) }}" class="btn btn-sm btn-secondary">Logs</a>
+            <td class="nowrap" title="{{ job.execution_mode | enum_value }} job"><span class="mono">{{ job.type_id }}</span> <span class="muted mono">{{ job.resolved_version }}</span></td>
+            <td class="nowrap">{{ ui.status_badge(job.status) }}</td>
+            <td class="nowrap">{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</td>
+            <td class="nowrap">{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
+            <td class="nowrap">
+                <a href="{{ url_for('projects.rpa_logs', project_id=project.id, job_id=job.job_id) }}">Logs</a>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="9" class="muted center pad-lg">
+            <td colspan="7" class="muted center pad-lg">
                 No RPA jobs yet.
                 {% if specs %}
                 <a href="{{ url_for('projects.rpa_spec_list', project_id=project.id) }}">Run a specification</a> to start one.
