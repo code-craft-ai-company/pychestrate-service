@@ -7039,10 +7039,12 @@ components:
       in: path
       name: scope
       required: true
-      description: Variable scope kind.
+      description: >-
+        Variable scope kind. `system` is the global scope (its scope id is empty, as in
+        `/variables/system//<name>`); case does not matter. The Admin Variables pages manage `system`.
       schema:
         type: string
-        enum: [global, project, pod, run]
+        enum: [system, project, pipeline, job]
     VariableScopeIdParam:
       in: path
       name: scope_id
@@ -7634,7 +7636,7 @@ components:
         name: { type: string }
         scope:
           type: string
-          enum: [global, project, pod, run]
+          enum: [SYSTEM, PROJECT, PIPELINE, JOB]
         scope_id: { type: string }
         value_type:
           type: string

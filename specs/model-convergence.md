@@ -23,7 +23,8 @@ two.
 | RES-05 (#365) | Fleet → Resources is the registry resource plane. The legacy `/resources/*` pages stay under the names they have today until their data has moved (§3), and the two sub-navigations stop competing. | §3 |
 | RES-04 (#402) | The registry resource plane (`/resource-pools`, `/api/v1/resources`) is the one model jobs use. Add the missing "register a resource" call first, then `requires:` in job specs. | §3 |
 | RES-21 (#368) | Same model; its empty states point at the step that fills them. | §3 |
-| ADM-07, ADM-08 (#366, #367) | Same rule: the modern secrets store and the modern variables service survive; the legacy pages become read-only, then go. Not part of this pass. | Later |
+| ADM-07 (#366) | Same rule: the modern secrets store survives; one secret picker for every consumer, then the legacy page becomes read-only, then goes. | Later |
+| ADM-08 (#367) | Same rule: the modern variables service survives. Step 1 (system-owned keys read-only) is done; step 2 makes the Admin Variables pages manage the modern store, so a variable created there is the one the runtime resolves (§8). Step 3 removes the legacy store. | §8 |
 | ADM-22 (#513) | A missing entity or an unknown path is a real 404 inside the shell, with a link back to the list. It is not a redirect with a flash. | §4 |
 | XC-08 (#529) | Sign the first administrator in when setup finishes, through the ordinary sign-in path. | §5 |
 | DOC-20 (#511) | The service serves its own user guide, so the guide always matches the running release and works where the internet does not. | §6 |
@@ -122,3 +123,29 @@ every existing install, backup job and runbook expects them. Moving them
 changes every one of those at once for a naming preference. They stay. If a
 move is wanted later it is a migration with a documented cutover, not a
 default change.
+
+## 8. Variables: one store (ADM-08, #367), step 2
+
+**Finding.** The Admin Variables pages wrote the legacy `global_variables` table. Nothing in the runtime reads it except the interface profile
+(`ui.profile.surfaces`); project templates, pod configuration and `GET /api/v1/variables/effective` read the modern bindings
+(`variables_variable_bindings`). A variable created on the page therefore did nothing, and one set through the API never appeared on the page.
+
+**Decisions (2026-10-15).**
+
+1. **The SYSTEM-scope bindings of the modern store are the global variables.** The Admin Variables pages list, create, edit, delete and show the history of
+   exactly those rows. A variable set through `/api/v1/variables` at system scope appears on the page, and one created on the page is what
+   `/api/v1/variables/effective` resolves.
+2. **The modern store gains what the page needs, and the API benefits too:** a `description`, a `default_value_text`, a `created_at`, and a history table
+   (`variables_binding_history`: scope, name, type, old and new value, who, when). `set_variable` and `unset_variable` write the history row in the same
+   transaction as the binding, so a change from the page, the API or the interface profile page is in History and nothing is recorded twice.
+3. **The page does not change.** A `SystemVariableStore` with the legacy `GlobalVariableStore`'s interface (it inherits the type checks and the
+   parsing of typed text, and raises the same errors) sits behind the page's existing seam, so the handlers, templates and their field-level errors stay as they
+   are. The interface profile reads and writes the same store.
+4. **Existing data is copied once, by the migration**, name by name, only where the modern store has no SYSTEM binding of that name, with each variable's
+   description, default, timestamps and history. The legacy tables are left untouched: a rollback is a redeploy of the previous release, and step 3 removes them
+   when nothing reads them.
+5. **A system-owned variable stays read-only on the page** (step 1). The API can still set it (it needs the same administrator permission), and the page
+   shows the change in History.
+
+**Not part of this step.** Editing PROJECT-, PIPELINE- or JOB-scope variables on the page (the API has them); removing the legacy store and its tests (step 3); a
+secret-valued variable type on the page (the modern store has `SECRET_REF`; the legacy page never offered it).

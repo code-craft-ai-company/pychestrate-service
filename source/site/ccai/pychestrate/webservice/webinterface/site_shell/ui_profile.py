@@ -341,10 +341,10 @@ def invalidate_deployment_cache() -> None:
 
 
 def _read_deployment_variable(*, db_session: Any) -> Any:
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
-        GlobalVariableStore,
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
+        SystemVariableStore,
     )
-    store = GlobalVariableStore(db_session)
+    store = SystemVariableStore(db_session)
     rtnval = store.get_value(DEPLOYMENT_VARIABLE_NAME, None)
     return rtnval
 
@@ -404,13 +404,13 @@ def set_deployment_surfaces(*, db_session: Any, surfaces: Iterable[Any], actor_i
 
     from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
         GlobalVariableCreateRequest,
-        GlobalVariableStore,
         GlobalVariableUpdateRequest,
     )
     from ccai.pychestrate.core.orm import VariableType  # noqa: E402
+    from ccai.pychestrate.webservice.variables.system_store import SystemVariableStore  # noqa: E402
 
     value = [s.value for s in SURFACE_ORDER if s in parsed]
-    store = GlobalVariableStore(db_session)
+    store = SystemVariableStore(db_session)
     existing = store.get_variable(DEPLOYMENT_VARIABLE_NAME)
     if existing is None:
         store.create_variable(

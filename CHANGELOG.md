@@ -29,6 +29,16 @@ preview tag.
 
 ### Fixed
 
+- **The Admin Variables pages and the runtime read one store (ADM-08, `specs/model-convergence.md` section 8).** The pages wrote the legacy `global_variables` table, which nothing in the
+  runtime reads except the interface profile: a variable created there did nothing (`/api/v1/variables/effective` returned null for it), and one set through the API never appeared there.
+  The pages now manage the SYSTEM-scope variables the service resolves, so each is one thing; the store gained a `description`, a default value, a created time and a history table
+  (`variables_binding_history`), and `set_variable` / `unset_variable` write the history in the same transaction, so a change from the page, the API or the interface profile page is in
+  History (and no longer only when it came from the page). The page's types, checks and messages are unchanged: a `SystemVariableStore` with the legacy store's interface sits behind its
+  existing seam. The migration copies the legacy variables and their history once, only where the modern store has no SYSTEM variable of that name (a variable somebody already set through
+  the API wins), and leaves the legacy tables untouched, so a rollback is a redeploy of the previous release; removing them is the next step. `PUT /api/v1/variables/{scope}/{scope_id}/{name}`
+  accepts an optional `description` (kept when left out). The OpenAPI document listed the scopes as `global`, `project`, `pod`, `run`; the routes accept `system`, `project`, `pipeline`, `job`, so a client
+  built from the document got a 400. It is corrected.
+
 - A notification channel's `secret://` settings reached the sender as a `{name, version}` dictionary (the variables module's reference resolver is a stub), and a
   parked message replayed with the raw `secret://` text; both now read the real value from the secrets vault (ORG-F08). A webhook channel whose address was not
   `http://` or `https://` (for example `file://`) was accepted; it is refused when the channel is made.

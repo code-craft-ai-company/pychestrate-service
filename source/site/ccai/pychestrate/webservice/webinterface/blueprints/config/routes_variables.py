@@ -137,16 +137,17 @@ VARIABLE_FIELD_LABELS: Dict[str, str] = {
 
 def _build_variable_store(*, db_session: Any) -> Any:
     """
-        Construct a :class:`GlobalVariableStore`. Lazy-import.
+        Construct the store the pages use: a :class:`SystemVariableStore`, the legacy store's interface over the SYSTEM-scope variables the
+        runtime and ``/api/v1/variables`` read (audit ADM-08). Lazy-import.
 
         :param db_session: Open SQLAlchemy session.
 
-        :returns: GlobalVariableStore instance.
+        :returns: SystemVariableStore instance.
     """
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
-        GlobalVariableStore,
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
+        SystemVariableStore,
     )
-    rtnval = GlobalVariableStore(db_session)
+    rtnval = SystemVariableStore(db_session)
     return rtnval
 
 

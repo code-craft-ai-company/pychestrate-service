@@ -25,7 +25,7 @@ from typing import Dict
 
 from ccai import testbase
 
-from ccai.pychestrate.core.managers.global_variable_store import GlobalVariableStore
+from ccai.pychestrate.webservice.variables.system_store import SystemVariableStore
 from ccai.pychestrate.webservice.webinterface.site_shell import ui_profile
 
 from ccai.tests.singlehost.pychestrate.webservice.phase10 import _adm_helpers as adm
@@ -48,7 +48,7 @@ def _seed_profile() -> None:
 def _stored_value() -> object:
     session = adm.open_db_session()
     try:
-        variable = GlobalVariableStore(session).get_variable(OWNED)
+        variable = SystemVariableStore(session).get_variable(OWNED)
         return None if variable is None else variable.value
     finally:
         session.close()

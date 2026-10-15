@@ -127,6 +127,7 @@ class _FakeBinding:
         self.name: str = name
         self.value_type: VariableValueType = value_type
         self.set_by_user_id: Optional[str] = set_by_user_id
+        self.description: Optional[str] = None
         self.set_at: datetime = datetime(
             2026, 5, 3, 12, 0, 0, tzinfo=timezone.utc
         )

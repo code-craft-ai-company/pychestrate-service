@@ -54,8 +54,13 @@ def _entry_ids(manifest: dict) -> List[str]:
 
 
 def _core_session():
+    # The deployment profile is a SYSTEM variable of the modern store (audit ADM-08), so the database needs those tables too.
+    from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
+    import ccai.pychestrate.webservice.variables.models  # noqa: F401 -- registers the variable tables
+
     engine = sa.create_engine("sqlite://")
     PychestrateModelBase.metadata.create_all(engine)
+    PychestratePhase1Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
     return session
 

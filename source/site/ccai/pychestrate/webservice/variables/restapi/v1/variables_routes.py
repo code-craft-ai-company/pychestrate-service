@@ -263,6 +263,7 @@ def _binding_to_dict(binding: Any) -> dict:
         "name": binding.name,
         "value_type": binding.value_type.value,
         "value": variable_service.decode_binding_value(binding=binding),
+        "description": binding.description or "",
         "set_at": (
             binding.set_at.isoformat() if binding.set_at is not None else None
         ),
@@ -314,7 +315,8 @@ def _trace_to_list(*, entries: List[dict]) -> List[dict]:
 def handle_set_variable(request: Request) -> Response:
     """
         ``PUT /api/v1/variables/{scope}/{scope_id}/{name}`` — set
-        or replace a binding.
+        or replace a binding. An optional ``description`` says what the variable is for (the Admin Variables
+        pages show it); leaving it out keeps an existing one. The change is in the variable's history.
 
         :param request: Incoming webworks request.
 
@@ -333,6 +335,12 @@ def handle_set_variable(request: Request) -> Response:
         value_type = _parse_value_type_or_abort(
             request=request, raw=str(payload.get("value_type", ""))
         )
+        description = payload.get("description", None)
+        if description is not None and (isinstance(description, str) is False or len(description) > 512):
+            _abort_problem(
+                request=request, status=400, detail="description must be text of at most 512 characters",
+                extensions=_binding_extensions(scope=scope_raw, scope_id=scope_id, name=name),
+            )
 
         try:
             binding = variable_service.set_variable(
@@ -343,6 +351,7 @@ def handle_set_variable(request: Request) -> Response:
                 value=payload.get("value", None),
                 value_type=value_type,
                 actor_user_id=actor_user_id,
+                description=description,
             )
         except InvalidVariableScopeError as xcpt:
             _abort_problem(

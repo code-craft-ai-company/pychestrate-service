@@ -48,6 +48,12 @@ def upsert_binding(*, db_session: DbSession, binding: VariableBinding) -> Variab
     existing.value_text = binding.value_text
     existing.set_by_user_id = binding.set_by_user_id
     existing.set_at = binding.set_at
+    if binding.description is not None:
+        existing.description = binding.description
+    if binding.default_value_text is not None:
+        existing.default_value_text = binding.default_value_text
+    if existing.created_at is None:
+        existing.created_at = binding.created_at if binding.created_at is not None else binding.set_at
     db_session.add(existing)
     db_session.flush()
 

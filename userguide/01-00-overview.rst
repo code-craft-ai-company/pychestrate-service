@@ -195,7 +195,13 @@ Users, roles, and permissions
 Secrets and variables
     Credentials and configuration that jobs and integrations use.
     Secrets are encrypted at rest with a key-encryption key (KEK) the
-    operator provides; variables are plain configuration values.
+    operator provides; variables are plain configuration values. The **Variables**
+    page under **Admin** and the REST API's system-scope variables
+    (``/api/v1/variables/system//<name>``) are one store: a variable created on the
+    page is the one the service and ``/api/v1/variables/effective`` read, one set
+    through the API appears on the page, and each change (page or API) is in the
+    variable's history. A variable the product owns, such as the interface profile,
+    is shown read-only on the page.
 
 Extensions
     Pychestrate's pluggable parts -- password hashers, auth providers,

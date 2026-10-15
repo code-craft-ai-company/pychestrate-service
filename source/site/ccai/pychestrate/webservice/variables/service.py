@@ -43,6 +43,7 @@ from ccai.pychestrate.webservice.variables.factories.database_resolver import (
 )
 from ccai.pychestrate.webservice.variables.models import (
     VariableBinding,
+    VariableBindingHistory,
     VariableScope,
     VariableValueType,
 )
@@ -73,10 +74,12 @@ def set_variable(
         name: str,
         value: Any,
         value_type: VariableValueType,
-        actor_user_id: Optional[str]
+        actor_user_id: Optional[str],
+        description: Optional[str] = None,
+        default_value: Any = None
     ) -> VariableBinding:
     """
-        Create or replace a variable binding.
+        Create or replace a variable binding. The change is recorded in the variable's history in the same transaction.
 
         :param db_session: Active SQLAlchemy session.
         :param scope: Target scope.
@@ -85,6 +88,8 @@ def set_variable(
         :param value: Python value.
         :param value_type: Declared value type.
         :param actor_user_id: Acting principal.
+        :param description: What the variable is for; ``None`` leaves an existing description as it is (``""`` clears it).
+        :param default_value: The value to fall back to, of the same type; ``None`` leaves an existing default as it is.
 
         :returns: The persisted :class:`VariableBinding`.
         :raises: InvalidVariableScopeError, InvalidVariableValueError, SemanticError
@@ -95,19 +100,31 @@ def set_variable(
         raise SemanticError("set_variable requires a non-empty name")
 
     encoded = _encode_value(value=value, value_type=value_type)
+    encoded_default = _encode_value(value=default_value, value_type=value_type) if default_value is not None else None
+    normalized_scope_id = _normalize_scope_id(scope=scope, scope_id=scope_id)
+    previous = variable_repository.get_binding(db_session=db_session, scope=scope, scope_id=normalized_scope_id, name=name.strip())
+    previous_text = previous.value_text if previous is not None else None
+    now = utc_now()
 
     binding = VariableBinding(
         binding_id=new_uuid(),
         scope=scope,
-        scope_id=_normalize_scope_id(scope=scope, scope_id=scope_id),
+        scope_id=normalized_scope_id,
         name=name.strip(),
         value_type=value_type,
         value_text=encoded,
         set_by_user_id=actor_user_id,
-        set_at=utc_now(),
+        set_at=now,
+        description=description,
+        default_value_text=encoded_default,
+        created_at=now,
     )
 
     persisted = variable_repository.upsert_binding(db_session=db_session, binding=binding)
+    db_session.add(VariableBindingHistory(
+        history_id=new_uuid(), scope=scope, scope_id=normalized_scope_id, name=persisted.name, value_type=value_type,
+        old_value_text=previous_text, new_value_text=encoded, changed_by_user_id=actor_user_id, changed_at=now,
+    ))
     variable_cache.invalidate_for_name(name=binding.name)
 
     event_payload = {
@@ -168,6 +185,10 @@ def unset_variable(
         err_msg = os.linesep.join(err_msg_lines)
         raise VariableNotFoundError(err_msg) from None
 
+    db_session.add(VariableBindingHistory(
+        history_id=new_uuid(), scope=scope, scope_id=normalized_id, name=existing.name, value_type=existing.value_type,
+        old_value_text=existing.value_text, new_value_text=None, changed_by_user_id=actor_user_id, changed_at=utc_now(),
+    ))
     variable_repository.delete_binding(db_session=db_session, binding=existing)
     variable_cache.invalidate_for_name(name=name)
 
@@ -415,6 +436,20 @@ def decode_binding_value(*, binding: VariableBinding) -> Any:
         encoded=binding.value_text,
         value_type=binding.value_type,
     )
+    return rtnval
+
+
+def decode_text(*, encoded: Optional[str], value_type: VariableValueType) -> Any:
+    """
+        Decode stored text (a value, a default or a history entry) into its Python form for ``value_type``.
+
+        :param encoded: The stored text.
+        :param value_type: The declared type.
+
+        :returns: The decoded value.
+        :raises: ValueError, TypeError when the text is not a valid ``value_type``.
+    """
+    rtnval = _decode_value(encoded=encoded, value_type=value_type)
     return rtnval
 
 
