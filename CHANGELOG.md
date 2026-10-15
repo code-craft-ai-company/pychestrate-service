@@ -29,6 +29,9 @@ preview tag.
 
 ### Fixed
 
+- **The projects dashboard's runs say what ran, not only their kind (PRJ-21, ORC-11).** On the lab's real runs the "Needs attention" list read "RPA · tasker-demo" five times and the recent runs "Test · testbase", so
+  five different failures looked the same. A row now leads with the name of what ran, the way the Runs list names it (a test's name, an RPA job's specification, "build:makefile"), with the kind after it
+  ("tasker-bad RPA · tasker-demo"); a run whose name is not known keeps just its kind.
 - **The Builds list shows a real build's targets and source (ORC-11).** The guide says a build leads with its runner and target ("makefile · docs") and shows its source, but on real builds the rows read just
   "makefile 290de6f5" with "—" as the source: the list looked for a single `target` while the runner (and the guide's own example) use a `targets` list, and only a source integration's source was shown. A row now reads
   "makefile · all" (a list is joined, cut at 40 characters; a single `target` still works), and a build that names its source in its runner inputs shows it: "v2 @ github.com/acme/other" from `git_url` and `git_ref`,

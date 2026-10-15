@@ -17,7 +17,7 @@
         <tbody>
             {% for run in dashboard_attention_runs %}
             <tr data-role="attention-run">
-                <td><a href="/runs/{{ run.run_id }}">{{ run.kind }}</a></td>
+                <td><a href="/runs/{{ run.run_id }}">{{ run.name or run.kind }}</a>{% if run.name %} <span class="muted">{{ run.kind }}</span>{% endif %}</td>
                 <td>{% if run.project_legacy_id %}<a href="{{ url_for('projects.project_detail', project_id=run.project_legacy_id) }}">{{ run.project_name }}</a>{% else %}{{ run.project_name }}{% endif %}</td>
                 <td><span class="badge badge-{{ run.tone }}">{{ run.state_label }}</span></td>
                 <td>{{ run.at | format_datetime('%Y-%m-%d %H:%M', '') }}</td>
@@ -104,7 +104,7 @@
         <tbody>
             {% for run in dashboard_recent_runs %}
             <tr data-role="recent-run">
-                <td><a href="/runs/{{ run.run_id }}">{{ run.kind }}</a></td>
+                <td><a href="/runs/{{ run.run_id }}">{{ run.name or run.kind }}</a>{% if run.name %} <span class="muted">{{ run.kind }}</span>{% endif %}</td>
                 <td>{% if run.project_legacy_id %}<a href="{{ url_for('projects.project_detail', project_id=run.project_legacy_id) }}">{{ run.project_name }}</a>{% else %}{{ run.project_name }}{% endif %}</td>
                 <td><span class="badge badge-{{ run.tone }}">{{ run.state_label }}</span></td>
                 <td>{{ run.at | format_datetime('%Y-%m-%d %H:%M', '') }}</td>

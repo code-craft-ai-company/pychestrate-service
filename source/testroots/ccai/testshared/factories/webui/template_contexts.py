@@ -180,7 +180,7 @@ def _copy_of(mode: str) -> Any:
 
 _DASHBOARD_RUN_ROW: Dict[str, Any] = {
     "run_id": "11111111-2222-4333-8444-555555555555", "project_legacy_id": 1, "project_name": "Alpha",
-    "kind": "Test \u00b7 testbase", "state": "failed", "state_label": "Failed", "tone": "danger",
+    "kind": "Test \u00b7 testbase", "name": "test_login", "state": "failed", "state_label": "Failed", "tone": "danger",
     "at": datetime(2026, 9, 29, 10, 0, tzinfo=timezone.utc),
 }
 

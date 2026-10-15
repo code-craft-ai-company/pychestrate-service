@@ -107,7 +107,33 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-def _row(run: Run, projects: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def _names_for(*, db_session: DbSession, runs: Iterable[Run]) -> Dict[str, str]:
+    """
+        What each run ran, by the name the Runs list gives it (a test's name, an RPA job's specification, "build:makefile"), so a row says
+        which failed and not only what kind it was. A run whose name is not known is left out.
+
+        :param db_session: Active session.
+        :param runs: The runs of the rows about to be shown.
+
+        :returns: ``{run id: name}``.
+    """
+    from ccai.pychestrate.webservice.runs.restapi.v1.runs_routes import describe_run  # noqa: E402
+
+    rtnval: Dict[str, str] = {}
+    for run in runs:
+        run_id = str(run.run_id)
+        if run_id in rtnval:
+            continue
+        try:
+            name = describe_run(db_session=db_session, run_id=run_id).get("job_name")
+        except Exception:  # noqa: BLE001 -- a row with only its kind is better than a broken dashboard
+            name = None
+        if name:
+            rtnval[run_id] = name
+    return rtnval
+
+
+def _row(run: Run, projects: Dict[str, Dict[str, Any]], names: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     state = run.state.value if hasattr(run.state, "value") else str(run.state)
     project = projects.get(str(run.project_id), {"legacy_id": None, "name": "Unknown project"})
     return {
@@ -115,6 +141,7 @@ def _row(run: Run, projects: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         "project_legacy_id": project["legacy_id"],
         "project_name": project["name"],
         "kind": run_kind_label(run.job_type),
+        "name": (names or {}).get(str(run.run_id)),
         "state": state,
         "state_label": state_label(state),
         "tone": state_tone(state),
@@ -197,7 +224,7 @@ def collect_run_activity(
 
         :returns: ``{"attention": [...], "recent": [...], "last_by_project": {legacy id: row},
                   "attention_by_project": {legacy id: count}}`` where a row has ``run_id``,
-                  ``project_legacy_id``, ``project_name``, ``kind``, ``state``, ``state_label``,
+                  ``project_legacy_id``, ``project_name``, ``kind``, ``name`` (what ran, or None), ``state``, ``state_label``,
                   ``tone`` and ``at``, and the count is how many of a listed project's runs are in
                   an attention state from the last week (a project with none is left out).
     """
@@ -232,7 +259,7 @@ def collect_run_activity(
         listed = {uuid_text: info for uuid_text, info in listed.items() if uuid_text in reachable_ids}
     named = _projects_by_uuid(db_session=db_session, uuids=set(str(run.project_id) for run in attention + recent))
     named.update(listed)
-    last_by_project: Dict[Any, Dict[str, Any]] = {}
+    last_runs: Dict[Any, Run] = {}
     for uuid_text, info in listed.items():
         last = (
             db_session.query(Run)
@@ -241,7 +268,9 @@ def collect_run_activity(
             .first()
         )
         if last is not None:
-            last_by_project[info["legacy_id"]] = _row(last, named)
+            last_runs[info["legacy_id"]] = last
+    names = _names_for(db_session=db_session, runs=list(attention) + list(recent) + list(last_runs.values()))
+    last_by_project: Dict[Any, Dict[str, Any]] = {legacy_id: _row(last, named, names) for legacy_id, last in last_runs.items()}
     # How many of each listed project's runs need attention (one grouped query), so the table can say
     # which projects are in trouble and list them first (PRJ-21), not only name the latest run.
     attention_by_project: Dict[Any, int] = {}
@@ -260,8 +289,8 @@ def collect_run_activity(
             if by_uuid.get(uuid_text, 0) > 0:
                 attention_by_project[info["legacy_id"]] = by_uuid[uuid_text]
     return {
-        "attention": [_row(run, named) for run in attention],
-        "recent": [_row(run, named) for run in recent],
+        "attention": [_row(run, named, names) for run in attention],
+        "recent": [_row(run, named, names) for run in recent],
         "last_by_project": last_by_project,
         "attention_by_project": attention_by_project,
     }

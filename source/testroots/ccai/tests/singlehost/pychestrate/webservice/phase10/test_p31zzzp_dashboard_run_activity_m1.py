@@ -28,6 +28,7 @@ from ccai import testbase
 
 from ccai.pychestrate.webservice.jobs.run.state.enums import RunState
 from ccai.pychestrate.webservice.jobs.run.state.models import Run
+from ccai.pychestrate.webservice.orchestration.rpa.models import RpaExecutionMode, RpaJob, RpaJobStatus
 from ccai.pychestrate.webservice.projects.bridge import registry_project_uuid_for_ref
 from ccai.pychestrate.webservice.projects.models import Project
 from ccai.pychestrate.webservice.webinterface.blueprints.projects import dashboard_activity as activity
@@ -185,5 +186,41 @@ def test_a_viewer_who_can_reach_every_project_sees_the_runs_of_all_bridged_ones(
     testbase.assert_equal(
         ([(row["run_id"], row["project_name"]) for row in found["attention"]], [row["project_name"] for row in found["recent"]], found["last_by_project"][1]["run_id"]),
         ([(failed, "Alpha")], ["Alpha"], failed),
+    )
+    return
+
+
+def test_a_row_says_what_ran_beside_its_kind_when_that_is_known():
+    """
+    **Feature: projects dashboard (ORC-11)**
+    **Property: a row carries the name of what ran (an RPA job's specification, here) beside its kind, so five failed runs of one job type are told apart on the dashboard; a run whose name
+    is not known has none and still shows its kind; the page prints the name as the link and the kind after it.**
+    """
+    _engine, session = build_in_memory_session()
+    alpha = _project(session, legacy_id=1, name="Alpha")
+    named = _run(session, alpha, RunState.FAILED, hours_ago=3, job_type="rpa-tasker-demo")
+    plain = _run(session, alpha, RunState.FAILED, hours_ago=2, job_type="build-makefile")
+    session.add(RpaJob(
+        job_id=named, project_id=alpha, spec_id=None, spec_name="nightly-ledger-import", type_id="tasker-demo", resolved_version="1.0.0",
+        execution_mode=RpaExecutionMode.TASKER, status=RpaJobStatus.FAILED,
+    ))
+    session.commit()
+    found = activity.collect_run_activity(db_session=session, accessible_legacy_ids=[1], listed_legacy_ids=[1], now=NOW)
+    rows = {row["run_id"]: row for row in found["attention"]}
+
+    import os
+
+    from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES
+
+    template_path = os.path.join(os.path.dirname(SITE_DIRECTORIES.DIR_STATIC), "blueprints", "projects", "templates", "projects", "dashboard.html")
+    with open(template_path, encoding="utf-8") as handle:
+        template = handle.read()
+
+    testbase.assert_equal(
+        (
+            (rows[named]["name"], rows[named]["kind"]), (rows[plain]["name"], rows[plain]["kind"]), found["last_by_project"][1]["run_id"] == plain,
+            template.count("{{ run.name or run.kind }}"), template.count("{% if run.name %} <span class=\"muted\">{{ run.kind }}</span>{% endif %}"),
+        ),
+        (("nightly-ledger-import", "RPA · tasker-demo"), (None, "Build · makefile"), True, 2, 2),
     )
     return
