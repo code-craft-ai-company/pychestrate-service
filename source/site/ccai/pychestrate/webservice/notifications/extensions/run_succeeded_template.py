@@ -46,9 +46,20 @@ class RunSucceededTemplate(NotificationTemplateExtension):
         run_id = payload.get("run_id", "<unknown>")
         project_slug = payload.get("project_slug", "<unknown>")
         reason = payload.get("reason", "")
-        subject = "[Pychestrate] Run {} completed in {}".format(run_id, project_slug)
-        body_lines = ["Run id: {}".format(run_id), "Project: {}".format(project_slug)]
+        job_name = payload.get("job_name", None)
+        if job_name:
+            subject = "[Pychestrate] {} ({}) completed in {}".format(job_name, str(run_id)[:8], project_slug)
+        else:
+            subject = "[Pychestrate] Run {} completed in {}".format(run_id, project_slug)
+        body_lines = []
+        if job_name:
+            body_lines.append("Job: {}".format(job_name))
+        body_lines.extend(["Run id: {}".format(run_id), "Project: {}".format(project_slug)])
+        if payload.get("triggered_by", None):
+            body_lines.append("Triggered by: {}".format(payload["triggered_by"]))
         if reason:
             body_lines.append("Note: {}".format(reason))
+        if payload.get("run_url", None):
+            body_lines.append("Open: {}".format(payload["run_url"]))
         rtnval = RenderedMessage(subject=subject, body="\n".join(body_lines), severity=cls.default_severity)
         return rtnval

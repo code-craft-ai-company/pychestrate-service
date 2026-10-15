@@ -53,7 +53,8 @@ _STOP = object()
 def build_template_payload(*, db_session: DbSession, event_payload: Mapping[str, Any]) -> Dict[str, Any]:
     """
         The mapping a notification template renders from a run event: the run id, the
-        project (id and slug), the state the run ended in and the reason, if any.
+        project (id and slug), the state the run ended in and the reason, if any, and what a reader wants to know
+        beside the id: the job's name and type, who started it, and a link to the run (when the service has a public URL).
 
         :param db_session: A session, to name the project.
         :param event_payload: The bus event's payload.
@@ -68,12 +69,32 @@ def build_template_payload(*, db_session: DbSession, event_payload: Mapping[str,
             slug = row[0] if row is not None else None
         except Exception:  # noqa: BLE001 -- a message with the id is better than none
             slug = None
+    run_id = str(event_payload.get("run_id", ""))
+    described: Dict[str, Optional[str]] = {"job_name": None, "job_type": None, "triggered_by": None}
+    try:
+        from ccai.pychestrate.webservice.runs.restapi.v1.runs_routes import describe_run  # noqa: E402
+
+        described = describe_run(db_session=db_session, run_id=run_id)
+    except Exception:  # noqa: BLE001 -- a message with the id is better than none
+        pass
+    run_url: Optional[str] = None
+    try:
+        from ccai.pychestrate.webservice.public_endpoint import resolve_public_base_url  # noqa: E402
+
+        base = resolve_public_base_url()
+        run_url = "{}/runs/{}".format(base, run_id) if base is not None and len(run_id) > 0 else None
+    except Exception:  # noqa: BLE001
+        run_url = None
     rtnval = {
-        "run_id": str(event_payload.get("run_id", "")),
+        "run_id": run_id,
         "project_id": str(project_id) if project_id is not None else None,
         "project_slug": slug if slug is not None else (str(project_id) if project_id is not None else "<unknown>"),
         "to_state": str(event_payload.get("to_state", "")),
         "reason": str(event_payload.get("reason", "") or ""),
+        "job_name": described.get("job_name"),
+        "job_type": described.get("job_type"),
+        "triggered_by": described.get("triggered_by"),
+        "run_url": run_url,
     }
     return rtnval
 

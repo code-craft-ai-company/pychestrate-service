@@ -856,6 +856,50 @@ def _triggered_by_name(*, db_session: Any, run_id: str) -> Optional[str]:
     return rtnval
 
 
+def _rpa_spec_name_for(*, db_session: Any, run_id: str, job_type: str, job_name: Optional[str]) -> Optional[str]:
+    """
+        An RPA run is named "rpa:<job type>" in its envelope, the same for every specification of the type (a passing and a failing
+        job of one type were indistinguishable in the Runs list and in notifications); the name a person gave the specification the
+        job ran from is what says what ran.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: The run's id (an RPA job's id is its run's id).
+        :param job_type: The run's job type ("rpa-process", "rpa-tasker").
+        :param job_name: The name the envelope gave, if any.
+
+        :returns: The specification's name for an RPA job that has one, else ``job_name`` unchanged.
+    """
+    if not job_type.startswith("rpa"):
+        return job_name
+    from ccai.pychestrate.webservice.orchestration.rpa.models import RpaJob  # noqa: E402
+
+    try:
+        spec_name = db_session.query(RpaJob.spec_name).filter(RpaJob.job_id == run_id).scalar()
+    except Exception:
+        # Sessions without the RPA tables (unit-test fakes) have no specification to name.
+        return job_name
+    rtnval = str(spec_name) if spec_name else job_name
+    return rtnval
+
+
+def describe_run(*, db_session: Any, run_id: str) -> Dict[str, Optional[str]]:
+    """
+        What a person reading a message about a run wants to know of it besides its id: what ran (the job's name),
+        its type, and who started it. Any of them is None when not known; a run that does not exist describes as nothing.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: The run's id.
+
+        :returns: ``{"job_name", "job_type", "triggered_by"}``.
+    """
+    row = db_session.query(Run).filter(Run.run_id == run_id).first()
+    if row is None:
+        return {"job_name": None, "job_type": None, "triggered_by": None}
+    described = _run_to_dict(row=row, db_session=db_session)
+    rtnval = {key: (str(described[key]) if described.get(key) else None) for key in ("job_name", "job_type", "triggered_by")}
+    return rtnval
+
+
 def _run_to_dict(
         *,
         row: Run,
@@ -921,6 +965,7 @@ def _run_to_dict(
             envelope_id=str(attempt.envelope_id),
         )
         job_name = _readable_job_name(db_session=db_session, job_id=job_id, job_name=job_name)
+    job_name = _rpa_spec_name_for(db_session=db_session, run_id=run_id, job_type=str(row.job_type or ""), job_name=job_name)
 
     progress_summary = _progress_summary_block(
         db_session=db_session, run_id=run_id,

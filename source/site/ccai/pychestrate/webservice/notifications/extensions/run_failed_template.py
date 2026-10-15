@@ -24,8 +24,9 @@ from ccai.pychestrate.webservice.notifications.extensions.template import (
 class RunFailedTemplate(NotificationTemplateExtension):
     """
         Reference template for ``entity.run.failed`` events. The subject
-        line includes the run id and the project slug; the body is a
-        three-line summary.
+        line names the job (or, when that is not known, the run id) and the
+        project slug; the body says what ran, which run, who started it, why it
+        failed and where to open it, each line only when known.
     """
 
     resource_extension_name: ClassVar[str] = "notification_template"
@@ -47,12 +48,22 @@ class RunFailedTemplate(NotificationTemplateExtension):
         project_slug = payload.get("project_slug", "<unknown>")
         reason = payload.get("reason", "")
 
-        subject = "[Pychestrate] Run {} failed in {}".format(run_id, project_slug)
+        job_name = payload.get("job_name", None)
+        if job_name:
+            subject = "[Pychestrate] {} ({}) failed in {}".format(job_name, str(run_id)[:8], project_slug)
+        else:
+            subject = "[Pychestrate] Run {} failed in {}".format(run_id, project_slug)
 
         body_lines = []
+        if job_name:
+            body_lines.append("Job: {}".format(job_name))
         body_lines.append("Run id: {}".format(run_id))
         body_lines.append("Project: {}".format(project_slug))
+        if payload.get("triggered_by", None):
+            body_lines.append("Triggered by: {}".format(payload["triggered_by"]))
         body_lines.append("Reason: {}".format(reason))
+        if payload.get("run_url", None):
+            body_lines.append("Open: {}".format(payload["run_url"]))
         body = "\n".join(body_lines)
 
         rtnval = RenderedMessage(

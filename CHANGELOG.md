@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- **A run notification says what ran, who started it and where to open it; an RPA run is named by its specification (ORG-F08, ORC-11).** A failed-run message read "Run 48f18a78-8155-470e-b6cb-965f409f1964 failed in
+  lab-project" and a reason, with nothing to tell which job it was. It now reads `[Pychestrate] tasker-bad (48f18a78) failed in lab-project`, with lines for the job, the run id, the project, who triggered it, the
+  reason and a link to the run (when `PYCHESTRATE_PUBLIC_BASE_URL` is set); an event with none of that known keeps the plain message. Behind it, an RPA run's name was "rpa:<job type>" for every specification of the
+  type (a passing and a failing job of one type were told apart nowhere: not in the Runs list, the API or the message); it is now the name of the specification the job ran from. Seen on the lab pod with a passing and a
+  failing taskplus job; the receiver got "tasker-ok (d9153fe2) completed" and "tasker-bad (35be8de6) failed" with the reason "RPA job exited with code 1: the ledger is unreachable".
 - **The RPA jobs table fits and no longer breaks a job's id into three lines (ORC-35).** With real jobs, nine columns did not fit the content area and every cell could break anywhere: "bed / 376 / e1" for an
   id, "tasker / -demo" for a type, the time over three lines. The short-value cells are now one line each (the specification's name absorbs the squeeze), the version sits beside the job type, the mode (shown on
   the job's page, and as a hover on the type) and a second "View" button (the id already links to the job) are gone, and Logs is a plain link. It fits at 1440 px; narrower, the table scrolls inside its own box
