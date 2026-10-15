@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **The Builds list shows a real build's targets and source (ORC-11).** The guide says a build leads with its runner and target ("makefile · docs") and shows its source, but on real builds the rows read just
+  "makefile 290de6f5" with "—" as the source: the list looked for a single `target` while the runner (and the guide's own example) use a `targets` list, and only a source integration's source was shown. A row now reads
+  "makefile · all" (a list is joined, cut at 40 characters; a single `target` still works), and a build that names its source in its runner inputs shows it: "v2 @ github.com/acme/other" from `git_url` and `git_ref`,
+  "local: builds/widgets" from `source_dir`. Checked on the lab's real builds.
 - **The Test Catalog's Trigger Run button is on screen at laptop widths (ORC-35).** Found by using the page with real entries: the Run action was the last of six columns and the table 80 rem wide, so at 1400 px (a
   common laptop width) the page's main action was scrolled out of sight; it only showed at about 1700 px. The action now follows the name, the secondary columns (capabilities, importer, created) follow it, and the table
   is 66 rem, so it fits a laptop with every column complete (the entry key is not cut either). A run started from it says "Run triggered." with a link to the run.

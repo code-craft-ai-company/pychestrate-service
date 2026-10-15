@@ -140,7 +140,9 @@ def test_the_builds_list_leads_with_the_runner_and_target_and_shows_the_source(b
     """
     **Feature: run lists say what ran (ORC-11)**
     **Property: each build row starts with its runner kind and target followed
-    by the short id, shows where its source came from ("main @ github.com/…",
+    by the short id (the target is the ``targets`` list a real build carries, joined, or a single
+    ``target``), shows where its source came from ("main @ github.com/…" from a source integration or
+    from ``git_url`` and ``git_ref`` in its inputs, "local: builds/widgets" from ``source_dir``,
     "—" when it has none) and how long it took.**
     """
     builds = {
@@ -150,8 +152,13 @@ def test_the_builds_list_leads_with_the_runner_and_target_and_shows_the_source(b
              "source": {"kind": "git", "url": "https://github.com/acme/widgets.git", "ref": "main", "integration_id": "i-1"}},
             {"run_id": "eeeeeeee-5555-4000-8000-000000000005", "project_id": PROJECT_ID, "runner_kind": "makefile", "inputs": {},
              "repro_digest_sha256": "0123456789abcdef", "state": "pending", "started_at": None, "finished_at": None, "source": None},
+            # What a real build's inputs look like: a "targets" list, and the source named in the inputs (no integration).
+            {"run_id": "ffffffff-6666-4000-8000-000000000006", "project_id": PROJECT_ID, "runner_kind": "makefile", "inputs": {"targets": ["all", "docs"], "source_dir": "/srv/builds/widgets/"},
+             "repro_digest_sha256": "1111111111111111", "state": "completed", "started_at": "2026-09-29T11:00:00+00:00", "finished_at": "2026-09-29T11:00:01+00:00", "source": None},
+            {"run_id": "99999999-7777-4000-8000-000000000007", "project_id": PROJECT_ID, "runner_kind": "makefile", "inputs": {"targets": ["install"], "git_url": "https://github.com/acme/other.git", "git_ref": "v2"},
+             "repro_digest_sha256": "2222222222222222", "state": "completed", "started_at": "2026-09-29T12:00:00+00:00", "finished_at": "2026-09-29T12:00:02+00:00", "source": None},
         ],
-        "meta": {"page": 1, "per_page": 50, "total": 2},
+        "meta": {"page": 1, "per_page": 50, "total": 4},
     }
     page = open_shell_page(
         browser, path="/builds?project_id=" + PROJECT_ID, bundle_names=["pyc-site-shell", "pyc-builds-bundle"],
@@ -171,9 +178,9 @@ def test_the_builds_list_leads_with_the_runner_and_target_and_shows_the_source(b
         (
             True,
             ["Build", "Source", "State", "Inputs digest", "Started", "Duration"],
-            ["makefile · docs dddddddd", "makefile eeeeeeee"],
-            ["main @ github.com/acme/widgets", "—"],
-            ["1m 40s", "—"],
+            ["makefile · docs dddddddd", "makefile eeeeeeee", "makefile · all, docs ffffffff", "makefile · install 99999999"],
+            ["main @ github.com/acme/widgets", "—", "local: builds/widgets", "v2 @ github.com/acme/other"],
+            ["1m 40s", "—", "1s", "2s"],
         ),
     )
     return

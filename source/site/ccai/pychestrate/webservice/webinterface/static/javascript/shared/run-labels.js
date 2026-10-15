@@ -78,15 +78,30 @@ export function run_title(run) {
 export function build_title(build) {
   const kind = typeof build.runner_kind === "string" && build.runner_kind.length > 0 ? build.runner_kind : "build";
   const inputs = build.inputs !== null && typeof build.inputs === "object" ? build.inputs : {};
-  const target = typeof inputs.target === "string" ? inputs.target.trim() : "";
-  return target.length > 0 ? kind + " · " + target : kind;
+  // The make targets: the "targets" list the runner reads (the guide's own example is {"targets": ["all"]}), or the single "target" some callers send.
+  const names = (Array.isArray(inputs.targets) ? inputs.targets : []).filter((name) => typeof name === "string" && name.trim().length > 0).map((name) => name.trim());
+  if (names.length === 0 && typeof inputs.target === "string" && inputs.target.trim().length > 0) {
+    names.push(inputs.target.trim());
+  }
+  let target = names.join(", ");
+  if (target.length > 40) {
+    target = target.slice(0, 39) + "\u2026";
+  }
+  return target.length > 0 ? kind + " \u00B7 " + target : kind;
 }
 
 /* Where a build's source came from: "main @ github.com/acme/repo", or "" without one. */
 export function build_source_label(build) {
-  const source = build.source;
-  if (source === null || source === void 0 || typeof source !== "object") {
-    return "";
+  const inputs = build.inputs !== null && typeof build.inputs === "object" ? build.inputs : {};
+  // A build that names its source in its runner inputs (no source integration) is shown as the integration's would be: a repository and ref, or a directory on the pod.
+  const source = build.source !== null && build.source !== void 0 && typeof build.source === "object"
+    ? build.source
+    : typeof inputs.git_url === "string" && inputs.git_url.length > 0
+      ? { url: inputs.git_url, ref: typeof inputs.git_ref === "string" ? inputs.git_ref : "" }
+      : null;
+  if (source === null) {
+    const directory = typeof inputs.source_dir === "string" ? inputs.source_dir.trim().replace(/\/+$/, "") : "";
+    return directory.length > 0 ? "local: " + directory.split("/").slice(-2).join("/") : "";
   }
   const ref = typeof source.ref === "string" ? source.ref : "";
   let repository = typeof source.url === "string" ? source.url : "";
