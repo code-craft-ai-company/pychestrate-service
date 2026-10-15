@@ -1056,25 +1056,11 @@ var PycTestCatalog = class extends HTMLElement {
           return key_code;
         }
       },
-      { key: "display_name", label: "Name", width: "14rem" },
-      {
-        key: "capabilities",
-        label: "Capabilities",
-        width: "12rem",
-        sortable: false,
-        render: (entry) => selection_summary(entry)
-      },
-      { key: "importer_tag", label: "Importer", width: "12rem" },
-      {
-        key: "created_at",
-        label: "Created",
-        width: "12rem",
-        render: (entry) => format_timestamp(entry.created_at)
-      },
+      { key: "display_name", label: "Name", width: "10rem" },
       {
         key: "action",
         label: "Action",
-        width: "10rem",
+        width: "9rem",
         sortable: false,
         render: (entry) => {
           const trigger_button = document.createElement("mj-button");
@@ -1090,6 +1076,20 @@ var PycTestCatalog = class extends HTMLElement {
           });
           return trigger_button;
         }
+      },
+      {
+        key: "capabilities",
+        label: "Capabilities",
+        width: "8rem",
+        sortable: false,
+        render: (entry) => selection_summary(entry)
+      },
+      { key: "importer_tag", label: "Importer", width: "8rem" },
+      {
+        key: "created_at",
+        label: "Created",
+        width: "11rem",
+        render: (entry) => format_timestamp(entry.created_at)
       }
     ];
     table.rows = this._entries;

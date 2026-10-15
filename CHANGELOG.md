@@ -29,6 +29,9 @@ preview tag.
 
 ### Fixed
 
+- **The Test Catalog's Trigger Run button is on screen at laptop widths (ORC-35).** Found by using the page with real entries: the Run action was the last of six columns and the table 80 rem wide, so at 1400 px (a
+  common laptop width) the page's main action was scrolled out of sight; it only showed at about 1700 px. The action now follows the name, the secondary columns (capabilities, importer, created) follow it, and the table
+  is 66 rem, so it fits a laptop with every column complete (the entry key is not cut either). A run started from it says "Run triggered." with a link to the run.
 - **A run notification says what ran, who started it and where to open it; an RPA run is named by its specification (ORG-F08, ORC-11).** A failed-run message read "Run 48f18a78-8155-470e-b6cb-965f409f1964 failed in
   lab-project" and a reason, with nothing to tell which job it was. It now reads `[Pychestrate] tasker-bad (48f18a78) failed in lab-project`, with lines for the job, the run id, the project, who triggered it, the
   reason and a link to the run (when `PYCHESTRATE_PUBLIC_BASE_URL` is set); an event with none of that known keeps the plain message. Behind it, an RPA run's name was "rpa:<job type>" for every specification of the
