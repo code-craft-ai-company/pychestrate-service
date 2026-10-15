@@ -278,6 +278,13 @@ preview tag.
 
 ### Added
 
+- **Deactivate, reactivate and anonymise a user through the REST API (ADM-41).** Anonymising a deactivated account (a data-protection request) was only on the Users
+  pages, and the API could not even deactivate one first. `POST /api/v1/identity/users/{id}/deactivate`, `/reactivate` and `/anonymise` (`system:users.write`) call the same
+  functions as the pages, so the rules are the same: deactivate first, never your own account, not an account that owns a project; a refusal is a 409 that says why and
+  changes nothing, an unknown or malformed id is a 404. They are in the OpenAPI document (so `pyc` has them). Earlier audit entries that name the person are not edited, on
+  purpose: the audit log is a hash chain, so an edit would break verification of every later entry; old entries leave by a retention policy. The guide says so, and tells an
+  administrator to remove the person's address from notification rules (`specs/1-user-management`, T2.11 done, T2.12 decided against).
+
 - A form whose session or token expired keeps what was typed on the forms that add a notification channel or rule too (XC-11): the typed server, address and
   recipients come back after signing in. The secret inputs (`secret__*`, and the vault secret chosen in `ref__*`) are never kept, and the channel page's own forms,
   including the one that replaces a secret, are not on the list at all; that form's input is now named `secret_value`, so its name says what it holds.

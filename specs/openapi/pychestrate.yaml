@@ -827,6 +827,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '404': { $ref: '#/components/responses/NotFound' }
+  /identity/users/{user_id}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    post:
+      tags: [users]
+      summary: Deactivate a user account.
+      description: >-
+        Ends the account's access now (its sign-in sessions are closed) and can be undone with
+        `reactivate`. Refused with 409 for your own account. Requires `system:users.write`.
+      operationId: users_deactivate
+      responses:
+        '200': { $ref: '#/components/responses/UserLifecycle' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /identity/users/{user_id}/reactivate:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    post:
+      tags: [users]
+      summary: Reactivate a deactivated user account.
+      description: >-
+        Undoes a deactivation. A local account that never set a password (a cancelled invitation)
+        goes back to `invited`, not `active`. Refused with 409 when the account is not deactivated
+        or is anonymised. Requires `system:users.write`.
+      operationId: users_reactivate
+      responses:
+        '200': { $ref: '#/components/responses/UserLifecycle' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /identity/users/{user_id}/anonymise:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    post:
+      tags: [users]
+      summary: Anonymise a deactivated user account (a data-protection request).
+      description: >-
+        Erases the account's personal data in place and **cannot be undone**: the login name, email
+        and display name become values derived from the id, and credentials, sessions, API tokens,
+        group memberships, role bindings and project memberships are deleted. The row and its id
+        stay so audit records that reference the user keep resolving. Refused with 409, changing
+        nothing, when the account is not deactivated, is already anonymised, is your own, or owns a
+        project (transfer or delete it first). Requires `system:users.write`.
+      operationId: users_anonymise
+      responses:
+        '200': { $ref: '#/components/responses/UserLifecycle' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   # =====================================================================
   # rbac
@@ -7068,6 +7115,21 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    UserLifecycle:
+      description: The account after the action.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [user_id, status]
+            properties:
+              user_id: { type: string, format: uuid }
+              status:
+                type: string
+                enum: [deactivated, active, invited, anonymised]
+              anonymised:
+                type: boolean
+                description: Present, true, after `anonymise`.
     Unprocessable:
       description: Request was well-formed but semantically invalid.
       content:

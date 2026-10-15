@@ -392,18 +392,21 @@ is a follow-up if an installation wants to keep anonymisation to fewer people.)
 Known residue, stated so nobody assumes more than is done: audit-log payloads and
 event outbox rows written *before* anonymisation may contain the login name or
 email of the person (for example `entity.user.deactivated` carries `login_name`);
-they are not rewritten. Notification routing rules hold recipient addresses as
-text and are not searched. Both need the retention work in `2-retention-policies`
-(scrubbing by `user_id`), and are listed in tasks.md.
+they are not rewritten, and that is a decision, not a gap (2026-10-15): audit records
+are a hash chain over their payloads, so editing one breaks the verification of every
+record after it, and re-chaining would defeat the log's tamper-evidence. Old entries
+leave through a retention policy, which expires whole entries (subject to legal hold).
+Notification routing rules hold recipient addresses as text an administrator typed and
+are not searched; the guide tells the administrator to look for the person's address on
+Admin, Notifications.
 
 ## Open Questions
 
 - Should `display_name` collisions be allowed? Current design: yes (only
   `login_name` / `primary_email` are unique). Close before Phase 1 cutover.
 - ~~Do we need soft-delete distinct from `DEACTIVATED` for GDPR erasure?~~
-  Decided: anonymise in place (see *Erasure by Anonymisation*); scrubbing
-  historical audit and outbox payloads by `user_id` is left to
-  `2-retention-policies`.
+  Decided: anonymise in place (see *Erasure by Anonymisation*); historical
+  audit payloads are not rewritten (hash chain), they leave by retention policy.
 - Group hierarchy: the current model is flat. If Phase 1 ships a demand
   for nested groups, add a self-referential `parent_group_id` column and
   ensure `1-rbac` resolves it before project scoping.

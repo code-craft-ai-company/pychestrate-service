@@ -184,7 +184,13 @@ Users, roles, and permissions
     and the account stays in the list as *Anonymised* so the audit log keeps resolving its id
     (it no longer names the person). An account that owns a project cannot be anonymised until the
     project is transferred or deleted; your own account cannot be anonymised. Entries written to
-    the audit log *before* the account was anonymised may still contain the person's login name.
+    the audit log *before* the account was anonymised may still contain the person's login name:
+    the log is tamper-evident (each entry is chained to the one before), so entries are not edited;
+    old ones leave by a retention policy. A notification rule holds the recipient addresses as they
+    were typed, so look for the person's address on **Admin**, **Notifications** and remove it.
+    The same three actions are in the REST API for a scripted request:
+    ``POST /api/v1/identity/users/{id}/deactivate``, ``/reactivate`` and ``/anonymise`` (need
+    ``system:users.write``; a refusal is a 409 that says why and changes nothing).
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.

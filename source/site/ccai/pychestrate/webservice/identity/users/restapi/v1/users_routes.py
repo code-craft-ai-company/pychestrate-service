@@ -9,10 +9,17 @@ The production webservice runs on ``ccai.webworks`` (see
 :mod:`app_pychestrate_main`). This module provides the
 webworks-native ``users`` controller.
 
-Two routes:
+Routes (reading needs ``system:users.read``, everything else ``system:users.write``):
 
 * ``POST /api/v1/identity/users`` — create user.
+* ``GET  /api/v1/identity/users`` — a page of users for a picker.
 * ``GET  /api/v1/identity/users/{user_id}`` — read user.
+* ``POST /api/v1/identity/users/{user_id}/deactivate`` — end the account's access (can be undone).
+* ``POST /api/v1/identity/users/{user_id}/reactivate`` — undo a deactivation.
+* ``POST /api/v1/identity/users/{user_id}/anonymise`` — erase a *deactivated* account's personal data in place
+  (a data-protection request; cannot be undone). 409 with the reason when refused. These three call the same
+  functions as the Users pages, so the rules (not your own account, deactivate first, not a project's owner)
+  are the same.
 
 Error responses are RFC 7807 problem documents per the convention
 in :mod:`api.problem_json_webworks`.
@@ -282,6 +289,64 @@ def handle_read_user(request: Request) -> Response:
     return rtnval
 
 
+def _admin_user_action(request: Request, *, action: str) -> Response:
+    """
+        Run one of the account-lifecycle actions the Users pages offer (``deactivate``, ``reactivate``, ``anonymise``) for the user in the path.
+        The functions are :mod:`webinterface.blueprints.config.identity_admin`'s, so the REST API and the pages cannot disagree about what is
+        allowed. A refusal (not found, your own account, wrong state, a project's owner) is a problem document; nothing changed.
+
+        :param request: Incoming webworks request.
+        :param action: ``deactivate``, ``reactivate`` or ``anonymise``.
+
+        :returns: JSON ``{"user_id", "status"}`` (or ``"anonymised": true``), or a problem response.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import identity_admin  # noqa: E402
+
+    user_id = str(request.path_params.get("user_id", ""))
+    try:
+        db_session = _require_session(request=request)
+        actor = _resolve_actor_user_id(request=request)
+        try:
+            if action == "deactivate":
+                identity_admin.deactivate_identity_user(db_session=db_session, user_id=user_id, actor_user_id=actor)
+                body = {"user_id": user_id, "status": "deactivated"}
+            elif action == "reactivate":
+                status = identity_admin.reactivate_identity_user(db_session=db_session, user_id=user_id, actor_user_id=actor)
+                body = {"user_id": user_id, "status": str(status).lower()}
+            else:
+                identity_admin.anonymise_identity_user(db_session=db_session, user_id=user_id, actor_user_id=actor)
+                body = {"user_id": user_id, "status": "anonymised", "anonymised": True}
+        except identity_admin.AdminNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"user_id": user_id})
+        except (identity_admin.SelfLockoutError, identity_admin.AdminValidationError) as xcpt:
+            _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"user_id": user_id})
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+def handle_deactivate_user(request: Request) -> Response:
+    """
+        ``POST /api/v1/identity/users/{user_id}/deactivate``.
+    """
+    return _admin_user_action(request, action="deactivate")
+
+
+def handle_reactivate_user(request: Request) -> Response:
+    """
+        ``POST /api/v1/identity/users/{user_id}/reactivate``.
+    """
+    return _admin_user_action(request, action="reactivate")
+
+
+def handle_anonymise_user(request: Request) -> Response:
+    """
+        ``POST /api/v1/identity/users/{user_id}/anonymise``.
+    """
+    return _admin_user_action(request, action="anonymise")
+
+
 #: The most users one page of the picker list returns.
 MAX_USERS_PAGE_SIZE: int = 200
 DEFAULT_USERS_PAGE_SIZE: int = 50
@@ -361,6 +426,10 @@ def register_users_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{user_id}", methods=["GET"]
     )(require_rest_permission(handle_read_user, permission_key="system:users.read"))
+    for action, handler in (("deactivate", handle_deactivate_user), ("reactivate", handle_reactivate_user), ("anonymise", handle_anonymise_user)):
+        app.attach_route(
+            base + "/{user_id}/" + action, methods=["POST"]
+        )(require_rest_permission(handler, permission_key="system:users.write"))
 
     return
 
@@ -373,4 +442,7 @@ __all__ = [
     "register_users_routes",
     "handle_create_user",
     "handle_read_user",
+    "handle_deactivate_user",
+    "handle_reactivate_user",
+    "handle_anonymise_user",
 ]

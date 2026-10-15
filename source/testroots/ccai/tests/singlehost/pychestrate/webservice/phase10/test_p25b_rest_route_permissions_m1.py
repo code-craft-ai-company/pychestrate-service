@@ -444,14 +444,18 @@ def test_audit_routes_declare_documented_permissions():
 def test_identity_users_routes_declare_documented_permissions():
     """
     **Feature: REST route permissions (LD-12)**
-    **Property: creating a user needs users.write; reading one and listing
-    them (the picker list) need users.read.**
+    **Property: creating a user, deactivating, reactivating and anonymising one
+    need users.write; reading one and listing them (the picker list) need
+    users.read.**
     """
     base = VERSION_PREFIX + "/identity/users"
     expected = {
         ("GET", base): "system:users.read",
         ("POST", base): "system:users.write",
         ("GET", base + "/{user_id}"): "system:users.read",
+        ("POST", base + "/{user_id}/deactivate"): "system:users.write",
+        ("POST", base + "/{user_id}/reactivate"): "system:users.write",
+        ("POST", base + "/{user_id}/anonymise"): "system:users.write",
     }
     testbase.assert_equal(
         _declared_permissions(registrar=users_routes.register_users_routes),
