@@ -46,6 +46,7 @@ from ccai.pychestrate.webservice.jobs.dispatch.errors import (
 from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
     DispatchCandidate,
 )
+from ccai.pychestrate.webservice.orchestration.rpa.candidates import capability_tags_for_client
 from ccai.pychestrate.webservice.orchestration.test import orchestrator as orchestrator_module
 from ccai.pychestrate.webservice.orchestration.test.catalog import repository as catalog_repo
 from ccai.pychestrate.webservice.orchestration.test.errors import (
@@ -371,7 +372,9 @@ def _resolve_catalog_entry(
 def _candidates_for_pod(*, db_session: Any, pod_id: str) -> List[DispatchCandidate]:
     """
         Build a :class:`DispatchCandidate` list from the REGISTERED
-        client registrations for a single pod.
+        client registrations for a single pod. Each candidate carries the
+        tags its client advertised (a test whose catalog entry requires a tag
+        is only dispatched to a pod that has it).
 
         :param db_session: Active SQLAlchemy session.
         :param pod_id: Target pod UUID.
@@ -394,7 +397,7 @@ def _candidates_for_pod(*, db_session: Any, pod_id: str) -> List[DispatchCandida
             DispatchCandidate(
                 client_id=str(client_id),
                 pod_id=str(pod_id),
-                capability_tags=tuple(),
+                capability_tags=capability_tags_for_client(db_session=db_session, client_id=str(client_id)),
                 inflight_dispatch_count=0,
                 last_dispatched_at_iso="",
             )

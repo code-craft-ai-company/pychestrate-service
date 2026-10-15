@@ -43,7 +43,11 @@ The service refuses to start a run that no pod can take, and says so: "No
 enrolled pod matches the job's capability requirements -- enroll a client/pod
 first." Check that a pod is enrolled in the project, is running (its client
 shows *Alive* under **Fleet**, **Clients**), and advertises any capability tags
-the entry requires.
+the entry requires. A pod's tags are the ``capability_tags`` in its client's
+``config.json`` (read when the client starts); the client's page under **Fleet**,
+**Clients** lists what it advertised. A run that requires a tag no pod advertises
+is refused with "No candidate pod satisfies the catalog entry's required
+capabilities", naming the tags it needed.
 
 
 Start a build

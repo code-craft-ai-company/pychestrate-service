@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- **A test that requires a capability tag can now be dispatched to a pod that advertises it (E2E-18).** Found with a real pod once it could advertise at all (`pychestrate-client` 6710ad7 makes the
+  capabilities call itself, because the published REST client package lacks it, so the Clients page now lists what a pod advertised): the pod advertised `lab-browser`, the service held it, and a catalog
+  entry requiring `lab-browser` was still refused with "No candidate pod satisfies the catalog entry's required capabilities", because the test-run route built every dispatch candidate with no tags. Each
+  candidate now carries its client's advertised tags (the capability kinds, `rpa:<job type>` and the free-form tags, as RPA dispatch already did). Checked in the lab: the job needing the advertised tag was
+  dispatched and completed, and one needing a tag no pod has was refused with a 409 naming it. Builds and infrastructure runs do not match on tags (they have none to require) and are unchanged.
 - **The Runs list and a run's page say who started it (ORC-11).** A test run records the user who triggered it and a build its actor, but the runs API never returned either. `GET /api/v1/runs`, `/runs/{id}`
   and the CSV export (as the last column, so scripts reading by position still work) now carry `triggered_by`, the user's display name (their login when they have none); the Runs list has a **Triggered by**
   column (a dash when no user did, for example a build a pipeline started or one whose user no longer exists) and the run page a **Triggered by** fact when it is known. The list's columns were narrowed a
