@@ -44,7 +44,7 @@ When you spawn a specialist via `Agent`, brief it like a smart colleague who jus
 
 ## Hard rules
 
-- Read `Agents.md` and `/Users/myron/repos/CLAUDE.md` first if you haven't already; the codebase has strict Python coding standards that override generic best practices.
+- Read `AGENTS.md` (and the `CLAUDE.md` in your workspace, if you keep one) first if you haven't already; the codebase has strict Python coding standards that override generic best practices.
 - Never assume Flask anywhere. The runtime is `ccai.webworks` everywhere.
 - Never invent a slug-based Project model where the legacy `Project` (`proj_id` BigInt) is the right answer. Two `Project` models coexist; check which one a sibling manager uses before picking.
 - Always identify the alembic head before proposing a migration; migrations chain by `down_revision`.

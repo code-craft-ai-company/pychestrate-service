@@ -20,7 +20,7 @@ You are the UI testing specialist for the pychestrate-service.
 The a11y snapshot will list elements that exist in the DOM even when they're visually hidden (e.g., zero-width sidebar). Cross-check with `evaluate_script` + `getBoundingClientRect()` to confirm what the user actually sees.
 
 ## Conventions
-- For the alpha deploy, use the Tailscale URL `https://tc-app-server.tailb75ce6.ts.net/`. Chrome doesn't resolve `.local` mDNS.
+- For a deployed instance, use its HTTPS URL (the one you set as `PYCHESTRATE_TEST_BASE_URL`); for a Tailscale host, the `.ts.net` name. Chrome doesn't resolve `.local` mDNS.
 - Always screenshot before AND after a fix when reporting visual changes.
 - Capture console messages and network failures when investigating — they often pinpoint the real cause.
 - Hard-reload with `ignoreCache: true` after a deploy; the JS bundles cache aggressively.

@@ -34,6 +34,7 @@ preview tag.
   step-by-step procedure at the operator runbook (chapter 13 of the user guide, which is the generic "Deploy on a Linux host" guide the audit asked for and is
   published at `/docs`), and links each job's section; a test checks every signpost points at a real heading or file. The README was deliberately not split into
   several files: the runbook already is the separate guide, and splitting would scatter the cross-references (the runbook links to its "Backup and restore" section).
+  Also: two agent definitions under `.claude/agents/` named the maintainer's staging host and a file path on their own machine; they now say "a deployed instance" and "the `CLAUDE.md` in your workspace".
 
 - Permanent deletions on the server-rendered pages ask for the name to be typed (XC-15). Deleting a project, a pool or a secret in the bundle views
   already did; the same deletions elsewhere used the ordinary confirm. The rule, decided and pinned by a lint over every template: a deletion asks for the
