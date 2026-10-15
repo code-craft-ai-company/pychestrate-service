@@ -1643,8 +1643,9 @@ paths:
       tags: [notifications]
       summary: Delete a notification channel.
       description: >-
-        Deletes the channel and the vault secrets the service stored for it (never a
-        vault secret it merely pointed at). Refused with 409 while a routing rule still
+        Deletes the channel, the messages recorded through it (with their dead letters)
+        and the vault secrets the service stored for it (never a vault secret it merely
+        pointed at). Refused with 409 while a routing rule still
         sends through it. Requires `system:notifications.write`.
       operationId: notifications_delete_channel
       responses:

@@ -398,11 +398,11 @@ def test_a_person_without_the_notification_keys_cannot_open_or_change_anything()
     return
 
 
-def test_the_messages_of_a_deleted_channel_stay_in_the_history_without_a_link():
+def test_deleting_a_channel_removes_its_messages_and_dead_letters_but_not_another_channels():
     """
     **Feature: notifications page (ORG-F08)**
-    **Property: deleting a channel keeps what was sent through it in the recent messages, labelled as a deleted channel and not linked (its page is
-    gone), while messages of a channel that still exists link to it.**
+    **Property: deleting a channel removes the messages recorded through it, their attempts and their dead letters (SQLite does not cascade foreign
+    keys, so they would stay, unreplayable); another channel's messages and dead letters stay and still link to their channel.**
     """
     _clear_notifications()
     cookies = adm.admin_cookies()
@@ -411,20 +411,33 @@ def test_the_messages_of_a_deleted_channel_stay_in_the_history_without_a_link():
     patch = create_module_patch(webhook_channels, "_post_json")
     try:
         mock = patch.activate()
-        mock.configure(return_value=200)
+
+        def deliver(*, url: str, payload: Any, headers: Any) -> int:
+            if payload["recipient"] == "fail":
+                raise urllib_error.URLError("far end down")
+            return 200
+
+        mock.configure(side_effect=deliver)
         for channel_id in (kept, doomed):
-            adm.post_form(path="/admin/notifications/channels/{}/test".format(channel_id), cookies=cookies, fields={"recipient": "history-check"})
+            for recipient in ("history-check", "fail"):
+                adm.post_form(path="/admin/notifications/channels/{}/test".format(channel_id), cookies=cookies, fields={"recipient": recipient})
     finally:
         patch.deactivate()
     adm.post_form(path="/admin/notifications/channels/{}/delete".format(doomed), cookies=cookies, fields={})
     page = adm.get(path="/admin/notifications", cookies=cookies).text
     deliveries = page[page.index('data-role="deliveries"'):]
 
+    session = adm.open_db_session()
+    try:
+        left = (
+            session.query(NotificationDispatchEnvelope).count(), session.query(NotificationDispatchAttempt).count(), session.query(NotificationDeadLetter).count(),
+            session.query(NotificationDispatchEnvelope).filter(NotificationDispatchEnvelope.channel_id == doomed).count(),
+        )
+    finally:
+        session.close()
+
     testbase.assert_equal(
-        (
-            deliveries.count("history-check"), "(deleted channel)" in deliveries,
-            "/admin/notifications/channels/{}".format(doomed) in deliveries, "/admin/notifications/channels/{}".format(kept) in deliveries,
-        ),
-        (2, True, False, True),
+        (left, "(deleted channel)" in deliveries, "/admin/notifications/channels/{}".format(doomed) in deliveries, "/admin/notifications/channels/{}".format(kept) in deliveries),
+        ((2, 2, 1, 0), False, False, True),
     )
     return

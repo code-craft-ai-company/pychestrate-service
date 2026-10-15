@@ -358,3 +358,30 @@ def list_recent_deliveries(
     )
     rtnval = [(attempt, envelope) for attempt, envelope in rows]
     return rtnval
+
+
+def delete_channel_history(
+        *,
+        db_session: DbSession,
+        channel_id: str
+    ) -> int:
+    """
+        Remove every message recorded through a channel: its envelopes, their attempts and their dead letters. A database that enforces the
+        foreign keys cascades these anyway when the channel goes; SQLite does not, and would leave dead letters that can never be replayed.
+
+        :param db_session: Active SQLAlchemy session.
+        :param channel_id: The channel.
+
+        :returns: How many envelopes were removed.
+    """
+    envelope_ids = [
+        row[0] for row in db_session.query(NotificationDispatchEnvelope.envelope_id)
+        .filter(NotificationDispatchEnvelope.channel_id == channel_id).all()
+    ]
+    if len(envelope_ids) == 0:
+        return 0
+    db_session.query(NotificationDeadLetter).filter(NotificationDeadLetter.envelope_id.in_(envelope_ids)).delete(synchronize_session=False)
+    db_session.query(NotificationDispatchAttempt).filter(NotificationDispatchAttempt.envelope_id.in_(envelope_ids)).delete(synchronize_session=False)
+    db_session.query(NotificationDispatchEnvelope).filter(NotificationDispatchEnvelope.envelope_id.in_(envelope_ids)).delete(synchronize_session=False)
+    rtnval = len(envelope_ids)
+    return rtnval

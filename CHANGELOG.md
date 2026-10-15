@@ -289,7 +289,7 @@ preview tag.
   points at an existing vault secret the user may read (`secret://<name>`, no pinned version); plain text in a secret setting is refused. The sender reads the vault
   when it sends, as the service, and the value is in no table, event, envelope or log (a test scans every table). Reads show the reference, never the value; a
   channel made before this keeps sending, is shown masked as "Secret stored unprotected", and replacing the secret moves it into the vault. `PATCH`, `DELETE` and
-  `POST .../test` were added to the channel API, and a channel is refused deletion while a rule uses it. Two new permissions, `system:notifications.read` and
+  `POST .../test` were added to the channel API, a channel is refused deletion while a rule uses it, and deleting one removes the messages recorded through it and their dead letters (SQLite does not cascade foreign keys, so they would have stayed, unreplayable). Two new permissions, `system:notifications.read` and
   `system:notifications.write`, replace `system:ui.admin.view` on these routes; both are administrative (system-admin only, in none of the workflow roles). Every
   add, change and delete of a channel or rule is in the audit log, naming settings and never values. The OpenAPI document now matches the service (kinds, scope,
   the new routes). Decisions are in `specs/2-notification-hub/design.md` (Security Considerations) and the guide's "Be told when a run fails".

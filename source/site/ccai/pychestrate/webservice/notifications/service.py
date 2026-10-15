@@ -317,7 +317,8 @@ def update_channel(
 
 def delete_channel(*, db_session: DbSession, channel_id: str, principal: Any = None) -> None:
     """
-        Delete a channel and the vault secrets the service stored for it (never a vault secret it merely points at).
+        Delete a channel, the messages recorded through it (and their dead letters) and the vault secrets the service stored for it (never a vault
+        secret it merely points at).
 
         :param db_session: Active SQLAlchemy session.
         :param channel_id: The channel.
@@ -346,6 +347,7 @@ def delete_channel(*, db_session: DbSession, channel_id: str, principal: Any = N
         db_session=db_session, topic=NotificationEventTopics.CHANNEL_DELETED,
         payload={"channel_id": str(channel.channel_id), "name": channel.name, "kind": channel.kind},
     )
+    notification_repository.delete_channel_history(db_session=db_session, channel_id=str(channel.channel_id))
     db_session.delete(channel)
     db_session.commit()
     _discard_channel_secrets(db_session=db_session, principal=principal, vault_names=own_names)

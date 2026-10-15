@@ -198,9 +198,9 @@ its field, and nothing is saved. On the channel's page:
 * **Replace a secret** stores a new value as a new version of the same vault
   secret; the channel follows it, so a password change is one step.
 * **Turn Off** stops everything sent through the channel without deleting it.
-* **Delete Channel** removes it and the secrets stored for it (not a vault
-  secret it merely pointed at). A channel that a rule still sends through
-  cannot be deleted; delete the rules first.
+* **Delete Channel** removes it, the messages recorded through it and the
+  secrets stored for it (not a vault secret it merely pointed at). A channel
+  that a rule still sends through cannot be deleted; delete the rules first.
 
 A channel made before secrets moved to the vault keeps working, but shows
 **Secret stored unprotected**; replace the secret and the old value is removed.
