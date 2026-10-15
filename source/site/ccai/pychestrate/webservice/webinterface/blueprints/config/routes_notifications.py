@@ -630,11 +630,11 @@ def handle_channel_state(request: Request) -> Response:
 
 def handle_channel_secrets(request: Request) -> Response:
     """
-        ``POST /admin/notifications/channels/{channel_id}/secrets`` with ``setting`` and ``value`` (or ``ref``).
+        ``POST /admin/notifications/channels/{channel_id}/secrets`` with ``setting`` and ``secret_value`` (or ``ref``).
     """
     def act(auth: Any, channel: Any, form: Any, detail_url: str) -> Response:
         setting = str(form.get("setting", "") or "").strip()
-        value = str(form.get("value", "") or "")
+        value = str(form.get("secret_value", "") or "")
         chosen = str(form.get("ref", "") or "").strip()
         if len(setting) == 0 or (len(value) == 0 and len(chosen) == 0):
             return _redirect_with_flash(

@@ -58,7 +58,7 @@
         <input type="hidden" name="setting" value="{{ field.name }}">
         <div class="form-group">
             <label for="value-{{ field.name }}">New {{ field.label | lower }}</label>
-            <input type="password" id="value-{{ field.name }}" name="value" class="form-control narrow" required autocomplete="new-password">
+            <input type="password" id="value-{{ field.name }}" name="secret_value" class="form-control narrow" required autocomplete="new-password">
         </div>
         <button type="submit" class="btn btn-secondary">Replace {{ field.label }}</button>
     </form>

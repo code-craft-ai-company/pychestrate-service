@@ -64,8 +64,12 @@ DRAFT_LIFETIME = timedelta(minutes=10)
 
 #: Only forms under these paths are kept: they hold names, descriptions, JSON documents
 #: and settings, not credentials. (Secrets, variables, API tokens, enrollment tokens and
-#: the sign-in and password pages are not on the list.)
-DRAFT_PATH_PREFIXES: Tuple[str, ...] = ("/projects/", "/resources/", "/admin/users", "/admin/roles", "/admin/rpa-job-types")
+#: the sign-in and password pages are not on the list. Of the Notifications pages only the two
+#: add forms are: the channel's page also has a form that replaces a secret.)
+DRAFT_PATH_PREFIXES: Tuple[str, ...] = (
+    "/projects/", "/resources/", "/admin/users", "/admin/roles", "/admin/rpa-job-types",
+    "/admin/notifications/channels/create", "/admin/notifications/rules/create",
+)
 
 #: A field whose name says it may hold a secret is never kept.
 SECRET_FIELD_NAME = re.compile(r"pass|secret|token|credential|csrf|pepper|otp|mfa|private", re.IGNORECASE)

@@ -362,6 +362,36 @@ def test_forms_that_may_hold_secrets_are_not_kept():
     return
 
 
+def test_the_notification_add_forms_are_kept_without_their_secrets_and_the_secret_forms_are_not():
+    """
+    **Feature: form drafts (XC-11)**
+    **Property: the forms that add a notification channel or rule are kept (the typed server, address and recipients come back) but never the
+    secret inputs (``secret__*``, ``ref__*``); the channel page's forms, including the one that replaces a secret, are not kept at all, and a
+    stale-token POST to the replace-secret form carries no draft.**
+    """
+    paths = [
+        "/admin/notifications/channels/create", "/admin/notifications/rules/create", "/admin/notifications",
+        "/admin/notifications/channels/11111111-2222-4333-8444-555555555551/secrets", "/admin/notifications/channels/11111111-2222-4333-8444-555555555551/test",
+        "/admin/notifications/channels/11111111-2222-4333-8444-555555555551/delete", "/admin/notifications/rules/22222222-2222-4333-8444-555555555551/delete",
+    ]
+    kept_paths = [form_drafts.keeps_forms_at(path) for path in paths]
+    kept = [name for name, _value in form_drafts.keepable_fields([
+        ("kind", "smtp_email"), ("name", "Team mail"), ("cfg__host", "smtp.example.test"), ("cfg__port", "587"), ("secret__password", "hunter2"),
+        ("ref__password", "shared.mail.password"), ("secret_value", "new-secret"), ("recipients", "ops@example.test"),
+    ])]
+
+    handle = ensure_app()
+    cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
+    add_form = _post(handle, cookies, "/admin/notifications/channels/create", [("csrf_token", "stale"), ("kind", "generic_webhook"), ("name", "hook"), ("cfg__url", "https://example.test/x")])
+    replace = _post(handle, cookies, "/admin/notifications/channels/11111111-2222-4333-8444-555555555551/secrets", [("csrf_token", "stale"), ("setting", "authorization"), ("secret_value", "new-secret")])
+
+    testbase.assert_equal(
+        (kept_paths, kept, "draft=" in (add_form.header("Location") or ""), "draft=" in (replace.header("Location") or "")),
+        ([True, True, False, False, False, False, False], ["kind", "name", "cfg__host", "cfg__port", "recipients"], True, False),
+    )
+    return
+
+
 def test_both_production_app_builders_wrap_the_application():
     """
     **Feature: form drafts (XC-11)**

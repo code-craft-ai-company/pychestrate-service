@@ -278,6 +278,10 @@ preview tag.
 
 ### Added
 
+- A form whose session or token expired keeps what was typed on the forms that add a notification channel or rule too (XC-11): the typed server, address and
+  recipients come back after signing in. The secret inputs (`secret__*`, and the vault secret chosen in `ref__*`) are never kept, and the channel page's own forms,
+  including the one that replaces a secret, are not on the list at all; that form's input is now named `secret_value`, so its name says what it holds.
+
 - **Notifications page, and channel secrets in the vault (ORG-F08).** Channels and rules could only be made with the REST API or `pyc`, and the only way to make an
   email channel work was to store its password as plain text in the channel (a `secret://` reference was resolved by a stub that handed the sender a
   `{name, version}` dictionary instead of the secret). **Admin, Notifications** now lists channels, rules and the last 20 messages with their result; **Add Channel**

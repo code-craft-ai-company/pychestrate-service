@@ -226,7 +226,8 @@ can go stale if the page stays open a long time. If you submit a form then, the
 service does not throw away what you typed. It keeps the text fields for ten
 minutes and, once you are signed in again, opens the same form with them put back
 and a notice saying so; check them and submit again. This covers the project,
-resource, user and role forms and the RPA job type form.
+resource, user and role forms, the RPA job type form and the forms that add a notification
+channel or rule.
 
 Some things are deliberately not kept: anything in a field whose name suggests a
 secret (a password, a token, a key), forms that hold secrets (Secrets, Variables,

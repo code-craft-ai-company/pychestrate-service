@@ -241,7 +241,7 @@ def test_a_channel_can_be_switched_off_have_a_secret_replaced_and_be_deleted_onc
     on = adm.post_form(path=base + "/state", cookies=cookies, fields={"disabled": "0"})
     on_page, cookies = _follow(on, cookies)
 
-    replaced = adm.post_form(path=base + "/secrets", cookies=cookies, fields={"setting": "password", "value": "second-VALUE-0042"})
+    replaced = adm.post_form(path=base + "/secrets", cookies=cookies, fields={"setting": "password", "secret_value": "second-VALUE-0042"})
     replaced_page, cookies = _follow(replaced, cookies)
     session = adm.open_db_session()
     try:
@@ -344,7 +344,7 @@ def test_every_change_is_in_the_audit_log_with_names_and_never_values():
     created = _add_smtp(cookies, name)
     channel_id = _channel_id(created.header("Location"))
     adm.post_form(path="/admin/notifications/channels/{}/state".format(channel_id), cookies=cookies, fields={"disabled": "1"})
-    adm.post_form(path="/admin/notifications/channels/{}/secrets".format(channel_id), cookies=cookies, fields={"setting": "password", "value": "rotated-VALUE-5521"})
+    adm.post_form(path="/admin/notifications/channels/{}/secrets".format(channel_id), cookies=cookies, fields={"setting": "password", "secret_value": "rotated-VALUE-5521"})
     adm.post_form(path="/admin/notifications/rules/create", cookies=cookies, fields=[("events", "entity.run.failed"), ("channel_ids", channel_id), ("recipients", "ops@example.test")])
     session = adm.open_db_session()
     try:
