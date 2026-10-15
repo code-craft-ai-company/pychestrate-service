@@ -322,3 +322,13 @@
     <pre class="pyc-log-viewer__output" tabindex="0" aria-label="Log output">{% if text %}{{ text }}{% elif running %}No log output yet.{% elif waiting %}This job has not started, so there is nothing to show.{% else %}The job finished without producing log output.{% endif %}</pre>
 </div>
 {%- endmacro %}
+
+{# A running job's progress: the bar and the pod's last message ("tick 16"), only when the pod has reported some (the guide's PYC-PROGRESS lines). #}
+{% macro job_progress(progress) %}
+{% if progress %}
+<div class="small" data-role="job-progress">
+    {% if progress.percent is not none %}<progress max="100" value="{{ progress.percent | round(0) | int }}" aria-label="Job progress">{{ progress.percent | round(0) | int }}%</progress> {{ progress.percent | round(0) | int }}%{% endif %}
+    {% if progress.message %}<div class="muted">{{ progress.message }}</div>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}

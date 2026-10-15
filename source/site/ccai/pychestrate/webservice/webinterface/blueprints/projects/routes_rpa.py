@@ -256,6 +256,20 @@ def _resolve_view_authorized_project(*, request: Request, auth: _AuthResolution)
     return (project_id, project_manager, project)
 
 
+def _job_progress(*, db_session: Any, job: Any) -> Optional[Dict[str, Any]]:
+    """
+        What the pod has reported of a running job (the percent and the message after a ``PYC-PROGRESS`` marker), for the job page's bar;
+        None when it has reported nothing or the progress cannot be read (the page then shows no bar, as it did).
+    """
+    from ccai.pychestrate.webservice.runs.restapi.v1.runs_routes import describe_progress  # noqa: E402
+
+    try:
+        rtnval = describe_progress(db_session=db_session, run_id=str(job.job_id))
+    except Exception:  # noqa: BLE001 -- a job page without a bar is better than none
+        rtnval = None
+    return rtnval
+
+
 def _rpa_project_key(*, db_session: Any, project_id: Any) -> str:
     """
         The id RPA specifications and jobs are stored under for a web-UI project (``project_id`` is its
@@ -1047,6 +1061,7 @@ def handle_rpa_detail(request: Request) -> Response:
         context["can_manage"] = can_manage
         context["work_packet_json"] = _pretty_json(dict(job.work_packet))
         context["is_active"] = job.status.value in ("pending", "dispatching", "running")
+        context["job_progress"] = _job_progress(db_session=db_session, job=job) if context["is_active"] else None
         context["job_names"] = _job_names(db_session=db_session, job=job)
 
         response = _render(template_name="projects/rpa/detail.html", context=context)

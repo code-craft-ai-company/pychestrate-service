@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- **A cancelled RPA job is a cancelled run, not a failed one (ORC-10).** Cancelling a slow job on the lab pod worked (the job ended "cancelled", exit -15, in about 20 seconds, on the pod's next heartbeat), but its run
+  said "failed / failure": the pod's upload knew only succeeded or not and named the outcome "failure". The Runs list, the dashboard's "needs attention" list and the failed-run notification all treated a cancel as a
+  failure. The service now ends the run CANCELLED whenever the job is cancelled (so older pods are right too), and `pychestrate-client` (c122fd0) reports "cancelled" as the other kinds already did; a timeout and a
+  plain failure stay failures. A cancelled test run already ended "cancelled" with "The run was cancelled by an operator; the job was stopped."
+- **A running RPA job's page shows its progress (E2E-23).** The guide says a `PYC-PROGRESS {"percent": 40, "message": "..."}` line is lifted into the job's progress indicator, and the generic Run page showed it, but the
+  job's own page showed nothing while it ran. Its status card now has the bar with the percent and the pod's last message ("21% tick 13"), refreshed with the page's existing 10-second live region.
 - **The projects dashboard's runs say what ran, not only their kind (PRJ-21, ORC-11).** On the lab's real runs the "Needs attention" list read "RPA · tasker-demo" five times and the recent runs "Test · testbase", so
   five different failures looked the same. A row now leads with the name of what ran, the way the Runs list names it (a test's name, an RPA job's specification, "build:makefile"), with the kind after it
   ("tasker-bad RPA · tasker-demo"); a run whose name is not known keeps just its kind.

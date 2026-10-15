@@ -226,6 +226,29 @@ def test_a_failed_rpa_job_records_the_pods_explanation_as_its_reason():
     return
 
 
+def test_a_job_the_pod_cancelled_is_a_cancelled_run_even_when_the_manifest_says_failure():
+    """
+    **Feature: 6-rpa-orchestration (M2)**
+    **Property: a manifest whose ``rpa_status`` is cancelled makes the job CANCELLED and its run CANCELLED (an older pod named the outcome "failure", which left the run FAILED beside a
+    cancelled job: on the dashboard's "needs attention" list and in a failed-run notification); a timeout and a plain failure still end their runs FAILED.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    spec = _seed_type_and_spec(session)
+    cancelled, timed_out, failed = _trigger(session, spec, {"n": 1}), _trigger(session, spec, {"n": 2}), _trigger(session, spec, {"n": 3})
+    outcomes = {}
+    for job, status, code in ((cancelled, "cancelled", -15), (timed_out, "timeout", None), (failed, "failed", 3)):
+        outcomes[status] = result_completion.complete_rpa_run(
+            db_session=session, run_id=job.job_id, manifest=_manifest(job, outcome="failure", extras={"rpa_status": status, "exit_code": code}),
+        )
+
+    testbase.assert_equal(
+        {status: (outcome.domain_state, outcome.run_state) for status, outcome in outcomes.items()},
+        {"cancelled": ("cancelled", "cancelled"), "timeout": ("timeout", "failed"), "failed": ("failed", "failed")},
+    )
+    return
+
+
 def test_complete_rpa_run_maps_timeout_failure_and_cancel():
     """
     **Feature: 6-rpa-orchestration (M2)**

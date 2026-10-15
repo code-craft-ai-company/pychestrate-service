@@ -505,10 +505,13 @@ def complete_rpa_run(
         reason=reason,
     )
 
+    # A job the pod says it cancelled (``rpa_status``) is a cancelled run whatever outcome the manifest names: a pod that reports a
+    # cancel as a plain failure left the run FAILED beside a CANCELLED job, and a cancelled job in the "needs attention" list.
+    run_outcome = TERMINAL_OUTCOME_CANCELLED if final_status == RpaJobStatus.CANCELLED else terminal_outcome
     run_state = _advance_run_state_from_outcome(
         db_session=db_session,
         run_id=run_id,
-        terminal_outcome=terminal_outcome,
+        terminal_outcome=run_outcome,
         reason=reason,
     )
 

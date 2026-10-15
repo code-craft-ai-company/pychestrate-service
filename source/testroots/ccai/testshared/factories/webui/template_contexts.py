@@ -612,6 +612,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
         [],
     ),
     "is_active": _by_mode(True, False),
+    "job_progress": _by_mode({"percent": 40.0, "message": "tick 24"}, None),
     "job_types": _many(RpaJobTypeView),
     "job_type": _one(RpaJobTypeView),
     "versions": _many(RpaJobTypeVersionView),

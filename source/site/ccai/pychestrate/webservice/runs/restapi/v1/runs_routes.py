@@ -882,6 +882,24 @@ def _rpa_spec_name_for(*, db_session: Any, run_id: str, job_type: str, job_name:
     return rtnval
 
 
+def describe_progress(*, db_session: Any, run_id: str) -> Optional[Dict[str, Any]]:
+    """
+        How far a run has got, as a person reads it: the percent and the pod's last message (the text after a ``PYC-PROGRESS`` marker),
+        for the job pages that show a bar.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: The run's id.
+
+        :returns: ``{"percent": number or None, "message": text}``, or None when the pod has reported nothing.
+    """
+    block = _progress_summary_block(db_session=db_session, run_id=run_id)
+    if block is None:
+        return None
+    percent = block.get("percent_complete")
+    rtnval = {"percent": float(percent) if isinstance(percent, (int, float)) and not isinstance(percent, bool) else None, "message": str(block.get("notes") or "")}
+    return rtnval
+
+
 def describe_run(*, db_session: Any, run_id: str) -> Dict[str, Optional[str]]:
     """
         What a person reading a message about a run wants to know of it besides its id: what ran (the job's name),

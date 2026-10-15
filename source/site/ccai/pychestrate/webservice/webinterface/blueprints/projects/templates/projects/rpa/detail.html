@@ -40,7 +40,7 @@
         <div class="muted">Status</div>
         <div>{{ ui.status_badge(job.status) }}</div>
         {% if job.run_state %}<div class="muted small">run state {{ job.run_state }}</div>{% endif %}
-        {% if is_active %}<div class="muted small" role="status">Updating every 10s while the job runs</div>{% endif %}
+        {% if is_active %}{{ ui.job_progress(job_progress | default(none)) }}<div class="muted small" role="status">Updating every 10s while the job runs</div>{% endif %}
     </div>
     <div class="card">
         <div class="muted">Specification</div>
