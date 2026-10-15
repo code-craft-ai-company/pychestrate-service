@@ -14,6 +14,22 @@ The examples use three placeholders; replace them with your own values:
 | `USER` | the account you deploy as on the target; the service runs as this user |
 | `PUBLIC_HOSTNAME` | the name browsers and pods use, the one on the TLS certificate (it can equal `HOST`) |
 
+## Start here
+
+This page is the reference for the scripts in this directory. To bring Pychestrate up on a Linux host
+step by step, by hand or to understand what the scripts do, read the operator runbook instead: chapter 13
+of the user guide ([`userguide/13-00-alpha-deployment.rst`](../userguide/13-00-alpha-deployment.rst), also
+published at `/docs/13-00-alpha-deployment.html` on a running instance).
+
+| I want to | Go to |
+|---|---|
+| Deploy to a host with one command | [`deploy-alpha-to-host.sh`](#deploy-alpha-to-hostsh) |
+| Renew the HTTPS certificate | [`renew-cert.sh`](#renew-certsh--https-server-cert-renewal) |
+| Let a pod connect with a certificate | [mTLS for orchestration-ingest endpoints](#mtls-for-orchestration-ingest-endpoints) |
+| Watch the service | [Monitoring](#monitoring) |
+| Back up, or restore | [Backup and restore](#backup-and-restore) |
+| Deploy from GitHub Actions | [CI deploy workflow](#ci-deploy-workflow-githubworkflowsdeployyml) |
+
 ## mTLS for orchestration-ingest endpoints
 
 The nginx :443 server block verifies client certificates for

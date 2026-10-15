@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- The deployment README says where to start (DOC-12). It is about 700 lines on six jobs (deploy, certificates, pod enrolment, monitoring, backup and restore, the CI
+  workflow), and a reader had no signpost. It now opens with a "Start here" table: it says the page is the reference for the scripts, points a person who wants the
+  step-by-step procedure at the operator runbook (chapter 13 of the user guide, which is the generic "Deploy on a Linux host" guide the audit asked for and is
+  published at `/docs`), and links each job's section; a test checks every signpost points at a real heading or file. The README was deliberately not split into
+  several files: the runbook already is the separate guide, and splitting would scatter the cross-references (the runbook links to its "Backup and restore" section).
+
 - Permanent deletions on the server-rendered pages ask for the name to be typed (XC-15). Deleting a project, a pool or a secret in the bundle views
   already did; the same deletions elsewhere used the ordinary confirm. The rule, decided and pinned by a lint over every template: a deletion asks for the
   name when it is permanent, removes something other records depend on or that holds history, and is rare enough that typing costs nothing. That is now
