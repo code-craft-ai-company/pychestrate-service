@@ -29,6 +29,16 @@ preview tag.
 
 ### Fixed
 
+- **A project's RPA specifications and jobs are one set, whichever surface made them (the project bridge).** Found by running RPA jobs on a real pod: the RPA jobs page said "No RPA jobs yet" and the job page
+  "RPA job not found" for jobs the REST surface listed. The web UI stored a project's RPA specifications and jobs under the text of its integer id ("1") and the REST surface under the project's UUID, so one
+  project had two disjoint sets (the model's own note called it deliberate; `specs/project-model-bridge.md` says the registry project is the system of record). The UI now uses the registry project's UUID
+  (through the bridge, or the UUID derived from the integer for a project with no bridged row, which is the UUID a bridged web-UI project keeps), including the watch action's cross-project check. A migration
+  (`a3c5e7f9b1d2`) re-keys the rows the UI had already made; a specification whose name the registry project already has is kept as "<name> (web UI)" (then "(web UI 2)"), and nothing is deleted. On the lab
+  the page then showed the jobs, their exit codes, who triggered them and the result tree.
+- **A failed RPA, build or provisioning run says what went wrong (ORC-10).** The recorded reason of a failed run was "rpa result manifest: outcome=failure" (or the build or provisioning equivalent) whatever happened,
+  and the RPA upload sent the pod's explanation nowhere (the other kinds sent it, and the RPA path appended it after the generic text). The reason is now the pod's own explanation when it gave one, as it already
+  is for test runs, and `pychestrate-client` (0c25cbe, a follow-up) sends it for RPA: "RPA job exited with code 3: the packet asked to fail" (the last line of the job's error output, or of its merged output when
+  it streams).
 - **A failed pipeline run says which stage and step failed and why, and the run list keeps itself current (ORC-13).** Seen on real runs in the lab: a failed run's line said "Failed · 1 of 2 stages completed ·
   stage_failure", the service's internal token, while the step's own reason ("dispatch failed: No candidate pod satisfies ...") sat behind the run's arrow; and right after Run the list showed "Running · 0 of 2
   stages completed" and stayed so until the page was reloaded. The line now reads `Stage "test", step "check" failed: <first line of the step's reason>` (cut at 200 characters; a reason that is already a

@@ -203,6 +203,29 @@ def test_complete_rpa_run_maps_outcome_exit_code_and_result_key():
     return
 
 
+def test_a_failed_rpa_job_records_the_pods_explanation_as_its_reason():
+    """
+    **Feature: 6-rpa-orchestration (M2)**
+    **Property: the job's reason is the manifest's notes (the pod's own account, for example "RPA job exited with code 3: boom") when it gave
+    some, and "rpa result manifest: outcome=failure" when it gave none; the notes are no longer tacked on after that text.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    spec = _seed_type_and_spec(session)
+    noted = _trigger(session, spec, {"n": 1})
+    silent = _trigger(session, spec, {"n": 2})
+    noted_manifest = _manifest(noted, outcome="failure", extras={"rpa_status": "failed", "exit_code": 3})
+    noted_manifest["notes"] = "RPA job exited with code 3: boom"
+    result_completion.complete_rpa_run(db_session=session, run_id=noted.job_id, manifest=noted_manifest)
+    result_completion.complete_rpa_run(db_session=session, run_id=silent.job_id, manifest=_manifest(silent, outcome="failure", extras={"rpa_status": "failed", "exit_code": 3}))
+
+    testbase.assert_equal(
+        (get_job(db_session=session, job_id=noted.job_id).final_state_reason, get_job(db_session=session, job_id=silent.job_id).final_state_reason),
+        ("RPA job exited with code 3: boom", "rpa result manifest: outcome=failure"),
+    )
+    return
+
+
 def test_complete_rpa_run_maps_timeout_failure_and_cancel():
     """
     **Feature: 6-rpa-orchestration (M2)**
@@ -409,7 +432,17 @@ def test_watch_rpa_bridge_refuses_a_spec_from_another_project():
     mock = patch.activate()
     mock.configure(side_effect=lambda: _Rpa())
     try:
-        bridge = routes_rpa.build_watch_rpa_trigger(db_session=None)
+        class _NoBridgeSession:
+            def query(self, *args: Any, **kwargs: Any) -> "_NoBridgeSession":
+                return self
+
+            def filter(self, *args: Any, **kwargs: Any) -> "_NoBridgeSession":
+                return self
+
+            def first(self) -> Any:
+                return None
+
+        bridge = routes_rpa.build_watch_rpa_trigger(db_session=_NoBridgeSession())
         refused = False
         try:
             bridge(spec_id="spec-uuid", work_packet={}, user_id="u-1", project_id=8)

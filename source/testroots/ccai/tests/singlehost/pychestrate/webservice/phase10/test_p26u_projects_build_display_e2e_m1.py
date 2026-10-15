@@ -170,6 +170,7 @@ def test_an_rpa_job_names_its_user_pod_and_client():
     from ccai.pychestrate.webservice.orchestration.rpa import repository as rpa_repository  # noqa: E402
     from ccai.pychestrate.webservice.orchestration.rpa.models import RpaExecutionMode  # noqa: E402
     from ccai.pychestrate.webservice.pods.models import PodDefinition  # noqa: E402
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects import routes_rpa  # noqa: E402
 
     setup = _setup(build_status="succeeded", commit_sha="abc1234")
     admin = ensure_seeded_admin()
@@ -186,7 +187,7 @@ def test_an_rpa_job_names_its_user_pod_and_client():
             secret_fields=[], created_by_id=None,
         )
         job = rpa_repository.insert_job(
-            db_session=db_session, job_id=new_uuid(), project_id=str(setup["project_id"]), spec_id=None,
+            db_session=db_session, job_id=new_uuid(), project_id=routes_rpa._rpa_project_key(db_session=db_session, project_id=setup["project_id"]), spec_id=None,
             spec_name="ad hoc", spec_revision=1, type_id=type_id, resolved_version="1.0.0",
             execution_mode=RpaExecutionMode.PROCESS, work_packet={}, packet_digest="",
             triggered_by_id=admin.user_id, trigger_cause={}, idempotency_key="",

@@ -376,6 +376,51 @@ def test_provision_manifest_failure_outcome_lands_failed():
     return
 
 
+def test_a_failed_build_or_provision_run_records_the_pods_explanation_as_its_reason():
+    """
+    **Feature: p20m build + provision result ingest**
+    **Property: the reason recorded for a build or provisioning run is the manifest's notes (the pod's own account, which the page, the
+    event and the notification show) when the pod gave some, and the service's outcome text when it gave none.**
+    """
+    engine, db_session = build_in_memory_session()
+    try:
+        build_noted, build_silent, infra_noted, infra_silent = new_uuid(), new_uuid(), new_uuid(), new_uuid()
+        for run_id in (build_noted, build_silent):
+            _seed_build_run(db_session=db_session, run_id=run_id)
+        for run_id in (infra_noted, infra_silent):
+            _seed_infra_run(db_session=db_session, run_id=run_id)
+
+        def _reason(model: Any, run_id: str) -> str:
+            return str(db_session.query(model).filter(model.run_id == run_id).first().final_state_reason)
+
+        for run_id, format_tag, notes, complete in (
+            (build_noted, "build", "make exited with code 2: no rule to make target 'all'", completion.complete_build_run),
+            (build_silent, "build", None, completion.complete_build_run),
+            (infra_noted, "provision", "terraform exited with code 1: invalid credentials", completion.complete_provision_run),
+            (infra_silent, "provision", "  ", completion.complete_provision_run),
+        ):
+            manifest = _build_manifest(run_id=run_id, format_tag=format_tag, terminal_outcome="failure")
+            if notes is not None:
+                manifest["notes"] = notes
+            complete(db_session=db_session, run_id=run_id, manifest=manifest)
+
+        reasons = (
+            _reason(BuildRun, build_noted), _reason(BuildRun, build_silent),
+            _reason(InfraRun, infra_noted), _reason(InfraRun, infra_silent).split(" ")[0:4],
+        )
+        testbase.assert_equal(
+            reasons,
+            (
+                "make exited with code 2: no rule to make target 'all'", "build result manifest: outcome=failure",
+                "terraform exited with code 1: invalid credentials", ["provision", "result", "manifest:", "outcome=failure"],
+            ),
+        )
+    finally:
+        db_session.close()
+        engine.dispose()
+    return
+
+
 # ---------------------------------------------------------------------------
 # results/complete routing
 # ---------------------------------------------------------------------------

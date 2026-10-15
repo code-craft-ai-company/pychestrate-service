@@ -152,6 +152,17 @@ class CompletionOutcome:
     manifest_id: Optional[str]
 
 
+def _pod_reason(*, manifest: Dict[str, Any], fallback: str) -> str:
+    """
+        The reason recorded for a run's end: the pod's own explanation (the manifest's ``notes``, for example "1 of 2 tests
+        failed." or "RPA job exited with code 3: the packet asked to fail") when it gave one, which is also the text the run
+        page, the run event and the failed-run notification show; else ``fallback`` (what the service knows: the outcome).
+    """
+    notes = str(manifest.get("notes", "") or "").strip()
+    rtnval = notes if len(notes) > 0 else fallback
+    return rtnval
+
+
 def _is_success_outcome(*, terminal_outcome: str) -> bool:
     """
         Map a ``ResultManifest.terminal_outcome`` string to a
@@ -395,7 +406,7 @@ def complete_build_run(
         final_state = BuildRunState.FAILED
 
     notes = str(manifest.get("notes", ""))
-    reason = "build result manifest: outcome={}".format(terminal_outcome)
+    reason = _pod_reason(manifest=manifest, fallback="build result manifest: outcome={}".format(terminal_outcome))
 
     files = artifact_files_from_manifest(manifest=manifest)
 
@@ -482,10 +493,7 @@ def complete_rpa_run(
     elif succeeded is False:
         final_status = RpaJobStatus.FAILED
 
-    notes = str(manifest.get("notes", "") or "")
-    reason = "rpa result manifest: outcome={}".format(terminal_outcome)
-    if len(notes) > 0:
-        reason = reason + "; " + notes
+    reason = _pod_reason(manifest=manifest, fallback="rpa result manifest: outcome={}".format(terminal_outcome))
     result_root_key = str(manifest.get("backend_key_prefix", "") or "") or None
 
     job_view = rpa_service.apply_run_terminal(
@@ -583,7 +591,7 @@ def complete_provision_run(
     reason_lines.append("artifact_files={}".format(len(files)))
     if len(backend_key_prefix) > 0:
         reason_lines.append("backend_key_prefix={}".format(backend_key_prefix))
-    reason = " ".join(reason_lines)
+    reason = _pod_reason(manifest=manifest, fallback=" ".join(reason_lines))
 
     # The InfraRun has no artifact table; carry the file count under
     # the manifest's ``extras`` digest if present, else leave the

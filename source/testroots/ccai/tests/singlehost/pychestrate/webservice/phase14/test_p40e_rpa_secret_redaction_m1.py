@@ -52,6 +52,7 @@ from ccai.pychestrate.webservice.orchestration.rpa.packet import (
     secret_top_level_keys,
 )
 from ccai.pychestrate.webservice.orchestration.rpa.restapi.v1 import rpa_routes
+from ccai.pychestrate.webservice.projects.legacy_identity import derived_project_uuid
 from ccai.pychestrate.webservice.webinterface.blueprints.projects import routes_rpa
 from ccai.pychestrate.webservice.webinterface.foundation import url_for as url_for_module
 
@@ -398,7 +399,7 @@ def test_saving_a_new_secret_value_replaces_the_stored_one():
 
 class _FakeSpec:
     spec_id = "spec-1"
-    project_id = PROJECT_REF
+    project_id = derived_project_uuid(PROJECT_REF)
     default_packet = STORED_PACKET
     secret_fields = tuple(SECRET_FIELDS)
     packet_schema = None
@@ -416,6 +417,16 @@ class _FakeRpaService:
 
 
 class _FakeDbSession:
+    def query(self, *args: Any, **kwargs: Any) -> "_FakeDbSession":
+        return self
+
+    def filter(self, *args: Any, **kwargs: Any) -> "_FakeDbSession":
+        return self
+
+    def first(self) -> Any:
+        # No registry project is bridged to the web-UI project: its RPA key is the UUID derived from the integer id.
+        return None
+
     def close(self) -> None:
         return
 

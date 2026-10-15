@@ -256,6 +256,32 @@ def _resolve_view_authorized_project(*, request: Request, auth: _AuthResolution)
     return (project_id, project_manager, project)
 
 
+def _rpa_project_key(*, db_session: Any, project_id: Any) -> str:
+    """
+        The id RPA specifications and jobs are stored under for a web-UI project (``project_id`` is its
+        integer id): its registry project's UUID, through the bridge, or the UUID derived from the
+        integer id when the project is not bridged (the UUID a bridged web-UI project's registry row
+        keeps). The REST surface stores them under that UUID, so a specification or job made on either
+        surface is seen on the other. The web UI used to store them under the integer's text, which left
+        the same project with two disjoint sets (the jobs list said "No RPA jobs yet" while the REST
+        surface listed three).
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: The web-UI project's integer id.
+
+        :returns: The registry project UUID as text.
+    """
+    from ccai.pychestrate.webservice.projects import repository as projects_repo  # noqa: E402
+    from ccai.pychestrate.webservice.projects.legacy_identity import derived_project_uuid  # noqa: E402
+
+    try:
+        project = projects_repo.get_project_by_legacy_id(db_session=db_session, legacy_proj_id=int(project_id))
+    except (TypeError, ValueError):
+        project = None
+    rtnval = str(project.project_id) if project is not None else derived_project_uuid(project_id)
+    return rtnval
+
+
 def _can_manage(*, project_manager: Any, project_id: int, user_id: str) -> bool:
     try:
         rtnval = project_manager.check_permission(project_id, user_id, "developer")
@@ -270,7 +296,7 @@ def _resolve_spec_or_redirect(*, auth: _AuthResolution, rpa: Any, project_id: in
         spec = rpa.get_spec(db_session=auth.db_session, spec_id=spec_id)
     except Exception:
         spec = None
-    if spec is None or str(spec.project_id) != str(project_id):
+    if spec is None or str(spec.project_id) != _rpa_project_key(db_session=auth.db_session, project_id=project_id):
         rtnval = _not_found_redirect(
             session=auth.session,
             url=not_found,
@@ -286,7 +312,7 @@ def _resolve_job_or_redirect(*, auth: _AuthResolution, rpa: Any, project_id: int
         job = rpa.get_job(db_session=auth.db_session, job_id=job_id)
     except Exception:
         job = None
-    if job is None or str(job.project_id) != str(project_id):
+    if job is None or str(job.project_id) != _rpa_project_key(db_session=auth.db_session, project_id=project_id):
         rtnval = _not_found_redirect(
             session=auth.session,
             url=not_found,
@@ -337,13 +363,13 @@ def handle_rpa_list(request: Request) -> Response:
         rpa = _build_rpa_service()
         listing = rpa.list_jobs(
             db_session=db_session,
-            project_id=str(project_id),
+            project_id=_rpa_project_key(db_session=db_session, project_id=project_id),
             spec_id=spec_id,
             status=_status_filter(rpa=rpa, value=status),
             offset=offset,
             limit=params["per_page"],
         )
-        specs, _spec_total = rpa.list_specs(db_session=db_session, project_id=str(project_id), limit=100)
+        specs, _spec_total = rpa.list_specs(db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), limit=100)
         can_manage = _can_manage(
             project_manager=project_manager, project_id=project_id, user_id=auth.user_id,
         )
@@ -400,7 +426,7 @@ def handle_rpa_spec_list(request: Request) -> Response:
         offset = (params["page"] - 1) * params["per_page"]
         rpa = _build_rpa_service()
         specs, total = rpa.list_specs(
-            db_session=db_session, project_id=str(project_id), offset=offset, limit=params["per_page"],
+            db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), offset=offset, limit=params["per_page"],
         )
         can_manage = _can_manage(
             project_manager=project_manager, project_id=project_id, user_id=auth.user_id,
@@ -593,7 +619,7 @@ def handle_rpa_spec_create(request: Request) -> Response:
                 description=description,
             )
             spec = rpa.create_spec(
-                db_session=db_session, project_id=str(project_id), inputs=inputs,
+                db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), inputs=inputs,
                 actor_id=auth.user_id,
             )
             response = _redirect_with_flash(
@@ -649,7 +675,7 @@ def _run_availability(*, db_session: Any, project_id: int, spec: Any) -> Dict[st
     """
     try:
         candidates = _resolve_candidates(
-            db_session=db_session, project_id=str(project_id), target_pod_id=spec.target_pod_id,
+            db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), target_pod_id=spec.target_pod_id,
         )
     except Exception as exc:
         _rpa_ui_logger.warning(
@@ -687,7 +713,7 @@ def _render_spec_detail(
     """
     db_session = auth.db_session
     recent = rpa.list_jobs(
-        db_session=db_session, project_id=str(project_id), spec_id=spec.spec_id, offset=0, limit=10,
+        db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), spec_id=spec.spec_id, offset=0, limit=10,
     )
     can_manage = _can_manage(
         project_manager=project_manager, project_id=project_id, user_id=auth.user_id,
@@ -884,11 +910,11 @@ def handle_rpa_run(request: Request) -> Response:
             # Check the packet before choosing pods, so a bad packet is
             # reported as such even when no pod is available.
             rpa.check_trigger_packet(
-                db_session=db_session, project_id=str(project_id), spec_id=spec_id,
+                db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), spec_id=spec_id,
                 work_packet=work_packet,
             )
             candidates = _resolve_candidates(
-                db_session=db_session, project_id=str(project_id), target_pod_id=spec.target_pod_id,
+                db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), target_pod_id=spec.target_pod_id,
             )
             if len(selected_pod_id) > 0:
                 candidates = [c for c in candidates if str(getattr(c, "pod_id", "")) == selected_pod_id]
@@ -905,7 +931,7 @@ def handle_rpa_run(request: Request) -> Response:
                 aspect_kwargs["idempotency_window_seconds"] = 0
             aspects = rpa.RpaTriggerAspects(**aspect_kwargs)
             job = rpa.trigger_job(
-                db_session=db_session, project_id=str(project_id), spec_id=spec_id,
+                db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), spec_id=spec_id,
                 work_packet=work_packet, aspects=aspects,
             )
         except Exception as exc:
@@ -1185,7 +1211,7 @@ def build_watch_rpa_trigger(*, db_session: Any) -> Callable[..., Any]:
         ) -> Any:
         rpa = _build_rpa_service()
         spec = rpa.get_spec(db_session=db_session, spec_id=spec_id)
-        if project_id is not None and str(spec.project_id) != str(project_id):
+        if project_id is not None and str(spec.project_id) != _rpa_project_key(db_session=db_session, project_id=project_id):
             # A watch may only start RPA jobs in its own project.
             raise ProjectsFormError(
                 "RPA specification {} is not part of project {}.".format(spec_id, project_id)

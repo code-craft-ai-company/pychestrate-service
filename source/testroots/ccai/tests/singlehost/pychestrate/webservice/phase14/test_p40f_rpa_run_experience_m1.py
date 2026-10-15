@@ -62,6 +62,7 @@ from ccai.pychestrate.webservice.orchestration.rpa import (
 from ccai.pychestrate.webservice.orchestration.rpa import service as rpa_service
 from ccai.pychestrate.webservice.orchestration.rpa.restapi.v1 import rpa_routes
 from ccai.pychestrate.webservice.webinterface.blueprints.config import routes_rpa_types
+from ccai.pychestrate.webservice.projects.legacy_identity import derived_project_uuid
 from ccai.pychestrate.webservice.webinterface.blueprints.projects import routes_rpa
 from ccai.pychestrate.webservice.webinterface.foundation import auth_guard
 
@@ -392,6 +393,16 @@ def test_rest_allow_duplicate_starts_a_new_job():
 
 
 class _FakeDbSession:
+    def query(self, *args: Any, **kwargs: Any) -> "_FakeDbSession":
+        return self
+
+    def filter(self, *args: Any, **kwargs: Any) -> "_FakeDbSession":
+        return self
+
+    def first(self) -> Any:
+        # No registry project is bridged to the web-UI project: its RPA key is the UUID derived from the integer id.
+        return None
+
     def close(self) -> None:
         return
 
@@ -406,7 +417,7 @@ class _FakeAuth:
 
 class _FakeSpec:
     spec_id = "spec-1"
-    project_id = PROJECT_REF
+    project_id = derived_project_uuid(PROJECT_REF)
     name = "nightly"
     default_packet: Dict[str, Any] = {}
     secret_fields: Tuple[str, ...] = ()
