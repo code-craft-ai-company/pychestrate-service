@@ -84,22 +84,22 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
     **Feature: run lists say what ran (ORC-11)**
     **Property: each run row starts with its job name ("Test run", "Build run"
     ... when it has none, or when the name is only an identifier) followed by the short id, then the type spelled out ("Test ·
-    testbase", "Build · makefile"), the project, the state, the creation time
-    and how long it ran ("3m 12s"; "—" when it never started); all six columns
+    testbase", "Build · makefile"), the project, the state, who triggered it ("—" when no user did), the creation time
+    and how long it ran ("3m 12s"; "—" when it never started); all seven columns
     fit at 1440 px, so Duration is not scrolled out of sight.**
     """
     runs = {
         "items": [
-            {"run_id": "aaaaaaaa-1111-4000-8000-000000000001", "project_id": PROJECT_ID, "job_name": "nightly-regression", "job_type": "testbase",
+            {"run_id": "aaaaaaaa-1111-4000-8000-000000000001", "project_id": PROJECT_ID, "job_name": "nightly-regression", "job_type": "testbase", "triggered_by": "Ada Lovelace",
              "state": "completed", "created_at": "2026-09-29T10:00:00+00:00", "started_at": "2026-09-29T10:00:05+00:00", "completed_at": "2026-09-29T10:03:17+00:00"},
-            {"run_id": "bbbbbbbb-2222-4000-8000-000000000002", "project_id": PROJECT_ID, "job_name": None, "job_type": "build-makefile",
+            {"run_id": "bbbbbbbb-2222-4000-8000-000000000002", "project_id": PROJECT_ID, "job_name": None, "job_type": "build-makefile", "triggered_by": "grace",
              "state": "pending", "created_at": "2026-09-29T11:00:00+00:00", "started_at": None, "completed_at": None},
             {"run_id": "cccccccc-3333-4000-8000-000000000003", "project_id": PROJECT_ID, "job_name": "", "job_type": "rpa-process",
              "state": "failed", "created_at": "2026-09-29T09:00:00+00:00", "started_at": "2026-09-29T09:00:00+00:00", "completed_at": "2026-09-29T09:00:45+00:00"},
             # A test run's job name is its catalog entry's id: not a name a person can read.
             {"run_id": "dddddddd-4444-4000-8000-000000000004", "project_id": PROJECT_ID, "job_name": "823e8e6f-2c4d-48c7-977b-bfb390a5a059", "job_type": "testbase",
              "state": "running", "created_at": "2026-09-29T08:00:00+00:00", "started_at": "2026-09-29T08:00:00+00:00", "completed_at": None},
-            {"run_id": "eeeeeeee-5555-4000-8000-000000000005", "project_id": PROJECT_ID, "job_name": "smoke", "job_type": "testbase",
+            {"run_id": "eeeeeeee-5555-4000-8000-000000000005", "project_id": PROJECT_ID, "job_name": "smoke", "job_type": "testbase", "triggered_by": "",
              "state": "completed", "created_at": "2026-09-29T07:00:00+00:00", "started_at": "2026-09-29T07:00:00+00:00", "completed_at": "2026-09-29T07:00:00+00:00"},
         ],
         "meta": {"page": 1, "per_page": 50, "total": 5},
@@ -118,10 +118,10 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
         page.context.close()
 
     testbase.assert_equal(
-        (fits, headers, [row[:2] for row in text], [row[-1] if index != 3 else None for index, row in enumerate(text)]),
+        (fits, headers, [row[:2] for row in text], [row[-1] if index != 3 else None for index, row in enumerate(text)], [row[4] for row in text]),
         (
             True,
-            ["Job", "Type", "Project", "State", "Created", "Duration"],
+            ["Job", "Type", "Project", "State", "Triggered by", "Created", "Duration"],
             [
                 ["nightly-regression aaaaaaaa", "Test · testbase"],
                 ["Build run bbbbbbbb", "Build · makefile"],
@@ -130,6 +130,7 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
                 ["smoke eeeeeeee", "Test · testbase"],
             ],
             ["3m 12s", "—", "45s", None, "< 1s"],
+            ["Ada Lovelace", "grace", "—", "—", "—"],
         ),
     )
     return

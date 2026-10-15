@@ -1164,6 +1164,9 @@ class PycRunDetail extends HTMLElement {
     if (job_name !== void 0 && job_name !== null && job_name.length > 0) {
       this._append_field(grid, "Job name", job_name);
     }
+    if (typeof run.triggered_by === "string" && run.triggered_by.length > 0) {
+      this._append_field(grid, "Triggered by", run.triggered_by);
+    }
     const attempt_field = document.createElement("div");
     attempt_field.classList.add("pyc-run-detail__field");
     const attempt_term = document.createElement("dt");

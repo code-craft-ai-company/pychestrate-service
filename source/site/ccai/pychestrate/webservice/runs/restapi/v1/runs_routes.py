@@ -824,6 +824,38 @@ def _assigned_client_block(*, db_session: Any, client_id: Optional[str]) -> Opti
     return rtnval
 
 
+def _triggered_by_name(*, db_session: Any, run_id: str) -> Optional[str]:
+    """
+        Who started the run, by name (ORC-11): the user a test run or a build was triggered by,
+        as their display name (their login when they have none). Runs started by something
+        else (a pipeline, a schedule) and runs whose user no longer exists have none.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: The run's id.
+
+        :returns: The name, or None.
+    """
+    from ccai.pychestrate.webservice.identity.users.models import IdentityUser  # noqa: E402
+    from ccai.pychestrate.webservice.orchestration.build.models import BuildRun  # noqa: E402
+    from ccai.pychestrate.webservice.orchestration.test.models import TestRun  # noqa: E402
+
+    try:
+        user_id = db_session.query(TestRun.triggered_by).filter(TestRun.run_id == run_id).scalar()
+        if user_id is None:
+            user_id = db_session.query(BuildRun.actor_id).filter(BuildRun.run_id == run_id).scalar()
+        user = None
+        if user_id is not None:
+            user = db_session.query(IdentityUser).filter(IdentityUser.user_id == user_id).first()
+    except Exception:
+        # Sessions without these tables (unit-test fakes) have nobody to name.
+        return None
+    if user is None:
+        return None
+    display_name = (user.display_name or "").strip()
+    rtnval = display_name if len(display_name) > 0 else user.login_name
+    return rtnval
+
+
 def _run_to_dict(
         *,
         row: Run,
@@ -854,6 +886,9 @@ def _run_to_dict(
           True (the single-run read); list pages keep it ``null``
           so a 500-row page does not drag every manifest's file
           index along.
+
+        * ``triggered_by`` — the name of the user who started a test
+          run or a build (see :func:`_triggered_by_name`).
 
         Facts the data model does not record (``labels``) are
         emitted empty.
@@ -924,6 +959,7 @@ def _run_to_dict(
         "dispatched_at": timings["dispatched_at"],
         "started_at": timings["started_at"],
         "completed_at": timings["completed_at"],
+        "triggered_by": _triggered_by_name(db_session=db_session, run_id=run_id),
         "labels": {},
     }
     return rtnval
@@ -996,7 +1032,7 @@ CSV_EXPORT_MAX_ROWS = 5000
 
 CSV_EXPORT_COLUMNS = (
     "run_id", "project_id", "job_name", "job_type", "state", "terminal_outcome",
-    "created_at", "started_at", "completed_at", "duration_seconds", "pod_id",
+    "created_at", "started_at", "completed_at", "duration_seconds", "pod_id", "triggered_by",
 )
 
 

@@ -9040,6 +9040,14 @@ components:
           format: date-time
           nullable: true
           description: First transition into a terminal state.
+        triggered_by:
+          type: string
+          nullable: true
+          description: >-
+            The name (display name, else login) of the user who started the
+            run. Recorded for test runs and builds; `null` for a run started by
+            something else (a pipeline, a schedule) and for one whose user no
+            longer exists.
         labels:
           type: object
           additionalProperties: { type: string }

@@ -76,10 +76,11 @@ FAILURE: Dict[str, Any] = {
 }
 
 
-def _open(browser: Browser, *, state: str = "failed", results: Any = None, results_status: int = 200) -> Any:
+def _open(browser: Browser, *, state: str = "failed", results: Any = None, results_status: int = 200, run_extra: Optional[Dict[str, Any]] = None) -> Any:
     """
         Open the run page. ``results`` is the body of ``/results`` (or a callable of
         the query); the requests made to it are collected on ``page.results_queries``.
+        ``run_extra`` adds fields to the run the API stub answers with.
     """
     queries: List[Dict[str, str]] = []
 
@@ -91,7 +92,7 @@ def _open(browser: Browser, *, state: str = "failed", results: Any = None, resul
     install_site_routes(
         context, bundle_names=["pyc-site-shell", "pyc-runs-bundle"],
         api_stubs={
-            "/api/v1/runs/" + RUN_ID: _run(state),
+            "/api/v1/runs/" + RUN_ID: dict(_run(state), **(run_extra or {})),
             "/api/v1/runs/{}/results".format(RUN_ID): answer,
             "/api/v1/projects": {"items": [{"project_id": PROJECT_ID, "display_name": "Demo", "slug": "demo"}], "meta": {"total": 1}},
         },
@@ -258,4 +259,27 @@ def test_no_recorded_tests_a_failed_request_and_a_running_run_each_say_the_right
         (empty, failed, run_still_shown, running),
         ("No individual test results were recorded for this run.", "Couldn't load the test results.", 1, ("", 0)),
     )
+    return
+
+
+def test_the_run_page_says_who_triggered_the_run_when_it_is_known(browser: Browser):
+    """
+    **Feature: who triggered a run (ORC-11)**
+    **Property: a run started by a user shows "Triggered by" with their name beside the other
+    facts; a run with no recorded user shows no such field (nothing is invented).**
+    """
+    page = _open(browser, results=_page_of([], {}), run_extra={"triggered_by": "Ada Lovelace"})
+    try:
+        labels = page.locator(".pyc-run-detail__grid dt").all_inner_texts()
+        index = labels.index("Triggered by") if "Triggered by" in labels else -1
+        value = page.locator(".pyc-run-detail__grid dd").nth(index).inner_text() if index >= 0 else None
+    finally:
+        page.context.close()
+    page = _open(browser, results=_page_of([], {}), run_extra={"triggered_by": None})
+    try:
+        unknown = "Triggered by" in page.locator(".pyc-run-detail__grid dt").all_inner_texts()
+    finally:
+        page.context.close()
+
+    testbase.assert_equal((value, unknown), ("Ada Lovelace", False))
     return

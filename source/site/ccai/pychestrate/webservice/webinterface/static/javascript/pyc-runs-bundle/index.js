@@ -1045,13 +1045,13 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "job_type",
         label: "Type",
-        width: "11rem",
+        width: "10rem",
         render: (run) => job_type_label(run.job_type)
       },
       {
         key: "project_id",
         label: "Project",
-        width: "10rem",
+        width: "9rem",
         render: (run) => {
           const project = document.createElement("span");
           project.classList.add("pyc-runs-list__project");
@@ -1065,7 +1065,7 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "state",
         label: "State",
-        width: "8rem",
+        width: "7.5rem",
         render: (run) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-runs-list__badge");
@@ -1073,6 +1073,12 @@ var PycRunsList = class extends HTMLElement {
           badge.textContent = state_label(run.state);
           return badge;
         }
+      },
+      {
+        key: "triggered_by",
+        label: "Triggered by",
+        width: "9rem",
+        render: (run) => typeof run.triggered_by === "string" && run.triggered_by.length > 0 ? run.triggered_by : "\u2014"
       },
       {
         key: "created_at",
@@ -1083,7 +1089,7 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "duration",
         label: "Duration",
-        width: "8rem",
+        width: "7rem",
         sortable: false,
         render: (run) => format_duration(run.started_at, run.completed_at, run.state === "running")
       }
@@ -2287,6 +2293,9 @@ var PycRunDetail = class extends HTMLElement {
     const job_name = run.job_name;
     if (job_name !== void 0 && job_name !== null && job_name.length > 0) {
       this._append_field(grid, "Job name", job_name);
+    }
+    if (typeof run.triggered_by === "string" && run.triggered_by.length > 0) {
+      this._append_field(grid, "Triggered by", run.triggered_by);
     }
     const attempt_field = document.createElement("div");
     attempt_field.classList.add("pyc-run-detail__field");

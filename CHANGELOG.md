@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **The Runs list and a run's page say who started it (ORC-11).** A test run records the user who triggered it and a build its actor, but the runs API never returned either. `GET /api/v1/runs`, `/runs/{id}`
+  and the CSV export (as the last column, so scripts reading by position still work) now carry `triggered_by`, the user's display name (their login when they have none); the Runs list has a **Triggered by**
+  column (a dash when no user did, for example a build a pipeline started or one whose user no longer exists) and the run page a **Triggered by** fact when it is known. The list's columns were narrowed a
+  little so all seven still fit at 1440 px. Not recorded yet: the branch and commit a run was started from, and a trigger record for runs a pipeline or schedule starts.
 - **A build's page shows its standard output as the log, and its error output apart (ORC-12).** Found by building on a real pod: a build uploads `build-stdout.log` and `build-stderr.log`, and the page picked the
   first whose name said "build", which was the (empty) standard error, so a passing build said "(the log is empty)" and a failing one hid why it failed. The standard output is now the log, and
   a standard error with something in it is shown under "Error output" with its own link (one too big to show says so and is linked); an empty one adds nothing. A build with a single log file still shows

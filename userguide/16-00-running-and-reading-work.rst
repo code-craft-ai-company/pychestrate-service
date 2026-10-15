@@ -80,7 +80,9 @@ Follow a run
 **Project**, and choose **Refresh** to reload; the page notes when it last did.
 The columns are **Job** (what ran: the job's name, which links to the run's
 page, and the short id after it for quoting), **Type** (for example *Test ·
-testbase* or *Build · makefile*), **Project**, **State**, **Created** and
+testbase* or *Build · makefile*), **Project**, **State**, **Triggered by** (the
+user who started a test run or a build; a dash when no user did, for example a
+run a pipeline started), **Created** and
 **Duration** (how long it ran, or how long so far while it is running; a dash
 for a run that has not started). The **Builds** and **Provisioning runs** pages
 lead the same way: a build with its runner and target (*makefile · docs*) and
@@ -91,7 +93,7 @@ scrolls sideways as one piece.
 **Download CSV**, beside Refresh, saves the whole list as the filters now
 show it (not just the page on screen) as a spreadsheet: run id, project, job
 name and type, state, outcome, when it was created, started and completed, how
-long it ran, and the pod. It holds at most 5,000 runs; a longer list is cut and
+long it ran, the pod, and who triggered it. It holds at most 5,000 runs; a longer list is cut and
 the download says so in its ``X-Export-Truncated`` header. Cells that a
 spreadsheet could read as a formula are written as text. The same file is
 ``GET /api/v1/runs?format=csv`` (with the same ``project_id`` and ``state``
@@ -108,12 +110,14 @@ Read a run
 Open a run from the list. The page shows:
 
 * The run's short id and its **state**, coloured by the outcome.
-* Its facts: **Project**, **Pod**, **Job type**, **Job name**, **Dispatch
-  attempt**, and the times it was **Created**, **Dispatched**, **Started** and
+* Its facts: **Project**, **Pod**, **Job type**, **Job name**, **Triggered by**
+  (when a user started it), **Dispatch attempt**, and the times it was **Created**, **Dispatched**, **Started** and
   **Completed**.
 * **Terminal outcome** and **Reason**, once the run has ended. The reason says
-  why. For a test run it is the pod's account, for example "testbase run exited
-  with code 255", or "testbase result manifest: outcome=success". A run that
+  why. For a failed test run it is the pod's account, for example "1 of 2 tests
+  failed.", and the same text is in the failed-run notification; when the pod
+  gave none (a run that passed, or a build) it is "testbase result manifest:
+  outcome=success" (or "build result manifest: outcome=failure"). A run that
   overran its hard deadline is ended by the service, and the reason says so:
   "hard deadline ... passed".
 * **Progress**: tiles for **Passed**, **Failed**, **Errored**, **Skipped** and
