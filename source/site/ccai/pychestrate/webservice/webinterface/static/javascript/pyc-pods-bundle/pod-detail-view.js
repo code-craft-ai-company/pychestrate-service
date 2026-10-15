@@ -25,9 +25,9 @@ const POD_STATES = [
   "CLIENT_LOST",
   "FAILED"
 ];
+// A draining pod is not mid-transition: nothing moves it on by itself (an operator retires it), so it is not polled every 5 seconds like a pod being provisioned.
 const TRANSIENT_POD_STATES = [
-  "PROVISIONING",
-  "DRAINING"
+  "PROVISIONING"
 ];
 const TERMINAL_POD_STATES = [
   "RELEASED"
@@ -217,6 +217,7 @@ class PycPodDetail extends HTMLElement {
   _loading;
   _errored;
   _transient;
+  _draining;
   _poll_status;
   _poll_timer;
   _root;
@@ -243,6 +244,7 @@ class PycPodDetail extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._transient = false;
+    this._draining = false;
     this._poll_status = "idle";
     this._poll_timer = null;
     this._root = null;
@@ -419,6 +421,7 @@ class PycPodDetail extends HTMLElement {
     if (state_env.ok === true && state_env.body !== null) {
       this._state_row = state_env.body;
       this._transient = is_transient_pod_state(state_env.body.state);
+      this._draining = state_env.body.state === "DRAINING";
     } else {
       // Never invent a state -- an unavailable state renders as
       // "State unavailable", not as DEFINED.
@@ -1221,6 +1224,8 @@ class PycPodDetail extends HTMLElement {
       el.setAttribute("data-tone", "neutral");
       if (this._transient === true) {
         el.textContent = "Pod is mid-transition — refreshing every 5 seconds.";
+      } else if (this._draining === true) {
+        el.textContent = "Pod is draining: it takes no new work. Retire it when its jobs have finished. Refreshing every 15 seconds.";
       } else {
         el.textContent = "Live view — refreshing every 15 seconds.";
       }

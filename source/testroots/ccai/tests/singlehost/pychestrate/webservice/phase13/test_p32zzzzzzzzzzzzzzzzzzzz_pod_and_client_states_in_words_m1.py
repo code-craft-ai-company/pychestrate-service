@@ -137,7 +137,8 @@ def test_a_pod_page_reads_its_state_history_and_hints_in_words(browser: Browser)
     **Feature: states in words (ORC-38)**
     **Property: a draining pod's state chip reads "draining", its history reads "ready → in use", the disabled Drain
     button explains itself with "ready or in use", the registration reads "active" and its history "released"; no
-    capitalised state word is left.**
+    capitalised state word is left; the banner says a draining pod takes no new work and is refreshed every 15 seconds
+    (not "mid-transition", every 5: nothing moves a draining pod on but an operator).**
     """
     base = "/api/v1/projects/{}/pods/{}".format(PROJECT, POD)
     stubs = {
@@ -153,12 +154,15 @@ def test_a_pod_page_reads_its_state_history_and_hints_in_words(browser: Browser)
         text = " ".join(page.locator("main").inner_text().split())
         drain_hint = page.locator('[data-role="drain-action"]').get_attribute("title")
         capitalised = [word for word in ("DRAINING", "READY", "IN_USE", "ACTIVE", "RELEASED") if word in text or word in (drain_hint or "")]
+        page.wait_for_timeout(600)
+        banner = page.locator('[data-role="poll-banner"]').inner_text()
     finally:
         page.context.close()
 
     testbase.assert_equal(
-        ("draining" in text, "ready → in use" in text, "released · v1" in text, drain_hint, capitalised),
-        (True, True, True, "Drain is only available while the pod is ready or in use.", []),
+        ("draining" in text, "ready → in use" in text, "released · v1" in text, drain_hint, capitalised, banner),
+        (True, True, True, "Drain is only available while the pod is ready or in use.", [],
+         "Pod is draining: it takes no new work. Retire it when its jobs have finished. Refreshing every 15 seconds."),
     )
     return
 

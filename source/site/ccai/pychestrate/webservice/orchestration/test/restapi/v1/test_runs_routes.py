@@ -47,6 +47,7 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
     DispatchCandidate,
 )
 from ccai.pychestrate.webservice.orchestration.rpa.candidates import capability_tags_for_client
+from ccai.pychestrate.webservice.pods.lifecycle_service import draining_note
 from ccai.pychestrate.webservice.orchestration.test import orchestrator as orchestrator_module
 from ccai.pychestrate.webservice.orchestration.test.catalog import repository as catalog_repo
 from ccai.pychestrate.webservice.orchestration.test.errors import (
@@ -381,6 +382,10 @@ def _candidates_for_pod(*, db_session: Any, pod_id: str) -> List[DispatchCandida
 
         :returns: List of dispatch candidates (may be empty).
     """
+    from ccai.pychestrate.webservice.pods.lifecycle_service import accepts_new_work  # noqa: E402
+
+    if accepts_new_work(db_session=db_session, pod_id=pod_id) is False:
+        return []
     registrations = (
         db_session.query(PodRegistration)
         .filter(PodRegistration.pod_id == pod_id)
@@ -494,6 +499,7 @@ def _build_eligible_pod_candidates(
             detail=(
                 "No enrolled pod matches the job's capability "
                 "requirements -- enroll a client/pod first."
+                + draining_note(db_session=db_session, project_id=project_id)
             ),
             extensions={
                 "project_id": project_id,

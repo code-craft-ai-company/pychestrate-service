@@ -88,6 +88,11 @@ def _candidates_from_registrations(registrations: List[Any], *, db_session: Any 
         pod_id = getattr(reg, "pod_id", None)
         if client_id is None or pod_id is None:
             continue
+        if db_session is not None:
+            from ccai.pychestrate.webservice.pods.lifecycle_service import accepts_new_work  # noqa: E402
+
+            if accepts_new_work(db_session=db_session, pod_id=str(pod_id)) is False:
+                continue
         tags: tuple = tuple()
         raw_tags = getattr(reg, "capability_tags", None)
         if isinstance(raw_tags, (list, tuple)):

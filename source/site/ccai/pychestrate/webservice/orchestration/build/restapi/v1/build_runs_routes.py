@@ -58,6 +58,7 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
     DispatchCandidate,
 )
 from ccai.pychestrate.webservice.orchestration.rpa.candidates import capability_tags_for_client
+from ccai.pychestrate.webservice.pods.lifecycle_service import draining_note
 from ccai.pychestrate.webservice.orchestration.build import (
     service as build_service,
 )
@@ -457,6 +458,10 @@ def _candidates_for_pod(
 
         :returns: List of dispatch candidates (may be empty).
     """
+    from ccai.pychestrate.webservice.pods.lifecycle_service import accepts_new_work  # noqa: E402
+
+    if accepts_new_work(db_session=db_session, pod_id=pod_id) is False:
+        return []
     registrations = (
         db_session.query(PodRegistration)
         .filter(PodRegistration.pod_id == pod_id)
@@ -700,6 +705,7 @@ def handle_trigger_build(request: Request) -> Response:
                 detail=(
                     "No enrolled pod matches the build job's "
                     "requirements -- enroll a client/pod first."
+                    + draining_note(db_session=db_session, project_id=project_id)
                 ),
                 extensions={
                     "project_id": project_id,

@@ -25,7 +25,9 @@ from ccai.pychestrate.webservice.orchestration.infra.restapi.v1 import provision
 from ccai.pychestrate.webservice.orchestration.pipelines.execution.orchestrator import PipelineOrchestrator
 from ccai.pychestrate.webservice.orchestration.test import orchestrator as orchestrator_module
 from ccai.pychestrate.webservice.orchestration.test.restapi.v1 import test_runs_routes
-from ccai.pychestrate.webservice.pods.models import PodDefinition, PodRegistration, RegistrationState
+from ccai.pychestrate.webservice.orchestration.rpa.candidates import resolve_dispatch_candidates
+from ccai.pychestrate.webservice.pods.lifecycle_service import draining_note
+from ccai.pychestrate.webservice.pods.models import PodDefinition, PodRegistration, PodRuntimeState, PodState, RegistrationState
 
 from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import build_in_memory_session
 
@@ -102,5 +104,85 @@ def test_build_provisioning_and_pipeline_dispatch_see_the_advertised_tags_too():
             {client: ["lab-browser", "rpa", "rpa:invoice@1"]},
             {client: ["lab-browser", "rpa", "rpa:invoice@1"], quiet_client: []},
         ),
+    )
+    return
+
+
+def test_a_draining_or_released_pod_is_sent_no_new_work_by_any_dispatch_path():
+    """
+    **Feature: pod lifecycle (drain)**
+    **Property: Drain changed the pod's state and nothing else (a draining pod on a real lab pod went on being sent new tests); a pod that is draining, released or failed is now offered to no
+    dispatch path (test runs, builds, provisioning runs, pipeline stages, RPA jobs), while a ready or in-use pod, a pod whose client is lost (the dispatcher waits for it) and a pod with no recorded
+    state still are.**
+    """
+    _engine, session = build_in_memory_session()
+    project = str(uuid.uuid4())
+    pods = {}
+    for label, state in (
+        ("ready", PodState.READY), ("in_use", PodState.IN_USE), ("draining", PodState.DRAINING), ("released", PodState.RELEASED), ("failed", PodState.FAILED),
+        ("lost", PodState.CLIENT_LOST), ("unrecorded", None),
+    ):
+        pod, client = str(uuid.uuid4()), str(uuid.uuid4())
+        pods[label] = pod
+        session.add(PodDefinition(pod_id=pod, project_id=project, pod_name=label, current_version=1))
+        _register(session, pod_id=pod, client_id=client, tags=None)
+        if state is not None:
+            session.add(PodRuntimeState(pod_id=pod, state=state))
+    session.commit()
+    by_pod = {pod: label for label, pod in pods.items()}
+
+    def _offered(candidates: object) -> list:
+        return sorted(by_pod[candidate.pod_id] for candidate in candidates)
+
+    every_pod = []
+    for label in pods:
+        every_pod.extend(test_runs_routes._candidates_for_pod(db_session=session, pod_id=pods[label]))
+    expected = ["in_use", "lost", "ready", "unrecorded"]
+    testbase.assert_equal(
+        (
+            _offered(every_pod),
+            _offered(c for label in pods for c in build_runs_routes._candidates_for_pod(db_session=session, pod_id=pods[label])),
+            _offered(c for label in pods for c in provisioning_runs_routes._candidates_for_pod(db_session=session, pod_id=pods[label])),
+            _offered(PipelineOrchestrator._eligible_candidates_for_project(db_session=session, project_id=project)),
+            _offered(resolve_dispatch_candidates(db_session=session, project_id=project)),
+            _offered(resolve_dispatch_candidates(db_session=session, project_id=project, target_pod_id=pods["draining"])),
+        ),
+        (expected, expected, expected, expected, expected, []),
+    )
+    return
+
+
+def test_the_no_pod_answer_names_the_draining_pods_when_there_are_any():
+    """
+    **Feature: pod lifecycle (drain)**
+    **Property: when the project has draining pods the "no enrolled pod matches" answer of the test, build and provisioning routes adds "Pods that are draining take no new work: <names>."
+    (at most five, then "and n more"); with none draining it is unchanged; another project's draining pod is not named.**
+    """
+    _engine, session = build_in_memory_session()
+    project, other = str(uuid.uuid4()), str(uuid.uuid4())
+    for owner, name, state in ((project, "lab-pod-b", PodState.DRAINING), (project, "lab-pod-a", PodState.DRAINING), (project, "ready-pod", PodState.READY), (other, "elsewhere", PodState.DRAINING)):
+        pod = str(uuid.uuid4())
+        session.add(PodDefinition(pod_id=pod, project_id=owner, pod_name=name, current_version=1))
+        session.add(PodRuntimeState(pod_id=pod, state=state))
+    session.commit()
+    for number in range(5):
+        pod = str(uuid.uuid4())
+        session.add(PodDefinition(pod_id=pod, project_id=other, pod_name="many-{}".format(number), current_version=1))
+        session.add(PodRuntimeState(pod_id=pod, state=PodState.DRAINING))
+    session.commit()
+
+    import os
+
+    from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES
+
+    webservice = os.path.dirname(os.path.dirname(SITE_DIRECTORIES.DIR_STATIC))
+    wired = [
+        open(os.path.join(webservice, "orchestration", *parts), encoding="utf-8").read().count("draining_note(db_session=db_session, project_id=project_id)")
+        for parts in (("test", "restapi", "v1", "test_runs_routes.py"), ("build", "restapi", "v1", "build_runs_routes.py"), ("infra", "restapi", "v1", "provisioning_runs_routes.py"))
+    ]
+
+    testbase.assert_equal(
+        (draining_note(db_session=session, project_id=project), draining_note(db_session=session, project_id=str(uuid.uuid4())), draining_note(db_session=session, project_id=other).endswith("and 1 more."), wired),
+        (" Pods that are draining take no new work: lab-pod-a, lab-pod-b.", "", True, [1, 1, 1]),
     )
     return

@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- **Draining a pod now stops new work reaching it (pod lifecycle).** Tried on the lab pod: Drain moved it to "draining" and changed nothing else, because no dispatch path looked at the pod's state, so the
+  next test run was sent to the draining pod. A pod that is draining, released or failed is now offered to no dispatch path (test runs, builds, provisioning runs, pipeline stages, RPA jobs); a pod whose client is lost
+  is still targeted (the dispatcher waits for it to reconnect), and so is one with no recorded state. When no pod can take a job and some are draining, the 409 says so ("... enroll a client/pod first. Pods that are
+  draining take no new work: lab-pod-2.") instead of sending a person to enroll a pod that is already there. The pod's page no longer calls a draining pod "mid-transition, refreshing every 5 seconds" (nothing moves it
+  on but an operator retiring it): it says "Pod is draining: it takes no new work. Retire it when its jobs have finished." and refreshes every 15 seconds. Verified on the lab: a draining pod got 409, the same pod
+  set ready got 202. A draining pod cannot be returned to ready (the lifecycle only allows retiring it); that is unchanged.
 - **A cancelled RPA job is a cancelled run, not a failed one (ORC-10).** Cancelling a slow job on the lab pod worked (the job ended "cancelled", exit -15, in about 20 seconds, on the pod's next heartbeat), but its run
   said "failed / failure": the pod's upload knew only succeeded or not and named the outcome "failure". The Runs list, the dashboard's "needs attention" list and the failed-run notification all treated a cancel as a
   failure. The service now ends the run CANCELLED whenever the job is cancelled (so older pods are right too), and `pychestrate-client` (c122fd0) reports "cancelled" as the other kinds already did; a timeout and a

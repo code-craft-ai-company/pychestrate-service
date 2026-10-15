@@ -30,6 +30,7 @@ from ccai.pychestrate.webservice.pods.exceptions import (
     PodStateTransitionError,
 )
 from ccai.pychestrate.webservice.pods.models import (
+    PodDefinition,
     PodLifecycleLog,
     PodRuntimeState,
     PodState,
@@ -114,6 +115,54 @@ def initialize_pod_state(
     db_session.flush()
     db_session.commit()
     return row
+
+
+#: Pod states that take no new work: a draining pod finishes what it has, a released one was deregistered and a failed one never came up.
+#: (A pod whose client is lost can still be targeted: the dispatcher says so and waits for it to reconnect.)
+NO_NEW_WORK_STATES: Tuple[PodState, ...] = (PodState.DRAINING, PodState.RELEASED, PodState.FAILED)
+
+
+def accepts_new_work(*, db_session: DbSession, pod_id: str) -> bool:
+    """
+        Whether a job may be dispatched to the pod. Drain was a button that changed the pod's state and nothing else (a draining pod went on
+        being sent new jobs); every dispatch path now asks this. A pod with no recorded state accepts work, as before.
+
+        :param db_session: Active SQLAlchemy session.
+        :param pod_id: The pod's id.
+
+        :returns: False when the pod is draining, released or failed.
+    """
+    row = db_session.query(PodRuntimeState.state).filter(PodRuntimeState.pod_id == pod_id).first()
+    state = row[0] if row is not None else None
+    rtnval = state not in NO_NEW_WORK_STATES
+    return rtnval
+
+
+def draining_note(*, db_session: DbSession, project_id: str) -> str:
+    """
+        What to add to a "no pod can take this job" answer when the reason may be that the project's pods are draining: they take no new
+        work, and "enroll a client/pod first" sent a person looking for a pod that was already there.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: The project's id.
+
+        :returns: " Pods that are draining take no new work: lab-pod-2." (names sorted, at most five), or "" when none is draining.
+    """
+    try:
+        rows = (
+            db_session.query(PodDefinition.pod_name)
+            .join(PodRuntimeState, PodRuntimeState.pod_id == PodDefinition.pod_id)
+            .filter(PodDefinition.project_id == project_id, PodRuntimeState.state == PodState.DRAINING)
+            .all()
+        )
+    except Exception:  # noqa: BLE001 -- a hint added to an error answer must never fail that answer
+        return ""
+    names = sorted(str(row[0]) for row in rows)
+    if len(names) == 0:
+        return ""
+    shown = ", ".join(names[:5]) + (" and {} more".format(len(names) - 5) if len(names) > 5 else "")
+    rtnval = " Pods that are draining take no new work: {}.".format(shown)
+    return rtnval
 
 
 def apply_transition(

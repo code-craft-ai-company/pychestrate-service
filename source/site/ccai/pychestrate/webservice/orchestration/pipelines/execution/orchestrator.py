@@ -1148,8 +1148,12 @@ class PipelineOrchestrator:
             .all()
         )
         candidates: List[DispatchCandidate] = []
+        from ccai.pychestrate.webservice.pods.lifecycle_service import accepts_new_work
+
         for pod_row in pod_rows:
             pod_id = str(pod_row.pod_id)
+            if accepts_new_work(db_session=db_session, pod_id=pod_id) is False:
+                continue
             registrations = (
                 db_session.query(PodRegistration)
                 .filter(PodRegistration.pod_id == pod_id)
