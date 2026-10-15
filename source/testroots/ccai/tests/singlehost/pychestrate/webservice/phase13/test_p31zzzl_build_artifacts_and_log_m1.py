@@ -209,6 +209,72 @@ def test_a_big_log_is_linked_not_fetched_and_a_failure_or_absence_is_said(browse
     return
 
 
+def test_the_standard_output_is_the_log_and_a_non_empty_standard_error_is_shown_apart(browser: Browser):
+    """
+    **Feature: build log (ORC-12)**
+    **Property: of ``build-stderr.log`` and ``build-stdout.log`` the standard output is the build log (found on a real build, where both names say "build" and the empty
+    standard error was shown as "(the log is empty)"); the standard error is shown under "Error output" with its own link when it has anything in it; each file is
+    fetched once.**
+    """
+    page = _open(
+        browser, [_entry("build-stderr.log", size=29), _entry("build-stdout.log", size=26), _entry("build-summary.json", size=40)],
+        files={"build-stdout.log": (200, "step 1 ok\nstep 2 ok\n"), "build-stderr.log": (200, "error: something broke\n")},
+    )
+    try:
+        out = page.locator('[data-role="build-log"]').inner_text()
+        err = page.locator('[data-role="build-log-errors"]').inner_text()
+        heading = page.locator('[data-role="log-errors-heading"]').inner_text()
+        out_href = page.locator('[data-role="log-open"]').get_attribute("href")
+        err_href = page.locator('[data-role="log-errors-open"]').get_attribute("href")
+        asked = sorted(page.file_requests)
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (out.strip(), err.strip(), heading, out_href, err_href, asked),
+        (
+            "step 1 ok\nstep 2 ok", "error: something broke", "Error output", "/api/v1/runs/{}/artifacts/build-stdout.log".format(BUILD_ID),
+            "/api/v1/runs/{}/artifacts/build-stderr.log".format(BUILD_ID), ["build-stderr.log", "build-stdout.log"],
+        ),
+    )
+    return
+
+
+def test_an_empty_standard_error_is_not_shown_and_a_lone_standard_error_is_the_log(browser: Browser):
+    """
+    **Feature: build log (ORC-12)**
+    **Property: an empty standard error adds no "Error output" block (the passing build shows only its log); a build whose only log is ``build-stderr.log`` shows it as the
+    build log; a standard error too big to show says so and links it.**
+    """
+    page = _open(
+        browser, [_entry("build-stderr.log", size=0), _entry("build-stdout.log", size=12)],
+        files={"build-stdout.log": (200, "all good\n"), "build-stderr.log": (200, "")},
+    )
+    try:
+        quiet = (page.locator('[data-role="build-log"]').inner_text().strip(), page.locator('[data-role="build-log-errors"]').count(), page.locator('[data-role="log-errors-heading"]').count())
+    finally:
+        page.context.close()
+    page = _open(browser, [_entry("build-stderr.log", size=20)], files={"build-stderr.log": (200, "only errors here\n")})
+    try:
+        lone = (page.locator('[data-role="build-log"]').inner_text().strip(), page.locator('[data-role="build-log-errors"]').count())
+    finally:
+        page.context.close()
+    page = _open(
+        browser, [_entry("build-stdout.log", size=10), _entry("build-stderr.log", size=3 * 1024 * 1024)],
+        files={"build-stdout.log": (200, "fine\n"), "build-stderr.log": (200, "never fetched")},
+    )
+    try:
+        big = (page.locator('[data-role="log-errors-large"]').inner_text(), page.locator('[data-role="log-errors-open"]').count(), list(page.file_requests))
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (quiet, lone, big),
+        (("all good", 0, 0), ("only errors here", 0), ("The error output is 3 MB, too big to show here.", 1, ["build-stdout.log"])),
+    )
+    return
+
+
 def test_log_text_is_shown_as_text_and_wraps_inside_the_page(browser: Browser):
     """
     **Feature: build log (ORC-12)**

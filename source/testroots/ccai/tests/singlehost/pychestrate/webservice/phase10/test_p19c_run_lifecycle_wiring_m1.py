@@ -742,6 +742,56 @@ def test_results_complete_handler_advances_to_failed_on_failure_outcome():
     return
 
 
+def _complete_a_testbase_run_with(*, extra_body):
+    """Drive a testbase run to the end through the results/complete handler with a failure outcome plus ``extra_body``; returns the transition reasons."""
+    _prepare_state()
+    _engine, session = build_in_memory_session()
+    run_id = new_uuid()
+    create_run(db_session=session, run_id=run_id, project_id=PROJECT_UUID, job_type="testbase")
+    transition(db_session=session, run_id=run_id, event=RunEvent.DISPATCH_STARTED, actor="system:dispatcher")
+    transition(db_session=session, run_id=run_id, event=RunEvent.RECEIPT_RECORDED, actor="system:dispatch-ack")
+    transition(db_session=session, run_id=run_id, event=RunEvent.FIRST_PROGRESS, actor="system:progress-ingest")
+
+    scan_patch = create_module_patch(runs_routes.result_scanner, "scan_once")
+
+    class _FakeScanOutcome:
+        status = "scanned"
+
+    scan_mock = scan_patch.activate()
+    scan_mock.configure(side_effect=lambda **kwargs: _FakeScanOutcome())
+    try:
+        body = {
+            "client_id": "client-1", "format_tag": "testbase", "backend_key_prefix": "runs/{}/".format(run_id),
+            "completed_at": "2026-05-17T13:00:00+00:00", "terminal_outcome": "failure",
+        }
+        body.update(extra_body)
+        request = _FakeRequest(
+            path="/api/v1/runs/{}/results/complete".format(run_id), path_params={"run_id": run_id}, body=body, db_session=session, mtls_client_cn=CLIENT_CN,
+        )
+        response = runs_routes.handle_post_results_complete(request=request)
+    finally:
+        scan_patch.deactivate()
+    audits = run_repo.list_state_audits(db_session=session, run_id=run_id)
+    return response.status_code, [audit.reason for audit in audits if audit.to_state == RunState.FAILED]
+
+
+def test_the_failed_transition_carries_the_pods_own_explanation_when_it_gave_one():
+    """
+    **Feature: run-lifecycle-wiring**
+    **Property: the reason recorded on a test run's move to FAILED (what its event, and so a failed-run notification, says) is the pod's notes on the manifest ("1 of 2 tests
+    failed."), as the run page shows; without notes it is the generic manifest text.**
+    """
+    with_notes = _complete_a_testbase_run_with(extra_body={"notes": "1 of 2 tests failed."})
+    without = _complete_a_testbase_run_with(extra_body={})
+    blank = _complete_a_testbase_run_with(extra_body={"notes": "   "})
+
+    testbase.assert_equal(
+        (with_notes, without, blank),
+        ((202, ["1 of 2 tests failed."]), (202, ["testbase result manifest: outcome=failure"]), (202, ["testbase result manifest: outcome=failure"])),
+    )
+    return
+
+
 # ---------------------------------------------------------------------------
 # Full chain: ack -> progress -> results
 # ---------------------------------------------------------------------------

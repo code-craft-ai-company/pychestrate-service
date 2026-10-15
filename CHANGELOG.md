@@ -29,6 +29,16 @@ preview tag.
 
 ### Fixed
 
+- **A build's page shows its standard output as the log, and its error output apart (ORC-12).** Found by building on a real pod: a build uploads `build-stdout.log` and `build-stderr.log`, and the page picked the
+  first whose name said "build", which was the (empty) standard error, so a passing build said "(the log is empty)" and a failing one hid why it failed. The standard output is now the log, and
+  a standard error with something in it is shown under "Error output" with its own link (one too big to show says so and is linked); an empty one adds nothing. A build with a single log file still shows
+  it as the log.
+- **A failed test run says what failed, in the run page, its event and its notification (ORC-10).** Found by running a real pod against a local server with a passing and a failing test: the run page said
+  "Reason: testbase run exited with code 255." (testbase exits non-zero whenever a test fails, so that reads like a crash) while the failed-run notification said "testbase result manifest:
+  outcome=failure", two different sentences for one event. The reason recorded on the run's move to FAILED, which the event and so the notification carry, is now the pod's own explanation when it gave one
+  (the manifest's `notes`), the same text the run page shows; the generic text remains the fallback. With the client change (`pychestrate-client` 67fc883, which names the counts from testbase's own
+  summary) both now read "1 of 2 tests failed." A second client change (0fa2b41) stops the pod uploading Python bytecode (`__pycache__/…pyc`) as run artifacts.
+
 - **A changed variable reaches every worker (ADM-08).** The effective-value cache (`/api/v1/variables/effective`, project templates, pod configuration) is a per-process LRU that was invalidated
   only by writes made *in that process*; the service runs several workers (four under the gunicorn scripts), so after a change the other workers went on serving the old value, for a deleted
   variable too, until they restarted. It was found when the Admin Variables pages began to write the same store (a variable deleted on the page still resolved to its old value). Every entry now

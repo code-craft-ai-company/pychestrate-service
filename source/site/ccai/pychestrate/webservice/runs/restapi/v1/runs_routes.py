@@ -2306,11 +2306,18 @@ def handle_post_results_complete(request: Request) -> Response:
             # ``terminal_outcome`` field, mirroring how
             # ingest.result.completion decides success for build /
             # provision runs (terminal_outcome == "success" => True).
+            # The reason on the transition is what the run's event carries (and so what a notification says), so it is the pod's own
+            # explanation when it gave one ("1 of 2 tests failed."), as the run page already shows; the generic text is the fallback.
+            pod_notes = payload.get("notes", None)
+            transition_reason = (
+                pod_notes.strip() if isinstance(pod_notes, str) and len(pod_notes.strip()) > 0
+                else "testbase result manifest: outcome={}".format(terminal_outcome)
+            )
             _advance_run_state_from_outcome(
                 db_session=db_session,
                 run_id=run_id,
                 terminal_outcome=terminal_outcome,
-                reason="testbase result manifest: outcome={}".format(terminal_outcome),
+                reason=transition_reason,
             )
 
         # A run reporting ``cancelled`` is the pod confirming it
