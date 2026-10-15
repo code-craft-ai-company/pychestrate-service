@@ -24,7 +24,11 @@ from typing import Any, Dict
 
 from playwright.sync_api import Browser
 
+import os
+
 from ccai import testbase
+
+from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES
 
 from ccai.testshared.factories.browsers.playwright_browser import (
     create_playwright_browser,
@@ -190,4 +194,64 @@ def test_a_button_with_no_usable_label_falls_back_to_continue(browser: Browser):
         page.context.close()
 
     testbase.assert_equal(accept, "Continue")
+    return
+
+
+def test_a_harmless_action_gets_the_primary_button_and_everything_else_stays_red(browser: Browser):
+    """
+    **Feature: confirmation dialog (XC-15)**
+    **Property: a data-confirm form with no tone has the red (danger) confirming button, as every one did; data-confirm-tone="neutral" on the
+    form or on the button gives the primary one (running a job, checking a resource in is not destructive); any other value stays red.**
+    """
+    def _accept_classes(where: str, value: str = "neutral") -> str:
+        page = _open(browser, label="Run job now")
+        try:
+            if where != "none":
+                page.evaluate(
+                    "([where, value]) => (where === 'form' ? document.getElementById('victim') : document.getElementById('go')).setAttribute('data-confirm-tone', value)",
+                    [where, value],
+                )
+            page.click("#go")
+            page.wait_for_selector(DIALOG + "[open]", timeout=5000)
+            return page.evaluate("() => document.querySelector('dialog.pyc-confirm [data-role=confirm-accept]').className")
+        finally:
+            page.context.close()
+
+    def _tone(classes: str) -> str:
+        return "primary" if "pyc-confirm__button--primary" in classes else "danger" if "pyc-confirm__button--danger" in classes else "other"
+
+    testbase.assert_equal(
+        (_tone(_accept_classes("none")), _tone(_accept_classes("form")), _tone(_accept_classes("button")), _tone(_accept_classes("form", "calm"))),
+        ("danger", "primary", "primary", "danger"),
+    )
+    return
+
+
+def test_only_harmless_confirms_in_the_templates_are_neutral():
+    """
+    **Feature: confirmation dialog (XC-15)**
+    **Property: the server-rendered confirms that run a job and check a resource or an address in or out say data-confirm-tone="neutral"; no
+    confirm that deletes, revokes, removes, terminates, retires, deactivates or forces is neutral (a red button is what tells a person it cannot be taken back).**
+    """
+    import re
+
+    root = os.path.join(os.path.dirname(SITE_DIRECTORIES.DIR_STATIC), "blueprints")
+    neutral, wrongly_neutral = [], []
+    for current, _dirs, names in os.walk(root):
+        for name in names:
+            if not name.endswith(".html"):
+                continue
+            with open(os.path.join(current, name), encoding="utf-8") as handle:
+                text = handle.read()
+            for match in re.finditer(r'data-confirm="([^"]*)"([^>]*)>', text):
+                message, rest = match.group(1), match.group(2)
+                if 'data-confirm-tone="neutral"' in rest:
+                    neutral.append(message.split("?")[0].split("{{")[0].strip())
+                    if re.search(r"delete|revoke|remove|terminate|retire|deactivate|force|cancel|release|move|sign out|change", message, re.I):
+                        wrongly_neutral.append(message)
+
+    testbase.assert_equal(
+        (sorted(set(neutral)), wrongly_neutral),
+        (["Check in this IP", "Check in this resource", "Check out", "Check this resource back in", "Dispatch an RPA job with this work packet"], []),
+    )
     return

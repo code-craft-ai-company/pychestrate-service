@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **A confirmation for a harmless action no longer has the red "cannot be taken back" button (XC-15).** Seen when running an RPA job from its page on a real pod: "Dispatch an RPA job with this work packet?" had the same red
+  confirming button as "Delete the project", because every server-rendered `data-confirm` form got the danger style (the pipeline page's Run dialog was already blue). A form or button can now say
+  `data-confirm-tone="neutral"`; the RPA run form and the check-in and check-out forms for resources and addresses do (forced check-in, and every delete, revoke, remove, retire, terminate and deactivate, stay red). A test
+  keeps destructive confirms from being marked neutral.
 - **A project's RPA specifications and jobs are one set, whichever surface made them (the project bridge).** Found by running RPA jobs on a real pod: the RPA jobs page said "No RPA jobs yet" and the job page
   "RPA job not found" for jobs the REST surface listed. The web UI stored a project's RPA specifications and jobs under the text of its integer id ("1") and the REST surface under the project's UUID, so one
   project had two disjoint sets (the model's own note called it deliberate; `specs/project-model-bridge.md` says the registry project is the system of record). The UI now uses the registry project's UUID

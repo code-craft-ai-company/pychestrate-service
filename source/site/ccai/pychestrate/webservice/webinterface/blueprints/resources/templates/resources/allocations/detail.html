@@ -110,7 +110,7 @@
             <h2 class="card-header">Actions</h2>
             <div class="stack">
                 {% if allocation.user_id == current_user_id %}
-                <form action="{{ url_for('resources.allocation_checkin', allocation_id=allocation.id) }}" method="post" data-confirm="Check in this resource?">
+                <form action="{{ url_for('resources.allocation_checkin', allocation_id=allocation.id) }}" method="post" data-confirm="Check in this resource?" data-confirm-tone="neutral">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-warning btn-block">
                         {{ ui.icon("assignment_return") }} Check In

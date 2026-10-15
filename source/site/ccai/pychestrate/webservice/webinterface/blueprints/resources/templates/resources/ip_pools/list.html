@@ -98,7 +98,7 @@
                 <form action="{{ url_for('resources.ip_pool_checkin', pool_id=alloc.pool_id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
-                    <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Check In</button>
+                    <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?" data-confirm-tone="neutral">Check In</button>
                 </form>
             </td>
         </tr>

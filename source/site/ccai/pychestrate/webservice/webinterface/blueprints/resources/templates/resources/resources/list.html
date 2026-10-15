@@ -117,7 +117,7 @@
                 {% if free > 0 and resource.health_status in ['online', 'degraded'] %}
                 <span class="badge badge-success">Available</span>
                 {% if resource.capacity > 1 %}<span class="muted small">{{ free }} of {{ resource.capacity }} free</span>{% endif %}
-                <form action="{{ url_for('resources.resource_checkout', resource_id=resource.id) }}" method="post" data-confirm="Check out {{ resource.name }}? It is yours until you check it back in.">
+                <form action="{{ url_for('resources.resource_checkout', resource_id=resource.id) }}" method="post" data-confirm="Check out {{ resource.name }}? It is yours until you check it back in." data-confirm-tone="neutral">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="mode" value="exclusive">
                     <button type="submit" class="btn btn-sm btn-primary">Check out</button>

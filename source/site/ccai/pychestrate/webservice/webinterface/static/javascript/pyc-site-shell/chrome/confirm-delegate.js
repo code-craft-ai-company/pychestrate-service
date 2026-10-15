@@ -20,6 +20,7 @@
 
 const CONFIRM_ATTRIBUTE = "data-confirm";
 const CONFIRM_TYPE_ATTRIBUTE = "data-confirm-type";
+const CONFIRM_TONE_ATTRIBUTE = "data-confirm-tone";
 const INSTALLED_FLAG = "__pycConfirmDelegateInstalled";
 
 function resolve_confirm_message(form, submitter) {
@@ -46,6 +47,21 @@ function resolve_confirm_message(form, submitter) {
  * The text the person must type to confirm, or "" when none is asked for. Read
  * from the submit button first, then the form, like the message.
  */
+/*
+ * The tone of the confirming button: the red one that every data-confirm had is for what cannot be taken back; a form whose action is
+ * harmless (run a job, check a resource in) says data-confirm-tone="neutral" on the form or its button and gets the primary one.
+ */
+function resolve_confirm_tone(form, submitter) {
+    let raw = null;
+    if (submitter !== null && submitter !== undefined && typeof submitter.getAttribute === "function") {
+        raw = submitter.getAttribute(CONFIRM_TONE_ATTRIBUTE);
+    }
+    if (raw === null) {
+        raw = form.getAttribute(CONFIRM_TONE_ATTRIBUTE);
+    }
+    return raw !== null && raw.trim() === "neutral" ? "neutral" : "danger";
+}
+
 function resolve_confirm_type(form, submitter) {
     let raw = null;
     if (submitter !== null && submitter !== undefined && typeof submitter.getAttribute === "function") {
@@ -225,7 +241,7 @@ function install_confirm_delegate(root) {
         }
         event.preventDefault();
         const message = resolve_confirm_message(form, submitter);
-        ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter)).then((accepted) => {
+        ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter), resolve_confirm_tone(form, submitter)).then((accepted) => {
             if (accepted !== true) {
                 return;
             }

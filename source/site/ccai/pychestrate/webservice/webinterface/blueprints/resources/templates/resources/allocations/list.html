@@ -75,7 +75,7 @@
             <td>{{ alloc.expected_checkin | local_datetime(false, '—') }}</td>
             <td>
                 {% if alloc.user_id == current_user_id %}
-                <form action="{{ url_for('resources.allocation_checkin', allocation_id=alloc.id) }}" method="post" data-confirm="Check in this resource?">
+                <form action="{{ url_for('resources.allocation_checkin', allocation_id=alloc.id) }}" method="post" data-confirm="Check in this resource?" data-confirm-tone="neutral">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-warning">Check In</button>
                 </form>

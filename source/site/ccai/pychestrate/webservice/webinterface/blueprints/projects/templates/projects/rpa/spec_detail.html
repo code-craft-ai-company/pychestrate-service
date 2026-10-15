@@ -66,7 +66,7 @@
     {% if run_blocked_reason %}
     <div class="pyc-inline-notice" role="status" id="run-blocked">{{ run_blocked_reason }}</div>
     {% endif %}
-    <form action="{{ url_for('projects.rpa_run', project_id=project.id, spec_id=spec.spec_id) }}" method="post" class="pyc-run-form" data-confirm="Dispatch an RPA job with this work packet?">
+    <form action="{{ url_for('projects.rpa_run', project_id=project.id, spec_id=spec.spec_id) }}" method="post" class="pyc-run-form" data-confirm="Dispatch an RPA job with this work packet?" data-confirm-tone="neutral">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label for="work_packet">Work Packet (JSON)</label>

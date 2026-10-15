@@ -511,6 +511,7 @@ function build_palette_hint(shortcut_label, on_activate) {
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/confirm-delegate.js
 var CONFIRM_ATTRIBUTE = "data-confirm";
 var CONFIRM_TYPE_ATTRIBUTE = "data-confirm-type";
+var CONFIRM_TONE_ATTRIBUTE = "data-confirm-tone";
 var INSTALLED_FLAG = "__pycConfirmDelegateInstalled";
 function resolve_confirm_message(form, submitter) {
   let raw = null;
@@ -528,6 +529,16 @@ function resolve_confirm_message(form, submitter) {
     return "Are you sure?";
   }
   return trimmed;
+}
+function resolve_confirm_tone(form, submitter) {
+  let raw = null;
+  if (submitter !== null && submitter !== void 0 && typeof submitter.getAttribute === "function") {
+    raw = submitter.getAttribute(CONFIRM_TONE_ATTRIBUTE);
+  }
+  if (raw === null) {
+    raw = form.getAttribute(CONFIRM_TONE_ATTRIBUTE);
+  }
+  return raw !== null && raw.trim() === "neutral" ? "neutral" : "danger";
 }
 function resolve_confirm_type(form, submitter) {
   let raw = null;
@@ -681,7 +692,7 @@ function install_confirm_delegate(root) {
     }
     event.preventDefault();
     const message = resolve_confirm_message(form, submitter);
-    ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter)).then((accepted) => {
+    ask_confirmation(message, resolve_confirm_label(submitter), resolve_confirm_type(form, submitter), resolve_confirm_tone(form, submitter)).then((accepted) => {
       if (accepted !== true) {
         return;
       }
