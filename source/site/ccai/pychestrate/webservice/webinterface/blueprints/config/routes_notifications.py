@@ -220,6 +220,7 @@ def _delivery_row(*, attempt: Any, envelope: Any, channel_names: Dict[str, str])
         "event": envelope.event_topic,
         "event_label": event_label(envelope.event_topic) if envelope.event_topic.startswith("entity.run.") else "Test message",
         "channel": channel_names.get(str(envelope.channel_id), "(deleted channel)"),
+        "channel_deleted": str(envelope.channel_id) not in channel_names,
         "channel_id": str(envelope.channel_id),
         "recipient": envelope.recipient,
         "outcome": outcome,

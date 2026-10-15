@@ -396,3 +396,35 @@ def test_a_person_without_the_notification_keys_cannot_open_or_change_anything()
         ([403, 403, 403], 403, "system:notifications.read", "system:notifications.read", True),
     )
     return
+
+
+def test_the_messages_of_a_deleted_channel_stay_in_the_history_without_a_link():
+    """
+    **Feature: notifications page (ORG-F08)**
+    **Property: deleting a channel keeps what was sent through it in the recent messages, labelled as a deleted channel and not linked (its page is
+    gone), while messages of a channel that still exists link to it.**
+    """
+    _clear_notifications()
+    cookies = adm.admin_cookies()
+    kept = _add_webhook(cookies, adm.unique_name(prefix="kept-hook"))
+    doomed = _add_webhook(cookies, adm.unique_name(prefix="doomed-hook"))
+    patch = create_module_patch(webhook_channels, "_post_json")
+    try:
+        mock = patch.activate()
+        mock.configure(return_value=200)
+        for channel_id in (kept, doomed):
+            adm.post_form(path="/admin/notifications/channels/{}/test".format(channel_id), cookies=cookies, fields={"recipient": "history-check"})
+    finally:
+        patch.deactivate()
+    adm.post_form(path="/admin/notifications/channels/{}/delete".format(doomed), cookies=cookies, fields={})
+    page = adm.get(path="/admin/notifications", cookies=cookies).text
+    deliveries = page[page.index('data-role="deliveries"'):]
+
+    testbase.assert_equal(
+        (
+            deliveries.count("history-check"), "(deleted channel)" in deliveries,
+            "/admin/notifications/channels/{}".format(doomed) in deliveries, "/admin/notifications/channels/{}".format(kept) in deliveries,
+        ),
+        (2, True, False, True),
+    )
+    return

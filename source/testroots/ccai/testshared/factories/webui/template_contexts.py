@@ -951,6 +951,7 @@ _NOTIFICATION_RULE_ROW: Dict[str, Any] = {
 _NOTIFICATION_DELIVERY_ROW: Dict[str, Any] = {
     "when": datetime(2026, 10, 14, 9, 30, tzinfo=timezone.utc), "event": "entity.run.failed", "event_label": "A run fails", "channel": "Team email",
     "channel_id": "11111111-2222-4333-8444-555555555551", "recipient": "ops@example.test", "outcome": "failed", "detail": "relay down", "latency_ms": 12,
+    "channel_deleted": False,
 }
 _NOTIFICATION_FIELD_ROWS: List[Dict[str, Any]] = [
     {"name": "host", "label": "Mail server", "help": "The server.", "required": True, "secret": False, "field_type": "text", "default": None,
@@ -986,7 +987,7 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "config/notifications/": {
         "channels": _notification_channels,
         "rules": _by_mode([_NOTIFICATION_RULE_ROW], []),
-        "deliveries": _by_mode([_NOTIFICATION_DELIVERY_ROW], []),
+        "deliveries": _by_mode([_NOTIFICATION_DELIVERY_ROW, dict(_NOTIFICATION_DELIVERY_ROW, channel="(deleted channel)", channel_deleted=True)], []),
         "kinds": _const([
             {"kind": "smtp_email", "label": "Email (SMTP)", "description": "Send an email."},
             {"kind": "slack_webhook", "label": "Slack", "description": "Post to Slack."},

@@ -116,7 +116,7 @@
             <tr>
                 <td>{{ row.when | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
                 <td>{{ row.event_label }}</td>
-                <td><a href="{{ url_for('config.notification_channel_detail', channel_id=row.channel_id) }}">{{ row.channel }}</a></td>
+                <td>{% if row.channel_deleted %}<span class="muted">{{ row.channel }}</span>{% else %}<a href="{{ url_for('config.notification_channel_detail', channel_id=row.channel_id) }}">{{ row.channel }}</a>{% endif %}</td>
                 <td>{{ row.recipient }}</td>
                 <td>{{ ui.status_badge(row.outcome) }}</td>
                 <td>{{ row.detail if row.detail else '' }}</td>
