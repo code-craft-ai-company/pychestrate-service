@@ -4,8 +4,10 @@
 Coding Standards and Patterns
 =============================
 
-The standards for code in this repository. The chapters that go with
-this one:
+The standards for code in every Pychestrate repository. This is the one
+copy: ``pychestrate-core`` links here instead of keeping its own and
+``pychestrate-client`` keeps none, so the standards cannot differ between
+repositories. To change one, change it here. The chapters that go with this one:
 
 * `Code Organization <10-01-code-organization.rst>`_ -- where code goes.
 * `Naming Conventions <10-02-naming-conventions.rst>`_ -- how it is named.
