@@ -100,6 +100,30 @@ def user_guide_url(*, docs_root: Optional[str] = None) -> str:
     return rtnval
 
 
+def user_guide_page_url(page: str, anchor: str = "", *, docs_root: Optional[str] = None) -> str:
+    """
+        The address of one page (and section) of the user guide, for a "Learn more" link from a form.
+
+        Empty when the guide is not installed or has no such page, so a link is only ever drawn when it opens something. The section is not
+        checked here (a test checks every link the templates use against the built guide).
+
+        :param page: The chapter's file name without ``.html``, for example ``16-00-running-and-reading-work``.
+        :param anchor: The section's id on that page, for example ``be-told-when-a-run-fails``.
+        :param docs_root: Directory to look in (default: :func:`user_guide_root`).
+
+        :returns: ``/docs/<page>.html#<anchor>``, or an empty string.
+    """
+    root = docs_root if docs_root is not None else user_guide_root()
+    if user_guide_is_installed(docs_root=root) is False:
+        return ""
+    if os.path.isfile(os.path.join(root, page + ".html")) is False:
+        return ""
+    rtnval = "{}/{}.html".format(USER_GUIDE_URL_PREFIX, page)
+    if len(anchor) > 0:
+        rtnval = rtnval + "#" + anchor
+    return rtnval
+
+
 def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> None:
     """
         Mount the user guide at ``/docs`` and send ``/docs`` and ``/docs/`` to

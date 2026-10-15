@@ -278,6 +278,12 @@ preview tag.
 
 ### Added
 
+- **"Learn more" links from the forms that need explaining to the user guide (DOC-20).** The audit found no outbound link on any page; the service already serves its own guide
+  at `/docs`, but nothing led there from the place a person is stuck. `ui.learn_more(chapter, section)` draws a link beside the title of the create-role and edit-role,
+  create-project, create-device, create-pool, create-IP-pool, create-reservation, health-check, register-RPA-job-type and notification (overview, add-channel, add-rule) pages. It
+  opens the matching guide section in a new tab (so a half-filled form is not lost) and says so to a screen reader, and draws nothing when the built guide is not installed or has no
+  such chapter, so it never leads nowhere. A test checks every link in the templates against the headings of the guide's source, so renaming a section cannot silently break one.
+
 - **Deactivate, reactivate and anonymise a user through the REST API (ADM-41).** Anonymising a deactivated account (a data-protection request) was only on the Users
   pages, and the API could not even deactivate one first. `POST /api/v1/identity/users/{id}/deactivate`, `/reactivate` and `/anonymise` (`system:users.write`) call the same
   functions as the pages, so the rules are the same: deactivate first, never your own account, not an account that owns a project; a refusal is a 409 that says why and

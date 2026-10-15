@@ -279,6 +279,14 @@
 </div>
 {%- endmacro %}
 
+{#- learn_more(page, anchor="", label="Learn more") -- a link from a form to the section of the user guide that explains it (DOC-20). It draws
+    nothing when the guide is not installed or has no such page (``guide_link`` answers ""), so it never leads nowhere. It opens in a new tab so a
+    half-filled form is not lost, and says so to a screen reader. ``page`` is the chapter's file name without ``.html``; ``anchor`` is the section's id. #}
+{% macro learn_more(page, anchor="", label="Learn more") -%}
+{%- set href = guide_link(page, anchor) -%}
+{%- if href %}<a class="pyc-learn-more" href="{{ href }}" target="_blank" rel="noopener" data-role="learn-more">{{ label }}<span class="visually-hidden"> in the user guide (opens in a new tab)</span></a>{% endif -%}
+{%- endmacro %}
+
 {#- log_viewer(text, running=False, filename="log.txt", refresh_seconds=10, waiting=False)
     -- shared log output with a Follow toggle, Copy, Download, and
     live refresh while the job runs (chrome/log-viewer.js). Replaces

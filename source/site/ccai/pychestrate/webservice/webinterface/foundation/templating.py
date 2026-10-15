@@ -169,7 +169,22 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     environment.filters["permission_groups"] = group_permissions
     # ``menu_preview_data()`` -- the menu entries and the permissions each needs, for the role forms' live preview.
     environment.globals["menu_preview_data"] = menu_preview_data
+    # ``guide_link(page, anchor)`` -- where a "Learn more" link opens in the user guide the service serves, or "" when there is none.
+    environment.globals["guide_link"] = _guide_link
     return
+
+
+def _guide_link(page: str, anchor: str = "") -> str:
+    """
+        The template global behind ``ui.learn_more``: the address of a user-guide page and section, or an empty string when the built guide is
+        not installed. The import is here so the template environment does not depend on the guide's route module at import time.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.user_guide_route import user_guide_page_url  # noqa: E402
+
+    try:
+        return user_guide_page_url(page, anchor)
+    except Exception:  # noqa: BLE001 -- a missing guide must never stop a page rendering
+        return ""
 
 
 # ---------------------------------------------------------------------------

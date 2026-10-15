@@ -166,6 +166,15 @@ The header holds four controls:
   see (below).
 * **Sign out** ends your session.
 
+The account menu also opens this guide (**User guide**), which the service
+serves itself, so it matches the running release and opens without internet
+access. A form that needs explaining, such as the ones that create a role, a
+project, a device, a pool, a reservation or a health check, register an RPA job
+type, or add a notification channel or rule, has a **Learn more** link beside its
+title that opens the section explaining it in a new tab, so what you have typed
+is not lost. If the guide is not installed on a deployment, the links are not
+drawn.
+
 
 Create a project
 ================

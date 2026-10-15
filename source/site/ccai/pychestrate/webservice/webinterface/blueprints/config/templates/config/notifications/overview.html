@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Notifications</h1>
-    <p>Be told when a run fails or completes. A channel is where messages go; a rule says which event sends a message through which channel.</p>
+    <p>Be told when a run fails or completes. A channel is where messages go; a rule says which event sends a message through which channel. {{ ui.learn_more("16-00-running-and-reading-work", "be-told-when-a-run-fails") }}</p>
 </div>
 
 {% call ui.preview_notice() %}Only run results are sent today: a run failing or completing. Reservations expiring, devices being quarantined, outbound webhooks and alert rules do not send messages yet.{% endcall %}
