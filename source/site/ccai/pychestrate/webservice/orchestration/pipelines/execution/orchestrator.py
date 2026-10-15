@@ -865,14 +865,43 @@ class PipelineOrchestrator:
                 db_session=session,
                 run_id=pipeline_run_id,
                 project_id=project_id,
-                project_slug="",
+                project_slug=self._project_slug_for(db_session=session, project_id=project_id),
                 candidates=followup_candidates,
-                actor_id=None,
+                actor_id=self._actor_for_run(db_session=session, run_id=pipeline_run_id),
             )
             session.commit()
         finally:
             session.close()
         return
+
+    @staticmethod
+    def _project_slug_for(*, db_session: DbSession, project_id: str) -> str:
+        """
+            The project's slug, which names the results location of every job a stage
+            starts. The stages after the first are dispatched from the run-terminal handler,
+            which has no request to take the slug from, so it reads it here (an empty slug
+            made every later stage fail with "Path component canonicalizes to empty").
+
+            :returns: The slug, or "" when the project cannot be found.
+        """
+        from ccai.pychestrate.webservice.projects import repository as projects_repo  # noqa: E402
+
+        project_row = projects_repo.get_project_by_id(db_session=db_session, project_id=project_id)
+        rtnval = str(getattr(project_row, "slug", "") or "")
+        return rtnval
+
+    @staticmethod
+    def _actor_for_run(*, db_session: DbSession, run_id: str) -> Optional[str]:
+        """
+            The user who started the pipeline run, so the jobs of its later stages are
+            attributed to them as the first stage's are.
+
+            :returns: The user id, or None when the run has none.
+        """
+        run_row = definition_repository.find_run_by_id(db_session=db_session, run_id=run_id)
+        actor = getattr(run_row, "actor_id", None) if run_row is not None else None
+        rtnval = str(actor) if actor is not None else None
+        return rtnval
 
     def _project_id_for_run(
             self, *, db_session: DbSession, run_id: str
@@ -1106,6 +1135,7 @@ class PipelineOrchestrator:
 
             :returns: Tuple of dispatch candidates (possibly empty).
         """
+        from ccai.pychestrate.webservice.orchestration.rpa.candidates import capability_tags_for_client
         from ccai.pychestrate.webservice.pods.models import (
             PodDefinition,
             PodRegistration,
@@ -1133,7 +1163,7 @@ class PipelineOrchestrator:
                     DispatchCandidate(
                         client_id=str(reg.client_id),
                         pod_id=pod_id,
-                        capability_tags=tuple(),
+                        capability_tags=capability_tags_for_client(db_session=db_session, client_id=str(reg.client_id)),
                         inflight_dispatch_count=0,
                         last_dispatched_at_iso="",
                     )

@@ -236,10 +236,12 @@ class _FakeTestOrchestrator:
 
     def __init__(self) -> None:
         self.triggered: List[str] = []
+        self.requests: List[Any] = []
         self._counter: int = 0
         return
 
     def trigger_run(self, *, db_session: Any, request: Any) -> Any:
+        self.requests.append(request)
         self._counter = self._counter + 1
         run_id = "00000000-0000-4000-8000-0000000c{:04d}".format(self._counter)
         self.triggered.append(run_id)
@@ -1076,4 +1078,42 @@ def test_a_pipeline_id_that_is_not_saved_is_404_and_id_plus_document_is_422_and_
         (unknown.status_code, _decode_body(unknown).get("reason"), both.status_code, not_text.status_code, len(build_module.triggered)),
         (404, "pipeline_not_found", 422, 422, 0),
     )
+    return
+
+
+def test_a_later_stage_is_dispatched_with_the_projects_slug_and_the_runs_actor():
+    """
+    **Feature: 6-pipeline-execution (E2E)**
+    **Property: the stage that becomes eligible when an earlier one finishes is dispatched from the
+    run-terminal handler with the project's real slug (an empty one made the job's results path fail with
+    "Path component canonicalizes to empty", so no second stage could run on a real pod) and with the
+    user who started the pipeline run, as the first stage's job was.**
+    """
+    from ccai.pychestrate.webservice.projects.models import Project
+
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    try:
+        session.add(Project(project_id=PROJECT_UUID, slug="lab-project", display_name="Lab project"))
+        session.commit()
+        build_module = _FakeBuildServiceModule()
+        test_orch = _FakeTestOrchestrator()
+        orchestrator = _make_orchestrator(session_factory=lambda: session, build_module=build_module, test_orch=test_orch)
+        orchestrator.attach_bus_subscribers()
+        actor = "00000000-0000-4000-8000-00000000a001"
+        orchestrator.trigger_pipeline(db_session=session, inputs=PipelineTriggerInputs(
+            project_id=PROJECT_UUID, project_slug="lab-project", commit_sha="abc123", ref="main", filename="pipeline.json",
+            document_bytes=_two_stage_document(), actor_id=actor,
+        ))
+        orchestrator._on_run_terminal(EntityEvent(
+            topic="entity.run.completed", payload={"run_id": "00000000-0000-4000-8000-0000000b0001"}, source_event_id="evt-1",
+        ))
+        request = test_orch.requests[0] if len(test_orch.requests) == 1 else None
+        testbase.assert_equal(
+            (len(test_orch.requests), getattr(request, "project_slug", None), getattr(request, "triggered_by", None)),
+            (1, "lab-project", actor),
+        )
+    finally:
+        reset_event_bus()
+        session.close()
     return

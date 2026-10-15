@@ -55,6 +55,7 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
 from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
     DispatchCandidate,
 )
+from ccai.pychestrate.webservice.orchestration.rpa.candidates import capability_tags_for_client
 from ccai.pychestrate.webservice.orchestration.infra.runs import (
     service as infra_service,
 )
@@ -480,7 +481,7 @@ def _candidates_for_pod(
             DispatchCandidate(
                 client_id=str(client_id),
                 pod_id=str(pod_id),
-                capability_tags=tuple(),
+                capability_tags=capability_tags_for_client(db_session=db_session, client_id=str(client_id)),
                 inflight_dispatch_count=0,
                 last_dispatched_at_iso="",
             )

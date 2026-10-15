@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- **A pipeline's second stage can now run (ORC-13).** Found by running a real two-stage pipeline (a makefile build, then a test) on a real pod in the lab: the build stage completed and the test stage failed with
+  "dispatch failed: Path component canonicalizes to empty", so no pipeline with a second stage could complete. The first stage is dispatched from the request, which knows the project's slug; the later ones are
+  dispatched from the handler that sees a stage's job finish, which passed an empty slug (the results location of a job is named after it) and no user. It now reads the project's slug and the user who started the
+  pipeline run, so a later stage's jobs are attributed to them as the first stage's are. Behind that, the pipeline's dispatch (and the build and provisioning routes') built candidates with no capability tags as
+  the test-run route had, so a test step requiring a tag a pod advertises was refused ("No candidate pod satisfies..."); each now carries the tags its client advertised. After both fixes the pipeline ran to
+  completion on the lab pod, from the API and from the pipeline page's Run button.
 - **A run's tab is titled by what it ran, and a pod's by its name (ORC-35).** Seen on real pages in the lab: the tabs read "Run 13032fb3 · Runs" and "Pod e4353688 · Pods", although the run has a job name
   and the pod a name, so several open tabs of the same kind were indistinguishable. A run is now "test_pass 13032fb3 · Runs · Pychestrate" (its job name and short id; "Run 13032fb3" when it has no job
   name), a pod "Pod lab-pod-2 · Pods · Pychestrate" (its short id when it has no name). Builds, provisioning runs and clients keep their short ids (a build's job name is just "build:makefile").
