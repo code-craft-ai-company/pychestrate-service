@@ -118,6 +118,12 @@ Running the server
      - ``1`` for the built-in server, ``4`` for the gunicorn scripts
      - Worker processes. More than one needs
        ``PYCHESTRATE_RESULT_PRESIGN_SECRET``.
+   * - ``PYCHESTRATE_VARIABLE_CACHE_TTL_SECONDS``
+     - ``5``
+     - How long a resolved variable value is kept before it is read again.
+       Each worker keeps its own cache, so a change made through one worker
+       reaches the others within this time (the worker that handled the change
+       sees it at once). ``0`` turns the cache off.
    * - ``PYCHESTRATE_THREADS``
      - ``8`` for the built-in server, ``2`` for the gunicorn scripts
      - Threads in each worker. A pod's long poll holds one for up to

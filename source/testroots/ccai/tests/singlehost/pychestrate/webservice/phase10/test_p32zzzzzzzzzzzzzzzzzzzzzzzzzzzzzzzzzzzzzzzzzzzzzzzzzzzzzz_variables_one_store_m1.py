@@ -20,6 +20,7 @@ import importlib.util
 import json
 import os
 import re
+import time
 import uuid
 
 from datetime import datetime, timezone
@@ -36,6 +37,7 @@ from sqlalchemy.pool import StaticPool
 from ccai import testbase
 
 from ccai.pychestrate.core.orm import GlobalVariable, GlobalVariableHistory, PychestrateModelBase
+from ccai.pychestrate.webservice.variables import cache as variable_cache
 from ccai.pychestrate.webservice.variables import service as variable_service
 from ccai.pychestrate.webservice.variables.restapi.v1 import variables_routes
 from ccai.pychestrate.webservice.variables.models import VariableBinding, VariableBindingHistory, VariableScope, VariableValueType
@@ -286,4 +288,78 @@ def test_the_api_can_describe_a_variable_and_the_description_is_kept_and_shown_o
         (first[0], first[1]["description"], name in page, second[1]["description"], cleared[1]["description"], bad_type[0], too_long[0]),
         (200, "Retention in days", True, "Retention in days", "", 400, 400),
     )
+    return
+
+
+def _resolve_in(session: Any, name: str) -> Any:
+    return variable_service.resolve_effective(db_session=session, name=name, project_id=None, pipeline_id=None, job_id=None, dereference_secrets=False)
+
+
+def _change_behind_the_cache(session: Any, name: str, text: str) -> None:
+    """What another worker's write looks like to this one: the row changes, and this process's cache is not told."""
+    session.query(VariableBinding).filter(VariableBinding.name == name).update({"value_text": text})
+    session.commit()
+
+
+def test_a_cached_value_expires_so_a_change_made_in_another_worker_is_seen():
+    """
+    **Feature: one variables store (ADM-08)**
+    **Property: the resolution cache is per process and the service runs several workers, so a value another worker changed was served from the old cache entry for ever;
+    an entry now expires after the configured time (a change made behind the cache's back is served until then, and seen after it), a change made through this worker is
+    seen at once, and 0 turns the cache off.**
+    """
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import build_in_memory_session
+
+    old = os.environ.get(variable_cache.TTL_ENV_VAR)
+    try:
+        os.environ[variable_cache.TTL_ENV_VAR] = "0.3"
+        variable_cache.reset_for_testing()
+        _engine, session = build_in_memory_session()
+        variable_service.set_variable(db_session=session, scope=VariableScope.SYSTEM, scope_id="", name="shared", value="one", value_type=VariableValueType.STRING, actor_user_id=None)
+        first = _resolve_in(session, "shared")
+        _change_behind_the_cache(session, "shared", "two")
+        within = _resolve_in(session, "shared")
+        time.sleep(0.45)
+        after = _resolve_in(session, "shared")
+        variable_service.set_variable(db_session=session, scope=VariableScope.SYSTEM, scope_id="", name="shared", value="three", value_type=VariableValueType.STRING, actor_user_id=None)
+        own_write = _resolve_in(session, "shared")
+
+        os.environ[variable_cache.TTL_ENV_VAR] = "0"
+        variable_cache.reset_for_testing()
+        _resolve_in(session, "shared")
+        _change_behind_the_cache(session, "shared", "four")
+        cache_off = _resolve_in(session, "shared")
+        session.close()
+    finally:
+        if old is None:
+            os.environ.pop(variable_cache.TTL_ENV_VAR, None)
+        else:
+            os.environ[variable_cache.TTL_ENV_VAR] = old
+        variable_cache.reset_for_testing()
+
+    testbase.assert_equal((first, within, after, own_write, cache_off), ("one", "one", "two", "three", "four"))
+    return
+
+
+def test_the_cache_lifetime_setting_falls_back_to_the_default_when_it_is_not_a_number():
+    """
+    **Feature: one variables store (ADM-08)**
+    **Property: the lifetime is the environment variable when it is a non-negative number, 5 seconds when unset, empty, negative or not a number.**
+    """
+    old = os.environ.get(variable_cache.TTL_ENV_VAR)
+    answers = []
+    try:
+        for value in (None, "", "2.5", "0", "-3", "soon"):
+            if value is None:
+                os.environ.pop(variable_cache.TTL_ENV_VAR, None)
+            else:
+                os.environ[variable_cache.TTL_ENV_VAR] = value
+            answers.append(variable_cache.ttl_seconds())
+    finally:
+        if old is None:
+            os.environ.pop(variable_cache.TTL_ENV_VAR, None)
+        else:
+            os.environ[variable_cache.TTL_ENV_VAR] = old
+
+    testbase.assert_equal(answers, [5.0, 5.0, 2.5, 0.0, 5.0, 5.0])
     return

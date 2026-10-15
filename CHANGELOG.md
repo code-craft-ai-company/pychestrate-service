@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- **A changed variable reaches every worker (ADM-08).** The effective-value cache (`/api/v1/variables/effective`, project templates, pod configuration) is a per-process LRU that was invalidated
+  only by writes made *in that process*; the service runs several workers (four under the gunicorn scripts), so after a change the other workers went on serving the old value, for a deleted
+  variable too, until they restarted. It was found when the Admin Variables pages began to write the same store (a variable deleted on the page still resolved to its old value). Every entry now
+  expires after 5 seconds (`PYCHESTRATE_VARIABLE_CACHE_TTL_SECONDS`, `0` turns the cache off), so a change reaches every worker within that time; the worker that made the change sees it at once.
+
 - **The Admin Variables pages and the runtime read one store (ADM-08, `specs/model-convergence.md` section 8).** The pages wrote the legacy `global_variables` table, which nothing in the
   runtime reads except the interface profile: a variable created there did nothing (`/api/v1/variables/effective` returned null for it), and one set through the API never appeared there.
   The pages now manage the SYSTEM-scope variables the service resolves, so each is one thing; the store gained a `description`, a default value, a created time and a history table
