@@ -151,7 +151,7 @@ def test_the_filter_narrows_the_list_by_words_and_the_count_follows_the_ticks(br
     **Feature: roles built by area (ADM-06)**
     **Property: typing "secret" leaves only permissions whose area, name or
     description mention it and hides the emptied areas; a filter nothing matches
-    says so; clearing it restores all; the count reads "N of 73 selected" and
+    says so; clearing it restores all; the count reads "N of 75 selected" and
     follows the ticks.**
     """
     page = open_fixture_page(browser, body_html="<form>" + _picker_html([]) + "</form>", **DESKTOP)
@@ -175,7 +175,7 @@ def test_the_filter_narrows_the_list_by_words_and_the_count_follows_the_ticks(br
 
     testbase.assert_equal(
         (total, initial, 0 < secret_rows < total, secret_areas, none_shown, restored, after),
-        (73, "0 of 73 selected", True, ["Project secrets", "Secrets"], True, 73, "2 of 73 selected"),
+        (75, "0 of 75 selected", True, ["Project secrets", "Secrets"], True, 75, "2 of 75 selected"),
     )
     return
 

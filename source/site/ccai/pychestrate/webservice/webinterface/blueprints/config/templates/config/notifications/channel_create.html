@@ -1,0 +1,87 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Add Notification Channel - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+{{ ui.breadcrumb([("Notifications", url_for('config.notifications_overview')), ("Add Channel", None)]) }}
+
+<div class="page-header">
+    <h1>Add Channel</h1>
+    <p>{% if kind %}Fill in how Pychestrate reaches {{ kind_label }}{% else %}Choose where messages should go{% endif %}</p>
+</div>
+
+{% if not kind %}
+<div class="stat-grid" data-role="kinds">
+    {% for item in kinds %}
+    <div class="card">
+        <h2 class="card-header">{{ item.label }}</h2>
+        <p class="muted">{{ item.description }}</p>
+        <a href="{{ url_for('config.notification_channel_create') }}?kind={{ item.kind }}" class="btn btn-secondary">Choose {{ item.label }}</a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card narrow">
+    <form method="post" data-role="channel-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="kind" value="{{ kind }}">
+        {{ ui.error_summary(errors, error_labels) }}
+        <p class="muted">{{ kind_description }} <a href="{{ url_for('config.notification_channel_create') }}">Choose a different type</a></p>
+
+        <div class="form-group">
+            <label for="name">Name *</label>
+            <input type="text" id="name" name="name" class="form-control" required maxlength="128" placeholder="Team email"
+                   value="{{ form_data.name if form_data else '' }}"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <div class="form-text" id="name-help">What you will call this channel when you add a rule.</div>
+            {{ ui.field_error(errors, 'name') }}
+        </div>
+
+        {% for field in fields %}
+        {% if field.secret %}
+        <div class="form-group" data-secret-setting="{{ field.name }}">
+            <label for="{{ field.secret_id }}">{{ field.label }}{% if field.required %} *{% endif %}</label>
+            <input type="password" id="{{ field.secret_id }}" name="{{ field.secret_id }}" class="form-control" autocomplete="new-password"
+                   {% if field.required and not vault_secrets %}required{% endif %}
+                   {% if errors and field.secret_id in errors %}aria-invalid="true"{% endif %}
+                   aria-describedby="hint-{{ field.secret_id }}-help{% if errors and field.secret_id in errors %} {{ field.secret_id }}-error{% endif %}">
+            <div class="form-text" id="hint-{{ field.secret_id }}-help">{{ field.help }} It is stored in the secrets vault and never shown again.</div>
+            {{ ui.field_error(errors, field.secret_id) }}
+            {% if vault_secrets %}
+            <label for="{{ field.ref_id }}" class="muted">Or use a secret that is already in the vault</label>
+            <select id="{{ field.ref_id }}" name="{{ field.ref_id }}" class="form-control">
+                <option value="">(type a new value above)</option>
+                {% for secret_name in vault_secrets %}
+                <option value="{{ secret_name }}" {% if form_data and form_data[field.ref_id] == secret_name %}selected{% endif %}>{{ secret_name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </div>
+        {% elif field.field_type == 'bool' %}
+        <div class="form-group">
+            <label for="{{ field.cfg_id }}"><input type="checkbox" id="{{ field.cfg_id }}" name="{{ field.cfg_id }}" value="1" aria-describedby="hint-{{ field.cfg_id }}-help"
+                   {% if form_data %}{% if form_data[field.cfg_id] %}checked{% endif %}{% elif field.default %}checked{% endif %}> {{ field.label }}</label>
+            <div class="form-text" id="hint-{{ field.cfg_id }}-help">{{ field.help }}</div>
+        </div>
+        {% else %}
+        <div class="form-group">
+            <label for="{{ field.cfg_id }}">{{ field.label }}{% if field.required %} *{% endif %}</label>
+            <input type="{{ 'number' if field.field_type == 'number' else ('url' if field.field_type == 'url' else 'text') }}" id="{{ field.cfg_id }}" name="{{ field.cfg_id }}" class="form-control"
+                   {% if field.required %}required{% endif %} {% if field.field_type == 'number' %}min="1" max="65535"{% endif %}
+                   value="{% if form_data %}{{ form_data[field.cfg_id] }}{% elif field.default is not none %}{{ field.default }}{% endif %}"
+                   {% if errors and field.cfg_id in errors %}aria-invalid="true"{% endif %}
+                   aria-describedby="hint-{{ field.cfg_id }}-help{% if errors and field.cfg_id in errors %} {{ field.cfg_id }}-error{% endif %}">
+            <div class="form-text" id="hint-{{ field.cfg_id }}-help">{{ field.help }}</div>
+            {{ ui.field_error(errors, field.cfg_id) }}
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        <div class="actions-row">
+            <button type="submit" class="btn btn-primary">Add Channel</button>
+            <a href="{{ url_for('config.notifications_overview') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

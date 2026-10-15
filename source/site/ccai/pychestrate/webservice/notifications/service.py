@@ -24,7 +24,9 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Any, List, Mapping, Optional
+import logging
+
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -46,9 +48,23 @@ from ccai.pychestrate.webservice.hardening.rate_limit import (
 from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
 from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
 from ccai.pychestrate.webservice.notifications.events import NotificationEventTopics
+from ccai.pychestrate.webservice.notifications.channel_config import (
+    PreparedChannelConfig,
+    channel_secret_name,
+    is_http_url,
+    is_secret_ref,
+    prepare_channel_config,
+    public_config,
+    secret_name_from_ref,
+    secret_ref_for,
+)
 from ccai.pychestrate.webservice.notifications.exceptions import (
     ChannelAlreadyExistsError,
+    ChannelConfigInvalidError,
+    ChannelInUseError,
     ChannelNotFoundError,
+    ChannelSecretAccessDeniedError,
+    ChannelSecretUnavailableError,
     NotificationDispatchError,
     TemplateNotFoundError,
     UnsupportedChannelKindError,
@@ -59,6 +75,18 @@ from ccai.pychestrate.webservice.notifications.extensions.template import (
 from ccai.pychestrate.webservice.notifications.factories.channel import (
     ChannelDeliveryOutcome,
     NotificationChannelProtocol,
+)
+from ccai.pychestrate.webservice.secrets import secrets_service
+from ccai.pychestrate.webservice.secrets.exceptions import (
+    SecretAccessDeniedError,
+    SecretAlreadyExistsError,
+    SecretNotFoundError,
+    SecretVersionExpiredError,
+)
+from ccai.pychestrate.webservice.secrets.models import SecretScopeKind
+from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+from ccai.pychestrate.webservice.secrets.secrets_aspects import (
+    build_default_aspects as build_default_secrets_aspects,
 )
 from ccai.pychestrate.webservice.notifications.models import (
     ChannelScopeLevel,
@@ -73,6 +101,12 @@ from ccai.pychestrate.webservice.notifications.models import (
 from ccai.pychestrate.webservice.notifications import repository as notification_repository
 
 
+_LOGGER = logging.getLogger(__name__)
+
+#: The name the vault records for reads the dispatcher makes when it sends.
+NOTIFICATIONS_SERVICE_IDENTITY: str = "notifications"
+
+
 def create_channel(
         *,
         db_session: DbSession,
@@ -81,22 +115,30 @@ def create_channel(
         scope_level: ChannelScopeLevel,
         project_id: Optional[str],
         config: Mapping[str, Any],
-        actor_user_id: Optional[str]
+        actor_user_id: Optional[str],
+        secrets: Optional[Mapping[str, str]] = None,
+        principal: Any = None
     ) -> NotificationChannel:
     """
         Create a new delivery channel.
 
+        A secret setting of the kind (an SMTP password, a webhook address that works like a password) is never stored in the channel. It
+        arrives in ``secrets`` and is written to the secrets vault on behalf of ``principal`` (so the vault's own access rules and audit
+        apply), or ``config`` points it at an existing vault secret the principal may read. The channel keeps only a ``secret://`` reference.
+
         :param db_session: Active SQLAlchemy session.
         :param name: Unique channel name within its scope.
-        :param kind: Channel kind (``smtp_email`` at M1).
+        :param kind: Channel kind (``smtp_email``, ``slack_webhook`` ...).
         :param scope_level: SYSTEM or PROJECT.
         :param project_id: Required when scope_level=PROJECT.
-        :param config: Channel-specific configuration mapping.
-        :param actor_user_id: Acting principal.
+        :param config: Channel-specific settings, and ``secret://`` references.
+        :param actor_user_id: Acting principal's user id.
+        :param secrets: Secret setting name to the new plain value to store in the vault.
+        :param principal: The authenticated caller, needed whenever a secret is stored or bound.
 
         :returns: The persisted :class:`NotificationChannel`.
-        :raises: ChannelAlreadyExistsError, UnsupportedChannelKindError,
-                 SemanticError
+        :raises: ChannelAlreadyExistsError, UnsupportedChannelKindError, ChannelConfigInvalidError,
+                 ChannelSecretAccessDeniedError, SemanticError
     """
     if name is None or len(name.strip()) == 0:
         raise SemanticError("create_channel requires a non-empty name")
@@ -106,6 +148,7 @@ def create_channel(
             raise SemanticError("PROJECT scope requires a non-empty project_id")
 
     _require_channel_kind_registered(kind=kind)
+    protocol = _resolve_channel_protocol(kind=kind)
 
     existing = notification_repository.get_channel_by_name(
         db_session=db_session,
@@ -120,30 +163,393 @@ def create_channel(
         err_msg = os.linesep.join(err_msg_lines)
         raise ChannelAlreadyExistsError(err_msg) from None
 
-    now = utc_now()
-    channel = NotificationChannel(
-        channel_id=new_uuid(),
-        name=name.strip(),
-        kind=kind,
-        scope_level=scope_level,
-        project_id=project_id,
-        config=dict(config) if config is not None else {},
-        disabled=False,
-        created_at=now,
-        updated_at=now,
+    prepared = prepare_channel_config(
+        fields=protocol.config_fields, kind=kind, config=config, secrets=secrets,
     )
 
+    channel_id = new_uuid()
+    stored_config = dict(prepared.config)
+    stored_names: List[str] = []
     try:
-        notification_repository.insert_channel(db_session=db_session, channel=channel)
-    except IntegrityError:
-        err_msg_lines = ["Cannot create channel — name already exists (integrity race)."]
-        err_msg_lines.append("NAME: {}".format(name.strip()))
-        err_msg = os.linesep.join(err_msg_lines)
-        raise ChannelAlreadyExistsError(err_msg) from None
+        _check_bound_secrets(db_session=db_session, principal=principal, prepared=prepared, fields=protocol.config_fields)
+        for setting, value in prepared.new_secrets.items():
+            vault_name = channel_secret_name(channel_id=channel_id, setting=setting)
+            _store_channel_secret(
+                db_session=db_session, principal=principal, vault_name=vault_name, value=value,
+                scope_level=scope_level, project_id=project_id,
+            )
+            stored_names.append(vault_name)
+            stored_config[setting] = secret_ref_for(name=vault_name)
 
-    db_session.commit()
+        now = utc_now()
+        channel = NotificationChannel(
+            channel_id=channel_id,
+            name=name.strip(),
+            kind=kind,
+            scope_level=scope_level,
+            project_id=project_id,
+            config=stored_config,
+            disabled=False,
+            created_at=now,
+            updated_at=now,
+        )
+        try:
+            notification_repository.insert_channel(db_session=db_session, channel=channel)
+        except IntegrityError:
+            err_msg_lines = ["Cannot create channel — name already exists (integrity race)."]
+            err_msg_lines.append("NAME: {}".format(name.strip()))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise ChannelAlreadyExistsError(err_msg) from None
+        _stage_admin_event(
+            db_session=db_session, topic=NotificationEventTopics.CHANNEL_CREATED, actor_user_id=actor_user_id,
+            payload={
+                "channel_id": str(channel_id), "name": channel.name, "kind": kind,
+                "secret_settings": sorted(setting for setting, value in stored_config.items() if is_secret_ref(value=value)),
+            },
+        )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        _discard_channel_secrets(db_session=db_session, principal=principal, vault_names=stored_names)
+        raise
+
     rtnval = channel
     return rtnval
+
+
+def describe_channel(*, channel: NotificationChannel) -> Dict[str, Any]:
+    """
+        A channel's settings as they may be shown: secrets as ``secret://`` references (or masked, when still held as plain text).
+
+        :param channel: The channel.
+
+        :returns: ``{"config": {...}, "unprotected_secret_fields": [...]}``.
+    """
+    try:
+        protocol = _resolve_channel_protocol(kind=channel.kind)
+        fields = protocol.config_fields
+    except UnsupportedChannelKindError:
+        fields = ()
+    shown, unprotected = public_config(fields=fields, config=channel.config)
+    rtnval = {"config": shown, "unprotected_secret_fields": unprotected}
+    return rtnval
+
+
+def update_channel(
+        *,
+        db_session: DbSession,
+        channel_id: str,
+        disabled: Optional[bool] = None,
+        config: Optional[Mapping[str, Any]] = None,
+        secrets: Optional[Mapping[str, str]] = None,
+        principal: Any = None
+    ) -> NotificationChannel:
+    """
+        Change a channel: switch it on or off, change plain settings, and replace or rotate secrets.
+
+        A new value in ``secrets`` for a setting the channel already keeps in the vault under its own name becomes a new version of that
+        vault secret (so the channel follows). For a setting that is unset, points at someone else's vault secret, or is still held as plain
+        text, the value is stored under the channel's own name and the setting now points at it.
+
+        :param db_session: Active SQLAlchemy session.
+        :param channel_id: The channel.
+        :param disabled: True to stop sending through it, False to resume; None leaves it.
+        :param config: Settings to change (only the ones given are replaced).
+        :param secrets: Secret setting name to its new plain value.
+        :param principal: The authenticated caller, needed when a secret is stored.
+
+        :returns: The updated channel.
+        :raises: ChannelNotFoundError, ChannelConfigInvalidError, ChannelSecretAccessDeniedError
+    """
+    channel = read_channel(db_session=db_session, channel_id=channel_id)
+    protocol = _resolve_channel_protocol(kind=channel.kind)
+    stored_names: List[str] = []
+    changed: List[str] = []
+    try:
+        if config is not None or secrets is not None:
+            current = dict(channel.config) if channel.config is not None else {}
+            merged = {key: value for key, value in current.items() if key not in (secrets or {})}
+            for key, value in (config or {}).items():
+                merged[key] = value
+            prepared = prepare_channel_config(
+                fields=protocol.config_fields, kind=channel.kind, config=merged, secrets=secrets, current_config=current,
+            )
+            _check_bound_secrets(db_session=db_session, principal=principal, prepared=prepared, fields=protocol.config_fields)
+            stored_config = dict(prepared.config)
+            for setting, value in prepared.new_secrets.items():
+                vault_name = channel_secret_name(channel_id=str(channel.channel_id), setting=setting)
+                current_value = current.get(setting, None)
+                owns_current = current_value == secret_ref_for(name=vault_name)
+                if owns_current is True and _vault_secret_exists(db_session=db_session, vault_name=vault_name) is True:
+                    _rotate_channel_secret(db_session=db_session, principal=principal, vault_name=vault_name, value=value)
+                else:
+                    _store_channel_secret(
+                        db_session=db_session, principal=principal, vault_name=vault_name, value=value,
+                        scope_level=channel.scope_level, project_id=channel.project_id,
+                    )
+                    stored_names.append(vault_name)
+                stored_config[setting] = secret_ref_for(name=vault_name)
+                changed.append("secret:{}".format(setting))
+            changed.extend(
+                "config:{}".format(key) for key in sorted(stored_config)
+                if key not in prepared.new_secrets and stored_config.get(key) != current.get(key)
+            )
+            channel.config = stored_config
+        if disabled is not None and bool(disabled) != bool(channel.disabled):
+            changed.append("disabled" if bool(disabled) is True else "enabled")
+        if disabled is not None:
+            channel.disabled = bool(disabled)
+        channel.updated_at = utc_now()
+        if len(changed) > 0:
+            _stage_admin_event(
+                db_session=db_session, topic=NotificationEventTopics.CHANNEL_UPDATED,
+                payload={"channel_id": str(channel.channel_id), "name": channel.name, "changed": changed},
+            )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        _discard_channel_secrets(db_session=db_session, principal=principal, vault_names=stored_names)
+        raise
+
+    rtnval = channel
+    return rtnval
+
+
+def delete_channel(*, db_session: DbSession, channel_id: str, principal: Any = None) -> None:
+    """
+        Delete a channel and the vault secrets the service stored for it (never a vault secret it merely points at).
+
+        :param db_session: Active SQLAlchemy session.
+        :param channel_id: The channel.
+        :param principal: The authenticated caller, who deletes the channel's own vault secrets.
+
+        :raises: ChannelNotFoundError, ChannelInUseError when a routing rule still sends through the channel.
+    """
+    channel = read_channel(db_session=db_session, channel_id=channel_id)
+    using = [
+        rule for rule in notification_repository.list_routing_rules(db_session=db_session, project_id=None)
+        if str(channel.channel_id) in [str(item) for item in (rule.channel_ids or [])]
+    ]
+    if len(using) > 0:
+        err_msg_lines = ["The channel '{}' cannot be deleted while routing rules send through it.".format(channel.name)]
+        for rule in using:
+            err_msg_lines.append("RULE: {} ({})".format(rule.event_pattern, rule.rule_id))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ChannelInUseError(err_msg) from None
+
+    own_names = [
+        secret_name_from_ref(ref=value) for value in (channel.config or {}).values()
+        if is_secret_ref(value=value) is True
+        and secret_name_from_ref(ref=value).startswith(channel_secret_name(channel_id=str(channel.channel_id), setting=""))
+    ]
+    _stage_admin_event(
+        db_session=db_session, topic=NotificationEventTopics.CHANNEL_DELETED,
+        payload={"channel_id": str(channel.channel_id), "name": channel.name, "kind": channel.kind},
+    )
+    db_session.delete(channel)
+    db_session.commit()
+    _discard_channel_secrets(db_session=db_session, principal=principal, vault_names=own_names)
+    return
+
+
+def send_test_message(
+        *,
+        db_session: DbSession,
+        channel_id: str,
+        recipient: str,
+        sent_by: str
+    ) -> ChannelDeliveryOutcome:
+    """
+        Send one test message through a channel, so an administrator learns whether its settings work before a real event needs them.
+        The attempt is recorded like any other delivery.
+
+        :param db_session: Active SQLAlchemy session.
+        :param channel_id: The channel.
+        :param recipient: Who or where to send it (an address for email).
+        :param sent_by: Who pressed the button, named in the message.
+
+        :returns: How it went; a failed delivery is a result, not an exception.
+        :raises: ChannelNotFoundError
+    """
+    channel = read_channel(db_session=db_session, channel_id=channel_id)
+    try:
+        dispatch_envelope(
+            db_session=db_session,
+            channel_id=str(channel.channel_id),
+            recipient=recipient,
+            event_topic="notification.channel.test",
+            template_name="channel_test",
+            payload={"channel_name": channel.name, "sent_by": sent_by},
+        )
+    except NotificationDispatchError:
+        attempt = notification_repository.latest_attempt_for_channel(db_session=db_session, channel_id=str(channel.channel_id))
+        message = attempt.error_message if attempt is not None and attempt.error_message else "The channel did not accept the message."
+        latency = int(attempt.latency_ms or 0) if attempt is not None else 0
+        rtnval = ChannelDeliveryOutcome(delivered=False, error_message=message, latency_ms=latency)
+        return rtnval
+
+    attempt = notification_repository.latest_attempt_for_channel(db_session=db_session, channel_id=str(channel.channel_id))
+    latency = int(attempt.latency_ms or 0) if attempt is not None else 0
+    rtnval = ChannelDeliveryOutcome(delivered=True, error_message="", latency_ms=latency)
+    return rtnval
+
+
+def _stage_admin_event(*, db_session: DbSession, topic: str, payload: Mapping[str, Any], actor_user_id: Optional[str] = None) -> None:
+    """
+        Stage an audit event for something an administrator did, to be published when the surrounding transaction commits. The acting user is the one
+        given, or the one the session is tagged with; the client address rides along. Payloads carry names, never a secret value.
+    """
+    from ccai.pychestrate.webservice.audit.data_change_bridge import session_actor, session_client_address  # noqa: E402
+
+    full_payload = dict(payload)
+    full_payload["actor_user_id"] = actor_user_id if actor_user_id is not None else session_actor(db_session=db_session)
+    full_payload["client_address"] = session_client_address(db_session=db_session)
+    enqueue_event(db_session=db_session, event=EntityEvent(topic=topic, payload=full_payload, source_event_id=new_uuid()))
+    return
+
+
+def _vault_scope(*, scope_level: ChannelScopeLevel, project_id: Optional[str]) -> Tuple[SecretScopeKind, Optional[str]]:
+    """
+        The vault scope a channel's secrets are stored in: service-wide for a system channel, the project's for a project channel.
+    """
+    if scope_level == ChannelScopeLevel.PROJECT:
+        rtnval = (SecretScopeKind.PROJECT, str(project_id))
+    else:
+        rtnval = (SecretScopeKind.ORG, None)
+    return rtnval
+
+
+def _store_channel_secret(
+        *,
+        db_session: DbSession,
+        principal: Any,
+        vault_name: str,
+        value: str,
+        scope_level: ChannelScopeLevel,
+        project_id: Optional[str]
+    ) -> None:
+    """
+        Write a channel's secret to the vault on behalf of ``principal``.
+
+        :raises: ChannelSecretAccessDeniedError
+    """
+    if principal is None:
+        raise ChannelSecretAccessDeniedError("Storing a channel's secret in the secrets vault needs a signed-in user.") from None
+    scope_kind, scope_ref = _vault_scope(scope_level=scope_level, project_id=project_id)
+    payload = SecretBytes(value.encode("utf-8"))
+    try:
+        secrets_service.put_secret(
+            db_session=db_session,
+            principal=principal,
+            secret_ref=vault_name,
+            plaintext=payload,
+            aspects=build_default_secrets_aspects(),
+            scope_kind=scope_kind,
+            scope_ref=scope_ref,
+        )
+    except SecretAccessDeniedError:
+        db_session.rollback()
+        raise ChannelSecretAccessDeniedError(
+            "You may not store secrets in the secrets vault. Storing a channel's secret needs system:secrets.admin"
+            " (or, for a project channel, project membership plus system:project_secrets.write)."
+        ) from None
+    except SecretAlreadyExistsError:
+        db_session.rollback()
+        raise ChannelSecretAccessDeniedError("A vault secret named {} already exists.".format(vault_name)) from None
+    finally:
+        payload.close()
+    return
+
+
+def _rotate_channel_secret(*, db_session: DbSession, principal: Any, vault_name: str, value: str) -> None:
+    """
+        Install a new version of a channel's own vault secret.
+
+        :raises: ChannelSecretAccessDeniedError
+    """
+    if principal is None:
+        raise ChannelSecretAccessDeniedError("Replacing a channel's secret in the secrets vault needs a signed-in user.") from None
+    payload = SecretBytes(value.encode("utf-8"))
+    try:
+        secrets_service.update_secret(
+            db_session=db_session, principal=principal, secret_ref=vault_name, plaintext=payload,
+            aspects=build_default_secrets_aspects(),
+        )
+    except SecretAccessDeniedError:
+        db_session.rollback()
+        raise ChannelSecretAccessDeniedError("You may not change secrets in the secrets vault. Replacing a channel's secret needs system:secrets.admin.") from None
+    finally:
+        payload.close()
+    return
+
+
+def _vault_secret_exists(*, db_session: DbSession, vault_name: str) -> bool:
+    """
+        Whether the vault holds a secret under ``vault_name``.
+    """
+    try:
+        secrets_service.get_secret_record(db_session=db_session, secret_ref=vault_name)
+    except SecretNotFoundError:
+        return False
+    return True
+
+
+def _check_bound_secrets(
+        *,
+        db_session: DbSession,
+        principal: Any,
+        prepared: PreparedChannelConfig,
+        fields: Tuple[Any, ...]
+    ) -> None:
+    """
+        Refuse to point a channel at a vault secret that does not exist, has expired, or that ``principal`` may not read. Uses the vault's own
+        read path so its access rules and audit apply to the binding. An address setting is also checked to be an address.
+
+        :raises: ChannelConfigInvalidError, ChannelSecretAccessDeniedError
+    """
+    by_name = {field.name: field for field in fields}
+    for setting, vault_name in prepared.bound_refs.items():
+        if principal is None:
+            raise ChannelSecretAccessDeniedError("Using a vault secret needs a signed-in user.") from None
+        field = by_name[setting]
+        try:
+            read = secrets_service.read_secret(
+                db_session=db_session, principal=principal, secret_ref=vault_name, aspects=build_default_secrets_aspects(),
+            )
+        except SecretNotFoundError:
+            db_session.rollback()
+            raise ChannelConfigInvalidError(["{} ('{}'): there is no secret named {} in the secrets vault. Create it first, or send the value in 'secrets'.".format(field.label, setting, vault_name)]) from None
+        except SecretVersionExpiredError:
+            db_session.rollback()
+            raise ChannelConfigInvalidError(["{} ('{}'): the secret {} has expired. Rotate it in the secrets vault.".format(field.label, setting, vault_name)]) from None
+        except SecretAccessDeniedError:
+            db_session.rollback()
+            raise ChannelSecretAccessDeniedError("You may not read the vault secret {}, so a channel cannot use it for you.".format(vault_name)) from None
+        try:
+            if field.field_type == "url":
+                text = read.plaintext.reveal().decode("utf-8", errors="replace")
+                if is_http_url(text=text) is False:
+                    raise ChannelConfigInvalidError(["{} ('{}'): the secret {} does not hold an address starting http:// or https://.".format(field.label, setting, vault_name)]) from None
+        finally:
+            read.plaintext.close()
+    return
+
+
+def _discard_channel_secrets(*, db_session: DbSession, principal: Any, vault_names: List[str]) -> None:
+    """
+        Best-effort removal of vault secrets a channel created, so a failed create or a deleted channel leaves nothing behind.
+    """
+    if principal is None:
+        return
+    for vault_name in vault_names:
+        try:
+            secrets_service.delete_secret(
+                db_session=db_session, principal=principal, secret_ref=vault_name, aspects=build_default_secrets_aspects(),
+            )
+        except Exception as xcpt:  # noqa: BLE001 -- best-effort compensation
+            db_session.rollback()
+            _LOGGER.warning("pychestrate.notifications.secret_cleanup_failed vault_name=%s error=%s", vault_name, type(xcpt).__name__)
+    return
 
 
 def read_channel(*, db_session: DbSession, channel_id: str) -> NotificationChannel:
@@ -227,14 +633,9 @@ def dispatch_envelope(
     notification_repository.insert_envelope(db_session=db_session, envelope=envelope)
 
     channel_cls = _resolve_channel_protocol(kind=channel.kind)
-    resolved_config = _resolve_config_secrets(
-        config=channel.config if channel.config is not None else {},
-    )
-    outcome: ChannelDeliveryOutcome = channel_cls.send(
-        channel_config=resolved_config,
-        recipient=recipient,
-        subject=rendered.subject,
-        body=rendered.body,
+    outcome = _send_through_channel(
+        db_session=db_session, channel=channel, channel_cls=channel_cls,
+        recipient=recipient, subject=rendered.subject, body=rendered.body,
     )
     hardening_metrics.record_latency(name="notification.dispatch.latency_ms", latency_ms=outcome.latency_ms)
     if outcome.delivered is True:
@@ -341,6 +742,14 @@ def create_routing_rule(
         updated_at=now,
     )
     notification_repository.insert_routing_rule(db_session=db_session, rule=rule)
+    _stage_admin_event(
+        db_session=db_session, topic=NotificationEventTopics.RULE_CREATED, actor_user_id=actor_user_id,
+        payload={
+            "rule_id": str(rule.rule_id), "event_pattern": rule.event_pattern, "template_name": rule.template_name,
+            "channel_ids": [str(item) for item in rule.channel_ids], "recipients": list(rule.recipients),
+            "project_id": str(rule.project_id) if rule.project_id is not None else None,
+        },
+    )
     db_session.commit()
     rtnval = rule
     return rtnval
@@ -360,6 +769,34 @@ def list_routing_rules(
     return rtnval
 
 
+def set_routing_rule_disabled(*, db_session: DbSession, rule_id: str, disabled: bool) -> NotificationRoutingRule:
+    """
+        Turn a routing rule off or on.
+
+        :param db_session: Active SQLAlchemy session.
+        :param rule_id: The rule.
+        :param disabled: True to stop it sending, False to resume.
+
+        :returns: The rule.
+        :raises: ChannelNotFoundError when there is no such rule.
+    """
+    rule = notification_repository.get_routing_rule(db_session=db_session, rule_id=rule_id)
+    if rule is None:
+        err_msg_lines = ["Cannot change routing rule — not found."]
+        err_msg_lines.append("RULE_ID: {}".format(rule_id))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ChannelNotFoundError(err_msg) from None
+    rule.disabled = bool(disabled)
+    rule.updated_at = utc_now()
+    _stage_admin_event(
+        db_session=db_session, topic=NotificationEventTopics.RULE_UPDATED,
+        payload={"rule_id": str(rule.rule_id), "event_pattern": rule.event_pattern, "disabled": bool(disabled)},
+    )
+    db_session.commit()
+    rtnval = rule
+    return rtnval
+
+
 def delete_routing_rule(*, db_session: DbSession, rule_id: str) -> None:
     """
         Remove a routing rule by id.
@@ -373,6 +810,10 @@ def delete_routing_rule(*, db_session: DbSession, rule_id: str) -> None:
         err_msg = os.linesep.join(err_msg_lines)
         raise ChannelNotFoundError(err_msg) from None
 
+    _stage_admin_event(
+        db_session=db_session, topic=NotificationEventTopics.RULE_DELETED,
+        payload={"rule_id": str(rule.rule_id), "event_pattern": rule.event_pattern},
+    )
     notification_repository.delete_routing_rule(db_session=db_session, rule=rule)
     db_session.commit()
     return
@@ -483,11 +924,9 @@ def replay_dead_letter(*, db_session: DbSession, envelope_id: str) -> Notificati
         db_session=db_session, channel_id=str(envelope.channel_id),
     )
     channel_cls = _resolve_channel_protocol(kind=channel.kind)
-    outcome = channel_cls.send(
-        channel_config=channel.config if channel.config is not None else {},
-        recipient=envelope.recipient,
-        subject=envelope.rendered_subject,
-        body=envelope.rendered_body,
+    outcome = _send_through_channel(
+        db_session=db_session, channel=channel, channel_cls=channel_cls,
+        recipient=envelope.recipient, subject=envelope.rendered_subject, body=envelope.rendered_body,
     )
 
     attempt = NotificationDispatchAttempt(
@@ -543,36 +982,81 @@ def _resolve_template(*, template_name: str):
     return rtnval
 
 
-def _resolve_config_secrets(*, config: Mapping[str, Any]) -> Mapping[str, Any]:
+def _send_through_channel(
+        *,
+        db_session: DbSession,
+        channel: NotificationChannel,
+        channel_cls: Any,
+        recipient: str,
+        subject: str,
+        body: str
+    ) -> ChannelDeliveryOutcome:
     """
-        Replace ``secret://…`` string values in a channel config with the
-        dereferenced payload returned by the registered
-        ``secret_ref_dereferencer`` chain.
+        Read the channel's secrets from the vault and hand the message to its sender. A secret that cannot be read is a failed delivery (it is
+        recorded and parked like any other), not an exception, and the message says which channel and setting.
 
-        :param config: Channel configuration mapping.
-
-        :returns: A shallow-copied mapping with secret-refs resolved.
+        :returns: How the send went.
     """
-    if config is None:
-        rtnval = {}
+    try:
+        resolved_config = _resolve_config_secrets(
+            db_session=db_session,
+            config=channel.config if channel.config is not None else {},
+            channel_name=channel.name,
+        )
+    except ChannelSecretUnavailableError as xcpt:
+        rtnval = ChannelDeliveryOutcome(delivered=False, error_message=str(xcpt), latency_ms=0)
         return rtnval
 
-    impls = list_factory_implementations(factory_protocol_name="secret_ref_dereferencer")
+    rtnval = channel_cls.send(
+        channel_config=resolved_config,
+        recipient=recipient,
+        subject=subject,
+        body=body,
+    )
+    return rtnval
 
+
+def _resolve_config_secrets(
+        *,
+        db_session: DbSession,
+        config: Mapping[str, Any],
+        channel_name: str
+    ) -> Mapping[str, Any]:
+    """
+        Replace each ``secret://<name>`` setting of a channel with the current value of that vault secret, read as the notification service
+        (no user is present when a run fails). The result is handed to the sender and then dropped: it is not stored, logged, or put on an
+        envelope or an event.
+
+        :param db_session: Active SQLAlchemy session.
+        :param config: What the channel stores.
+        :param channel_name: The channel's name, for messages.
+
+        :returns: A shallow copy with the secrets read.
+        :raises: ChannelSecretUnavailableError when a secret is missing, expired or not text.
+    """
     rtnval = {}
-    for key, value in config.items():
-        if isinstance(value, str) is True and value.startswith("secret://") is True:
-            resolved = None
-            for impl in impls:
-                try:
-                    resolved = impl.dereference(secret_ref=value)
-                    break
-                except NotImplementedError:
-                    continue
-            rtnval[key] = resolved if resolved is not None else value
-        else:
+    for key, value in (config if config is not None else {}).items():
+        if is_secret_ref(value=value) is False:
             rtnval[key] = value
-
+            continue
+        vault_name = secret_name_from_ref(ref=value)
+        try:
+            read = secrets_service.read_secret_for_service(
+                db_session=db_session, secret_ref=vault_name, service_identity=NOTIFICATIONS_SERVICE_IDENTITY,
+            )
+        except (SecretNotFoundError, SecretVersionExpiredError):
+            raise ChannelSecretUnavailableError(
+                "The secret behind the setting '{}' of the channel '{}' is missing or has expired ({}). Enter it again on the Notifications page.".format(
+                    key, channel_name, vault_name)
+            ) from None
+        try:
+            rtnval[key] = read.plaintext.reveal().decode("utf-8")
+        except UnicodeDecodeError:
+            raise ChannelSecretUnavailableError(
+                "The secret behind the setting '{}' of the channel '{}' is not text ({}).".format(key, channel_name, vault_name)
+            ) from None
+        finally:
+            read.plaintext.close()
     return rtnval
 
 

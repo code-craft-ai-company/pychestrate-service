@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- A notification channel's `secret://` settings reached the sender as a `{name, version}` dictionary (the variables module's reference resolver is a stub), and a
+  parked message replayed with the raw `secret://` text; both now read the real value from the secrets vault (ORG-F08). A webhook channel whose address was not
+  `http://` or `https://` (for example `file://`) was accepted; it is refused when the channel is made.
+
 - The deployment README says where to start (DOC-12). It is about 700 lines on six jobs (deploy, certificates, pod enrolment, monitoring, backup and restore, the CI
   workflow), and a reader had no signpost. It now opens with a "Start here" table: it says the page is the reference for the scripts, points a person who wants the
   step-by-step procedure at the operator runbook (chapter 13 of the user guide, which is the generic "Deploy on a Linux host" guide the audit asked for and is
@@ -273,6 +277,22 @@ preview tag.
   envelope holds the id, from the catalog when the entry still exists.
 
 ### Added
+
+- **Notifications page, and channel secrets in the vault (ORG-F08).** Channels and rules could only be made with the REST API or `pyc`, and the only way to make an
+  email channel work was to store its password as plain text in the channel (a `secret://` reference was resolved by a stub that handed the sender a
+  `{name, version}` dictionary instead of the secret). **Admin, Notifications** now lists channels, rules and the last 20 messages with their result; **Add Channel**
+  asks for the type first (Email, Slack, Microsoft Teams, PagerDuty, Webhook) and then shows that type's form, checking every setting at once and marking each
+  mistake beside its field; a channel's page can **send a test message** and say whether it arrived and why not, turn the channel off, **replace a secret**, and
+  delete it; **Add Rule** makes one rule for each event ticked (a run fails, a run completes) with the message text that fits it.
+  Each channel kind now declares its settings and which are secret (SMTP password, a Slack or Teams webhook address, a PagerDuty key, a webhook's authorization
+  header). A secret is sent in `secrets` (or the page's password box) and stored in the secrets vault under `notifications.channel.<id>.<setting>`, or `config`
+  points at an existing vault secret the user may read (`secret://<name>`, no pinned version); plain text in a secret setting is refused. The sender reads the vault
+  when it sends, as the service, and the value is in no table, event, envelope or log (a test scans every table). Reads show the reference, never the value; a
+  channel made before this keeps sending, is shown masked as "Secret stored unprotected", and replacing the secret moves it into the vault. `PATCH`, `DELETE` and
+  `POST .../test` were added to the channel API, and a channel is refused deletion while a rule uses it. Two new permissions, `system:notifications.read` and
+  `system:notifications.write`, replace `system:ui.admin.view` on these routes; both are administrative (system-admin only, in none of the workflow roles). Every
+  add, change and delete of a channel or rule is in the audit log, naming settings and never values. The OpenAPI document now matches the service (kinds, scope,
+  the new routes). Decisions are in `specs/2-notification-hub/design.md` (Security Considerations) and the guide's "Be told when a run fails".
 
 - Six built-in roles for the common workflows (ADM-06): **read-only**, **tester**, **developer**, **release-manager**, **lab-manager** and **platform-operator**.
   Building a role meant choosing from 73 keys, so the first job on a new installation was working out what a tester or a developer needs. Each role is

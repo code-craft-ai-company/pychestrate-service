@@ -175,23 +175,76 @@ Be told when a run fails
 
 The service can send a message when a run ends: an email, or a message to
 Slack, Microsoft Teams, PagerDuty or any webhook. It sends nothing until a
-system administrator sets up two things through the REST API (the same
-operations are ``pyc`` commands; see ``pyc notifications --help``).
+system administrator sets up two things on **Admin**, **Notifications**
+(which needs the ``system:notifications.write`` permission; people with
+``system:notifications.read`` can look but not change). Only run results
+are sent today: a run failing, and a run completing. Reservations expiring,
+devices being quarantined, outbound webhooks and alert rules do not send
+messages yet.
 
-**A channel** is where messages go. For email:
+**A channel** is where messages go. Choose **Add Channel**, pick the type
+(Email, Slack, Microsoft Teams, PagerDuty or Webhook), and fill in its form.
+Anything that works like a password is stored in the secrets vault, never in
+the channel: the SMTP password, a Slack or Teams webhook address (the address
+itself is the credential), a PagerDuty integration key, a webhook's
+authorization header. Type it once, or choose a secret that is already in
+the vault; afterwards the page shows only where it is stored and never the
+value. If a form has mistakes, every one is listed together and marked beside
+its field, and nothing is saved. On the channel's page:
+
+* **Send a test message** sends one through the channel with its real
+  settings and says whether it arrived, how long it took, and, if not, the
+  reason the far end gave. Do this once after adding a channel.
+* **Replace a secret** stores a new value as a new version of the same vault
+  secret; the channel follows it, so a password change is one step.
+* **Turn Off** stops everything sent through the channel without deleting it.
+* **Delete Channel** removes it and the secrets stored for it (not a vault
+  secret it merely pointed at). A channel that a rule still sends through
+  cannot be deleted; delete the rules first.
+
+A channel made before secrets moved to the vault keeps working, but shows
+**Secret stored unprotected**; replace the secret and the old value is removed.
+
+**A rule** says which event goes through which channels to whom. Choose
+**Add Rule** (it needs a channel first), tick **A run fails** and/or **A run
+completes** (each gets a rule with the message text that fits it), choose the
+channels, a project or **Every project**, and who it goes to: one per line,
+addresses for email, a channel such as ``#builds`` for Slack, any label for the
+others. An optional limit caps how many messages the rule sends in a minute, so
+a burst of failures does not flood one inbox. A rule can be turned off and on
+or deleted from the same page. The page also lists the most recent messages with
+their result, so you can see what was sent and why anything was not.
+
+The message names the run and the project and gives the reason. It is sent by a
+background thread of the service, never by the request that receives the pod's
+result, so a slow mail relay cannot hold a run up. A message that cannot be
+delivered is recorded with its error and parked as a dead letter
+(``GET /api/v1/notifications/dead-letter`` lists them); it does not stop the other
+messages, and it does not change the run. If the secret behind a channel has
+been removed from the vault, the message fails with a note naming the channel and
+the setting, never the value. Failures are also in the service log
+(``pychestrate.notifications.delivery_failed``). Adding, changing, switching and
+deleting channels and rules are recorded in the audit log, with the names of the
+settings that changed and never a secret.
+
+The same operations are in the REST API (and as ``pyc`` commands; see ``pyc
+notifications --help``). For email:
 
 .. code-block:: text
 
     POST /api/v1/notifications/channels
     {"name": "ops-mail", "kind": "smtp_email", "scope_level": "SYSTEM",
      "config": {"host": "smtp.example.com", "port": 587, "use_tls": true,
-                "from_address": "pychestrate@example.com"}}
+                "from_address": "pychestrate@example.com", "username": "robot"},
+     "secrets": {"password": "..."}}
 
-(``username`` and ``password`` are optional. The configuration is stored as
-you send it.) The other kinds are ``slack_webhook``, ``ms_teams_webhook``,
-``pagerduty_events_v2`` and ``generic_webhook``.
-
-**A routing rule** says which events go through which channels to whom:
+A secret is sent in ``secrets`` and stored in the vault, or ``config`` names an
+existing vault secret as ``"secret://<name>"``; a secret sent as plain text in
+``config`` is refused, with every other problem found. The other kinds are
+``slack_webhook``, ``ms_teams_webhook``, ``pagerduty_events_v2`` and
+``generic_webhook``. ``PATCH`` on a channel switches it on or off, changes its
+plain settings or replaces a secret, ``DELETE`` removes it, and
+``POST .../test`` sends a test message. A rule:
 
 .. code-block:: text
 
@@ -206,18 +259,9 @@ you send it.) The other kinds are ``slack_webhook``, ``ms_teams_webhook``,
 ``entity.run.completed`` (a run that finished) with ``run_succeeded``, are the two
 events that can be sent. A rule that could never send is refused with the reason:
 a pattern that matches neither event, an unknown template or channel, a template
-that does not describe the event, no recipient. ``rate_limit_per_minute`` caps how
-many messages the rule sends in a minute, so a burst of failures does not flood
-one inbox. ``GET /api/v1/notifications/routing-rules`` lists the rules,
-``PATCH`` with ``{"disabled": true}`` turns one off, and ``DELETE`` removes it.
-
-The message names the run and the project and gives the reason. It is sent by a
-background thread of the service, never by the request that receives the pod's
-result, so a slow mail relay cannot hold a run up. A message that cannot be
-delivered is recorded with its error and parked as a dead letter
-(``GET /api/v1/notifications/dead-letter`` lists them); it does not stop the other
-messages, and it does not change the run. Failures are also in the service log
-(``pychestrate.notifications.delivery_failed``).
+that does not describe the event, no recipient. ``GET /api/v1/notifications/routing-rules``
+lists the rules, ``PATCH`` with ``{"disabled": true}`` turns one off, and ``DELETE``
+removes it.
 
 
 Change or remove an alert rule

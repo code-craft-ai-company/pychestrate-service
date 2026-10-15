@@ -297,6 +297,17 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Register and manage inbound webhook integrations and "
         "outbound subscriptions"
     ),
+    # Notification channels and routing rules (audit ORG-F08). Administrative:
+    # a channel makes the server send mail and HTTP requests with stored
+    # credentials, so these are held by system-admin only.
+    "system:notifications.read": (
+        "See the notification channels, the rules that send through them, "
+        "and recent deliveries"
+    ),
+    "system:notifications.write": (
+        "Add, change and delete notification channels and routing rules, "
+        "and send test messages"
+    ),
     # Operator-facing read access for the embeddable-views catalog
     # (GET /api/v1/embed/views). Introduced by 8-embeddable-views
     # PR p21b. The /embed/{view_key} serving route itself is

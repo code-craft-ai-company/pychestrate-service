@@ -934,10 +934,82 @@ DEFAULT_REGISTRY.update({
 # Per-template-prefix overrides: longest matching prefix wins
 # ---------------------------------------------------------------------------
 
+# -- Admin, Notifications (audit ORG-F08): the handlers pass plain dict rows, built in routes_notifications ---------------------------------
+_NOTIFICATION_CHANNEL_ROW: Dict[str, Any] = {
+    "channel": None, "channel_id": "11111111-2222-4333-8444-555555555551", "name": "Team email", "kind_label": "Email (SMTP)",
+    "scope_label": "All projects", "state": "active", "unprotected": ["password"], "last_outcome": "delivered",
+    "last_when": datetime(2026, 10, 14, 9, 30, tzinfo=timezone.utc), "recipient_help": "An email address.", "disabled": False,
+}
+_NOTIFICATION_QUIET_CHANNEL_ROW: Dict[str, Any] = dict(
+    _NOTIFICATION_CHANNEL_ROW, channel_id="11111111-2222-4333-8444-555555555552", name="Pager", kind_label="PagerDuty", state="disabled",
+    unprotected=[], last_outcome=None, last_when=None, disabled=True,
+)
+_NOTIFICATION_RULE_ROW: Dict[str, Any] = {
+    "rule_id": "22222222-2222-4333-8444-555555555551", "event_label": "A run fails", "project": "Every project", "channels": ["Team email"],
+    "recipients": ["ops@example.test"], "rate_limit": 10, "state": "active",
+}
+_NOTIFICATION_DELIVERY_ROW: Dict[str, Any] = {
+    "when": datetime(2026, 10, 14, 9, 30, tzinfo=timezone.utc), "event": "entity.run.failed", "event_label": "A run fails", "channel": "Team email",
+    "channel_id": "11111111-2222-4333-8444-555555555551", "recipient": "ops@example.test", "outcome": "failed", "detail": "relay down", "latency_ms": 12,
+}
+_NOTIFICATION_FIELD_ROWS: List[Dict[str, Any]] = [
+    {"name": "host", "label": "Mail server", "help": "The server.", "required": True, "secret": False, "field_type": "text", "default": None,
+     "cfg_id": "cfg__host", "secret_id": "secret__host", "ref_id": "ref__host"},
+    {"name": "port", "label": "Port", "help": "Usually 587.", "required": True, "secret": False, "field_type": "number", "default": 587,
+     "cfg_id": "cfg__port", "secret_id": "secret__port", "ref_id": "ref__port"},
+    {"name": "use_tls", "label": "Use TLS", "help": "Encrypt.", "required": False, "secret": False, "field_type": "bool", "default": True,
+     "cfg_id": "cfg__use_tls", "secret_id": "secret__use_tls", "ref_id": "ref__use_tls"},
+    {"name": "url", "label": "Address", "help": "Where to post.", "required": True, "secret": False, "field_type": "url", "default": None,
+     "cfg_id": "cfg__url", "secret_id": "secret__url", "ref_id": "ref__url"},
+    {"name": "password", "label": "Password", "help": "Stored in the vault.", "required": False, "secret": True, "field_type": "text", "default": None,
+     "cfg_id": "cfg__password", "secret_id": "secret__password", "ref_id": "ref__password"},
+]
+_NOTIFICATION_SETTING_ROWS: List[Dict[str, Any]] = [
+    {"name": "host", "label": "Mail server", "secret": False, "value": "smtp.example.test", "in_vault": False, "vault_name": "", "unprotected": False, "is_mapping": False},
+    {"name": "headers", "label": "Other headers", "secret": False, "value": {"X-Team": "ops"}, "in_vault": False, "vault_name": "", "unprotected": False, "is_mapping": True},
+    {"name": "password", "label": "Password", "secret": True, "value": "secret://notifications.channel.x.password", "in_vault": True,
+     "vault_name": "notifications.channel.x.password", "unprotected": False, "is_mapping": False},
+    {"name": "token", "label": "Token", "secret": True, "value": "********", "in_vault": False, "vault_name": "", "unprotected": True, "is_mapping": False},
+]
+
+
+def _notification_channels(mode: str) -> List[Dict[str, Any]]:
+    rtnval = [_NOTIFICATION_CHANNEL_ROW, _NOTIFICATION_QUIET_CHANNEL_ROW] if mode == MODE_POPULATED else []
+    return rtnval
+
+
 TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "config/": {
         "logs": _many(AuditLogEntry),
         "history": _many(VariableChangeLog),
+    },
+    "config/notifications/": {
+        "channels": _notification_channels,
+        "rules": _by_mode([_NOTIFICATION_RULE_ROW], []),
+        "deliveries": _by_mode([_NOTIFICATION_DELIVERY_ROW], []),
+        "kinds": _const([
+            {"kind": "smtp_email", "label": "Email (SMTP)", "description": "Send an email."},
+            {"kind": "slack_webhook", "label": "Slack", "description": "Post to Slack."},
+        ]),
+        "kind": _by_mode("smtp_email", None),
+        "kind_label": _by_mode("Email (SMTP)", ""),
+        "kind_description": _by_mode("Send an email through your mail server.", ""),
+        "fields": _by_mode(_NOTIFICATION_FIELD_ROWS, []),
+        "vault_secrets": _by_mode(["shared.token", "ops.password"], []),
+        "channel_id": _const("11111111-2222-4333-8444-555555555551"),
+        "channel_name": _const("Team email"),
+        "state": _by_mode("active", "disabled"),
+        "created_at": _const(datetime(2026, 10, 14, 9, 0, tzinfo=timezone.utc)),
+        "settings": _by_mode(_NOTIFICATION_SETTING_ROWS, []),
+        "unprotected": _by_mode(["token"], []),
+        "secret_fields": _by_mode([row for row in _NOTIFICATION_FIELD_ROWS if row["secret"]], []),
+        "recipient_help": _const("An email address."),
+        "using_rules": _by_mode([{"rule_id": "22222222-2222-4333-8444-555555555551", "event_label": "A run fails"}], []),
+        "events": _const([
+            {"topic": "entity.run.failed", "label": "A run fails"},
+            {"topic": "entity.run.completed", "label": "A run completes"},
+        ]),
+        "projects": _by_mode([{"project_id": "33333333-2222-4333-8444-555555555551", "name": "Alpha"}], []),
     },
     "projects/": {
         "logs": _by_mode("line one\nline two\n", ""),

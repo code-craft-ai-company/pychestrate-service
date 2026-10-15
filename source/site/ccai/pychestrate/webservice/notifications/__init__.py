@@ -19,6 +19,9 @@ from ccai.pychestrate.webservice.extensions.registry import (
 from ccai.pychestrate.webservice.notifications.extensions.template import (
     NotificationTemplateExtension,
 )
+from ccai.pychestrate.webservice.notifications.extensions.channel_test_template import (
+    ChannelTestTemplate,
+)
 from ccai.pychestrate.webservice.notifications.extensions.run_failed_template import (
     RunFailedTemplate,
 )
@@ -55,5 +58,9 @@ def register_builtin_extensions() -> None:
     register_resource_extension(
         base_class=NotificationTemplateExtension,
         extension=RunSucceededTemplate,
+    )
+    register_resource_extension(
+        base_class=NotificationTemplateExtension,
+        extension=ChannelTestTemplate,
     )
     return

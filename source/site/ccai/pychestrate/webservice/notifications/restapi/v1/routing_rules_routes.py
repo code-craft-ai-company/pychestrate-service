@@ -27,9 +27,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import uuid
-
-from typing import Any, List, Optional
+from typing import Any
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
@@ -37,9 +35,10 @@ from ccai.webworks.routing.response import JSONResponse, Response
 from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.notifications import repository as notification_repository
 from ccai.pychestrate.webservice.notifications import service as notification_service
+from ccai.pychestrate.webservice.notifications import rule_validation
 from ccai.pychestrate.webservice.notifications.exceptions import (
     ChannelNotFoundError,
-    TemplateNotFoundError,
+    RoutingRuleInvalidError,
 )
 from ccai.pychestrate.webservice.notifications.restapi.v1.channels_routes import (
     _ProblemAbort,
@@ -48,24 +47,15 @@ from ccai.pychestrate.webservice.notifications.restapi.v1.channels_routes import
     _require_session,
     _resolve_actor_user_id,
 )
-from ccai.pychestrate.webservice.notifications.router import pattern_matches
-from ccai.pychestrate.webservice.notifications.run_notifier import NOTIFIED_TOPICS
-from ccai.pychestrate.webservice.projects.models import Project
 
 
 ROUTING_RULES_PATH = "/notifications/routing-rules"
 
-#: Deliveries one rule may ask for (channels times recipients), so a typo cannot fan out to hundreds.
-MAX_CHANNELS = 5
-MAX_RECIPIENTS = 20
+MAX_CHANNELS = rule_validation.MAX_CHANNELS
+MAX_RECIPIENTS = rule_validation.MAX_RECIPIENTS
 
 
-def _is_uuid(value: Any) -> bool:
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        return False
-    return True
+_is_uuid = rule_validation.is_uuid
 
 
 def _rule_to_dict(rule: Any) -> dict:
@@ -93,70 +83,11 @@ def _rule_to_dict(rule: Any) -> dict:
 
 def _validated_create_fields(*, request: Request, db_session: Any, payload: dict) -> dict:
     """Check a create body, aborting with a 400 that says what is wrong; returns the cleaned fields."""
-    if payload.get("filter_tag_expression", None) not in (None, ""):
-        _abort_problem(request=request, status=400, detail="filter_tag_expression is not supported yet; a rule matches on event_pattern and project_id only.")
-
-    pattern = str(payload.get("event_pattern", "") or "").strip()
-    if len(pattern) == 0:
-        _abort_problem(request=request, status=400, detail="event_pattern is required (for example 'entity.run.failed').")
-    if not any(pattern_matches(pattern=pattern, topic=topic) for topic in NOTIFIED_TOPICS):
-        _abort_problem(
-            request=request, status=400,
-            detail="event_pattern '{}' matches none of the events that can be notified: {}.".format(pattern, ", ".join(NOTIFIED_TOPICS)),
-            extensions={"event_pattern": pattern},
-        )
-
-    template_name = str(payload.get("template_name", "") or "").strip()
-    if len(template_name) == 0:
-        _abort_problem(request=request, status=400, detail="template_name is required (for example 'run_failed').")
     try:
-        template = notification_service._resolve_template(template_name=template_name)
-    except TemplateNotFoundError:
-        _abort_problem(request=request, status=400, detail="No notification template is named '{}'.".format(template_name), extensions={"template_name": template_name})
-    fitting = [topic for topic in NOTIFIED_TOPICS if pattern_matches(pattern=pattern, topic=topic) and (len(template.event_topics) == 0 or topic in template.event_topics)]
-    if len(fitting) == 0:
-        _abort_problem(
-            request=request, status=400,
-            detail="Template '{}' describes {}, and event_pattern '{}' matches none of them, so this rule would never send.".format(
-                template_name, ", ".join(template.event_topics), pattern),
-            extensions={"template_name": template_name, "event_pattern": pattern},
-        )
-
-    channel_ids = payload.get("channel_ids", None)
-    if not isinstance(channel_ids, list) or len(channel_ids) == 0 or len(channel_ids) > MAX_CHANNELS:
-        _abort_problem(request=request, status=400, detail="channel_ids must list between 1 and {} channel ids.".format(MAX_CHANNELS))
-    for channel_id in channel_ids:
-        if not _is_uuid(channel_id):
-            _abort_problem(request=request, status=400, detail="channel_ids holds a value that is not a channel id: {!r}.".format(channel_id))
-        try:
-            notification_service.read_channel(db_session=db_session, channel_id=str(channel_id))
-        except ChannelNotFoundError:
-            _abort_problem(request=request, status=400, detail="No notification channel has the id {}.".format(channel_id), extensions={"channel_id": str(channel_id)})
-
-    recipients = payload.get("recipients", None)
-    if not isinstance(recipients, list) or len(recipients) == 0 or len(recipients) > MAX_RECIPIENTS:
-        _abort_problem(request=request, status=400, detail="recipients must list between 1 and {} addresses.".format(MAX_RECIPIENTS))
-    cleaned_recipients: List[str] = []
-    for recipient in recipients:
-        if not isinstance(recipient, str) or len(recipient.strip()) == 0 or len(recipient) > 320:
-            _abort_problem(request=request, status=400, detail="recipients holds a value that is not an address: {!r}.".format(recipient))
-        cleaned_recipients.append(recipient.strip())
-
-    project_id: Optional[str] = None
-    if payload.get("project_id", None) not in (None, ""):
-        project_id = str(payload["project_id"])
-        if not _is_uuid(project_id) or db_session.query(Project.project_id).filter(Project.project_id == project_id).first() is None:
-            _abort_problem(request=request, status=400, detail="No project has the id {}.".format(project_id), extensions={"project_id": project_id})
-
-    rate_limit = payload.get("rate_limit_per_minute", None)
-    if rate_limit is not None and (isinstance(rate_limit, bool) or not isinstance(rate_limit, int) or rate_limit < 1 or rate_limit > 10000):
-        _abort_problem(request=request, status=400, detail="rate_limit_per_minute must be a whole number from 1 to 10000, or left out for no limit.")
-
-    return {
-        "project_id": project_id, "event_pattern": pattern, "template_name": template_name,
-        "channel_ids": [str(channel_id) for channel_id in channel_ids], "recipients": cleaned_recipients,
-        "rate_limit_per_minute": rate_limit,
-    }
+        rtnval = rule_validation.validate_rule_fields(db_session=db_session, payload=payload)
+    except RoutingRuleInvalidError as xcpt:
+        _abort_problem(request=request, status=400, detail=xcpt.detail, extensions=xcpt.extensions)
+    return rtnval
 
 
 def handle_create_routing_rule(request: Request) -> Response:
@@ -215,11 +146,12 @@ def handle_update_routing_rule(request: Request) -> Response:
         db_session = _require_session(request=request)
         if not isinstance(payload.get("disabled", None), bool) or set(payload.keys()) != {"disabled"}:
             _abort_problem(request=request, status=400, detail="The body must be {\"disabled\": true} or {\"disabled\": false}.")
-        rule = notification_repository.get_routing_rule(db_session=db_session, rule_id=rule_id) if _is_uuid(rule_id) else None
-        if rule is None:
+        try:
+            if not _is_uuid(rule_id):
+                raise ChannelNotFoundError(rule_id)
+            rule = notification_service.set_routing_rule_disabled(db_session=db_session, rule_id=rule_id, disabled=payload["disabled"])
+        except ChannelNotFoundError:
             _abort_problem(request=request, status=404, detail="No routing rule has the id {}.".format(rule_id), extensions={"rule_id": rule_id})
-        rule.disabled = payload["disabled"]
-        db_session.commit()
         rtnval: Response = JSONResponse(content=_rule_to_dict(rule), status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -260,11 +192,12 @@ def register_routing_rules_routes(*, app: Any, version_prefix: str) -> None:
         :returns: None.
     """
     base = version_prefix + ROUTING_RULES_PATH
-    permission = "system:ui.admin.view"
-    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_routing_rules, permission_key=permission))
-    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_routing_rule, permission_key=permission))
-    app.attach_route(base + "/{rule_id}", methods=["PATCH"])(require_rest_permission(handle_update_routing_rule, permission_key=permission))
-    app.attach_route(base + "/{rule_id}", methods=["DELETE"])(require_rest_permission(handle_delete_routing_rule, permission_key=permission))
+    read_permission = "system:notifications.read"
+    write_permission = "system:notifications.write"
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_routing_rules, permission_key=read_permission))
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_routing_rule, permission_key=write_permission))
+    app.attach_route(base + "/{rule_id}", methods=["PATCH"])(require_rest_permission(handle_update_routing_rule, permission_key=write_permission))
+    app.attach_route(base + "/{rule_id}", methods=["DELETE"])(require_rest_permission(handle_delete_routing_rule, permission_key=write_permission))
     return
 
 

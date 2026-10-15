@@ -12,7 +12,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -304,4 +304,57 @@ def insert_attempt(
     db_session.add(attempt)
     db_session.flush()
     rtnval = attempt
+    return rtnval
+
+
+def latest_attempt_for_channel(
+        *,
+        db_session: DbSession,
+        channel_id: str
+    ) -> Optional[NotificationDispatchAttempt]:
+    """
+        The most recent delivery attempt made through a channel.
+
+        :param db_session: Active SQLAlchemy session.
+        :param channel_id: The channel.
+
+        :returns: The attempt, or None when nothing was ever sent through it.
+    """
+    rtnval = (
+        db_session.query(NotificationDispatchAttempt)
+        .join(
+            NotificationDispatchEnvelope,
+            NotificationDispatchEnvelope.envelope_id == NotificationDispatchAttempt.envelope_id,
+        )
+        .filter(NotificationDispatchEnvelope.channel_id == channel_id)
+        .order_by(NotificationDispatchAttempt.attempted_at.desc())
+        .first()
+    )
+    return rtnval
+
+
+def list_recent_deliveries(
+        *,
+        db_session: DbSession,
+        limit: int
+    ) -> List[Tuple[NotificationDispatchAttempt, NotificationDispatchEnvelope]]:
+    """
+        The most recent delivery attempts across all channels, newest first.
+
+        :param db_session: Active SQLAlchemy session.
+        :param limit: How many to return.
+
+        :returns: ``(attempt, envelope)`` pairs.
+    """
+    rows = (
+        db_session.query(NotificationDispatchAttempt, NotificationDispatchEnvelope)
+        .join(
+            NotificationDispatchEnvelope,
+            NotificationDispatchEnvelope.envelope_id == NotificationDispatchAttempt.envelope_id,
+        )
+        .order_by(NotificationDispatchAttempt.attempted_at.desc())
+        .limit(int(limit))
+        .all()
+    )
+    rtnval = [(attempt, envelope) for attempt, envelope in rows]
     return rtnval

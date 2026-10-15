@@ -488,14 +488,19 @@ def test_flags_routes_declare_documented_permissions():
 def test_notification_channel_routes_declare_documented_permissions():
     """
     **Feature: REST route permissions (LD-12)**
-    **Property: every notification-channel route needs the admin
-    view key (channels carry delivery endpoints and credentials).**
+    **Property: reading notification channels needs the notifications read
+    key and every change (create, change, delete, send a test) the write key
+    (channels carry delivery endpoints and credentials, so both are
+    administrative).**
     """
     base = VERSION_PREFIX + "/notifications/channels"
     expected = {
-        ("GET", base): "system:ui.admin.view",
-        ("POST", base): "system:ui.admin.view",
-        ("GET", base + "/{channel_id}"): "system:ui.admin.view",
+        ("GET", base): "system:notifications.read",
+        ("POST", base): "system:notifications.write",
+        ("GET", base + "/{channel_id}"): "system:notifications.read",
+        ("PATCH", base + "/{channel_id}"): "system:notifications.write",
+        ("DELETE", base + "/{channel_id}"): "system:notifications.write",
+        ("POST", base + "/{channel_id}/test"): "system:notifications.write",
     }
     testbase.assert_equal(
         _declared_permissions(registrar=channels_routes.register_channels_routes),

@@ -2142,6 +2142,10 @@ def register_config_routes(*, app: Any) -> None:
         register_rpa_types_routes,
     )
     register_rpa_types_routes(app=app)
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_notifications import (  # noqa: E402
+        register_notifications_routes,
+    )
+    register_notifications_routes(app=app)
     register_scopes_routes(app=app)
 
     # D4 features -- secrets + sessions + audit.

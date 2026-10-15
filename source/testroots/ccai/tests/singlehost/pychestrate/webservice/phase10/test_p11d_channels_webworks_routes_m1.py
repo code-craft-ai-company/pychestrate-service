@@ -118,7 +118,9 @@ class _FakeChannel:
         scope_level: ChannelScopeLevel = ChannelScopeLevel.SYSTEM,
         project_id: Optional[str] = None,
         disabled: bool = False,
+        config: Optional[dict] = None,
     ) -> None:
+        self.config: dict = config if config is not None else {}
         self.channel_id: str = channel_id
         self.name: str = name
         self.kind: str = kind
@@ -181,11 +183,12 @@ def _raises(exc: BaseException) -> Callable[..., Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_register_channels_routes_attaches_three_routes_under_version_prefix():
+def test_register_channels_routes_attaches_every_route_under_version_prefix():
     """
     **Feature: 2-notification-hub T1.1 (webworks routes)**
-    **Property: register_channels_routes attaches the same three
-    method+path pairs the flask_restx controller exposed.**
+    **Property: register_channels_routes attaches the three routes the
+    flask_restx controller exposed, and the change, delete and test routes
+    added with the Notifications page (audit ORG-F08).**
     """
     app = _FakeApp()
     channels_routes.register_channels_routes(app=app, version_prefix="/api/v1")
@@ -194,6 +197,9 @@ def test_register_channels_routes_attaches_three_routes_under_version_prefix():
         ("/api/v1/notifications/channels", ("GET",)),
         ("/api/v1/notifications/channels", ("POST",)),
         ("/api/v1/notifications/channels/{channel_id}", ("GET",)),
+        ("/api/v1/notifications/channels/{channel_id}", ("PATCH",)),
+        ("/api/v1/notifications/channels/{channel_id}", ("DELETE",)),
+        ("/api/v1/notifications/channels/{channel_id}/test", ("POST",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)

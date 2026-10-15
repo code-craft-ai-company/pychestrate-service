@@ -446,6 +446,14 @@ NAV_ENTRIES: List[NavEntry] = [
         section="Configuration",
     ),
     NavEntry(
+        entry_id="admin.notifications",
+        label="Notifications",
+        route="/admin/notifications",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:notifications.read"],
+        section="Configuration",
+    ),
+    NavEntry(
         entry_id="admin.scopes",
         label="Secret Scopes",
         route="/admin/scopes",

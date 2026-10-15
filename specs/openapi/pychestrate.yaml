@@ -1541,6 +1541,11 @@ paths:
     get:
       tags: [notifications]
       summary: List notification channels.
+      description: >-
+        Lists the places notifications can be delivered to (an email server, a Slack
+        or Teams webhook, PagerDuty, a generic webhook). A secret setting is shown as
+        its `secret://` reference, never as its value. Requires
+        `system:notifications.read`.
       operationId: notifications_list_channels
       responses:
         '200':
@@ -1557,6 +1562,16 @@ paths:
     post:
       tags: [notifications]
       summary: Create a notification channel.
+      description: >-
+        Each kind has settings, some of them secret (an SMTP `password`, the `url` of a
+        Slack or Teams webhook, a PagerDuty `routing_key`, a generic webhook's
+        `authorization`). Send a secret in `secrets`; it is stored in the secrets vault
+        and the channel keeps a `secret://` reference. Or point `config` at an existing
+        vault secret the caller may read, as `"secret://<name>"` (a pinned version is
+        refused). A secret given as plain text in `config` is refused. A missing or
+        unknown setting, a wrong shape, or an address that is not `http://` or `https://`
+        is a 400 whose `problems` member lists every one. Requires
+        `system:notifications.write`.
       operationId: notifications_create_channel
       requestBody:
         required: true
@@ -1570,6 +1585,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationChannel' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: A channel with this name already exists in the scope.
   /notifications/channels/{channel_id}:
     parameters:
       - in: path
@@ -1579,6 +1597,7 @@ paths:
     get:
       tags: [notifications]
       summary: Read a notification channel.
+      description: Requires `system:notifications.read`.
       operationId: notifications_get_channel
       responses:
         '200':
@@ -1587,13 +1606,101 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationChannel' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [notifications]
+      summary: Switch a notification channel on or off, change its settings, or replace its secrets.
+      description: >-
+        Any of `disabled`, `config` (the plain settings to change) and `secrets` (a new
+        value for a secret setting). A new secret becomes a new version of the channel's
+        own vault secret, so the channel follows it; for a setting that is unset, points
+        at someone else's secret, or is still held as plain text, the value is stored
+        under the channel's own name and the setting now points at it. Requires
+        `system:notifications.write`.
+      operationId: notifications_update_channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                disabled: { type: boolean }
+                config: { type: object, additionalProperties: true }
+                secrets:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        '200':
+          description: The channel.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationChannel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [notifications]
+      summary: Delete a notification channel.
+      description: >-
+        Deletes the channel and the vault secrets the service stored for it (never a
+        vault secret it merely pointed at). Refused with 409 while a routing rule still
+        sends through it. Requires `system:notifications.write`.
+      operationId: notifications_delete_channel
+      responses:
+        '204':
+          description: Channel deleted.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: A routing rule still sends through the channel.
+  /notifications/channels/{channel_id}/test:
+    parameters:
+      - in: path
+        name: channel_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [notifications]
+      summary: Send a test message through a notification channel.
+      description: >-
+        Sends one test message so an administrator learns whether the channel's settings
+        work before a real event needs them. A message that could not be delivered is
+        still a 200, with `delivered` false and the reason. Requires
+        `system:notifications.write`.
+      operationId: notifications_test_channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient]
+              additionalProperties: false
+              properties:
+                recipient:
+                  type: string
+                  description: Who or where to send it (for email, an address).
+      responses:
+        '200':
+          description: How the send went.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivered, error_message, latency_ms]
+                properties:
+                  delivered: { type: boolean }
+                  error_message: { type: string }
+                  latency_ms: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /notifications/routing-rules:
     get:
       tags: [notifications]
       summary: List notification routing rules.
       description: >-
         Lists the rules that turn a run event into messages, optionally only
-        those of one project. Requires `system:ui.admin.view`.
+        those of one project. Requires `system:notifications.read`.
       operationId: notifications_list_routing_rules
       parameters:
         - in: query
@@ -1619,7 +1726,7 @@ paths:
         without it applies to every project. A rule that could never fire is
         refused with the reason: a pattern that matches neither event, an unknown
         template, a channel that does not exist, no recipient. Requires
-        `system:ui.admin.view`.
+        `system:notifications.write`.
       operationId: notifications_create_routing_rule
       requestBody:
         required: true
@@ -7639,32 +7746,55 @@ components:
 
     NotificationChannel:
       type: object
-      required: [channel_id, name, kind, status, created_at]
+      required: [channel_id, name, kind, scope_level, disabled, created_at]
       properties:
         channel_id: { type: string, format: uuid }
         name: { type: string }
         kind:
           type: string
-          enum: [email, slack, webhook, pagerduty]
+          enum: [smtp_email, slack_webhook, ms_teams_webhook, pagerduty_events_v2, generic_webhook]
+        scope_level:
+          type: string
+          enum: [SYSTEM, PROJECT]
+        project_id: { type: [string, 'null'], format: uuid }
+        disabled: { type: boolean }
         config:
           type: object
+          description: >-
+            The channel's settings. A secret setting is its `secret://` reference; a
+            secret still held as plain text (a channel made before secrets moved to the
+            vault) is masked.
           additionalProperties: true
-        status:
-          type: string
-          enum: [active, disabled, error]
+        unprotected_secret_fields:
+          type: array
+          description: Secret settings still held as plain text; replace each with `PATCH` and `secrets`.
+          items: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     NotificationChannelCreateRequest:
       type: object
-      required: [name, kind, config]
+      required: [name, kind, scope_level]
       properties:
         name: { type: string }
         kind:
           type: string
-          enum: [email, slack, webhook, pagerduty]
+          enum: [smtp_email, slack_webhook, ms_teams_webhook, pagerduty_events_v2, generic_webhook]
+        scope_level:
+          type: string
+          enum: [SYSTEM, PROJECT]
+        project_id:
+          type: [string, 'null']
+          format: uuid
+          description: Required when `scope_level` is PROJECT.
         config:
           type: object
+          description: >-
+            The plain settings, and `secret://<name>` references to existing vault secrets.
           additionalProperties: true
+        secrets:
+          type: object
+          description: A new value for each secret setting; stored in the secrets vault.
+          additionalProperties: { type: string }
     NotificationRoutingRule:
       type: object
       required: [rule_id, event_pattern, template_name, channel_ids, recipients, disabled]

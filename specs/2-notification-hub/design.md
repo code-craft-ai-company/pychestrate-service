@@ -359,10 +359,52 @@ source/site/ccai/pychestrate/webservice/restapi/versions/v1/notifications.py
 
 ## Security Considerations
 
-- Channel config secrets: only `${secret:…}` references are stored;
-  resolution happens at send time through `2-global-variables`'
-  `secret_ref_dereferencer`. Plaintext never hits REST responses or
-  logs.
+- Channel config secrets: only `secret://<name>` references are stored;
+  plaintext never hits REST responses or logs. *Decided 2026-10-15
+  (audit ORG-F08); this replaces the earlier plan to resolve through the
+  variables module's `secret_ref_dereferencer`, whose reference
+  implementation returns a `{name, version}` stub (it was passing that
+  dictionary to the SMTP login as the password).* The rules:
+  1. **Each channel kind declares its fields** (`config_fields`), and
+     which of them are secret: the SMTP `password`, the `url` of a Slack
+     or Teams webhook (the URL is the credential), a PagerDuty
+     `routing_key`, a generic webhook's `authorization` header value.
+  2. **A secret field is never accepted as plaintext in `config`.** The
+     caller sends the value in `secrets.<field>` and the service stores
+     it in the secrets vault (ORG scope for a system channel, PROJECT
+     scope for a project channel) under
+     `notifications.channel.<channel_id>.<field>`, then keeps only the
+     reference in `config`; or the caller points `config.<field>` at an
+     existing vault secret (`secret://name`), which the acting user must
+     be allowed to read, as for an inbound webhook's shared secret. A
+     plaintext value in a secret field is refused with a message saying
+     where to put it. A pinned version (`secret://name#v2`) is refused:
+     a channel always uses the current version, so rotating the secret
+     rotates the channel.
+  3. **Sending reads the vault as the service** (`read_secret_for_service`,
+     as the inbound webhook receiver does), at send time, in the
+     dispatcher only; the plaintext is not stored, logged, put on an
+     envelope or an event. A secret that is missing or expired fails the
+     delivery with a message naming the channel and the field (never the
+     value), recorded like any failed send.
+  4. **Reads show the reference, never the value**: a secret field is
+     returned as its `secret://` reference. A channel created before this
+     rule that still holds a plaintext secret keeps sending (nothing is
+     broken by upgrading), is returned with the value masked and listed
+     under `unprotected_secret_fields`, and the page tells an
+     administrator to replace it.
+  5. **Rotation** is a `PATCH` with `secrets.<field>` (a new vault
+     version; the channel follows). Deleting a channel deletes the vault
+     secrets it created (never one it merely points at) and is refused
+     while a routing rule still uses the channel.
+  6. A webhook URL must be `http://` or `https://`.
+- **Permissions (decided 2026-10-15):** `system:notifications.read`
+  (see channels, rules and recent deliveries) and
+  `system:notifications.write` (create, change, delete, send a test).
+  Both are administrative: held by `system-admin` only, in none of the
+  workflow roles, because a channel makes the server send mail and HTTP
+  requests with stored credentials. (The REST routes used
+  `system:ui.admin.view`, which is not a statement about notifications.)
 - Recipients validate against `1-user-management` or, for external
   emails, against a configured `external_recipient_allowlist`.
 - `notification.channel.write` gates system channels;

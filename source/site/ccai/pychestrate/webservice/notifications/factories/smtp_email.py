@@ -21,9 +21,10 @@ import smtplib
 import time
 
 from email.message import EmailMessage
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Mapping, Tuple
 
 from ccai.pychestrate.webservice.notifications.factories.channel import (
+    ChannelConfigField,
     ChannelDeliveryOutcome,
     NotificationChannelProtocol,
 )
@@ -36,6 +37,17 @@ class SmtpEmailChannel(NotificationChannelProtocol):
 
     factory_protocol_name: ClassVar[str] = "notification_channel"
     channel_kind: ClassVar[str] = "smtp_email"
+    kind_label: ClassVar[str] = "Email (SMTP)"
+    kind_description: ClassVar[str] = "Send an email through your mail server."
+    recipient_help: ClassVar[str] = "An email address, for example team@example.com."
+    config_fields: ClassVar[Tuple[ChannelConfigField, ...]] = (
+        ChannelConfigField(name="host", label="Mail server", help="The mail server's name or address, for example smtp.example.com."),
+        ChannelConfigField(name="port", label="Port", help="Usually 587 (with TLS) or 25.", field_type="number", default=587),
+        ChannelConfigField(name="from_address", label="From address", help="The sender shown on each email, for example pychestrate@example.com."),
+        ChannelConfigField(name="use_tls", label="Use TLS", help="Encrypt the connection (STARTTLS). Leave on unless your mail server cannot.", required=False, field_type="bool", default=True),
+        ChannelConfigField(name="username", label="User name", help="Leave empty if the mail server does not ask for a login.", required=False),
+        ChannelConfigField(name="password", label="Password", help="Stored in the secrets vault. Used only when a user name is set.", required=False, secret=True),
+    )
     PRECEDENCE: ClassVar[int] = 1000
 
     @classmethod

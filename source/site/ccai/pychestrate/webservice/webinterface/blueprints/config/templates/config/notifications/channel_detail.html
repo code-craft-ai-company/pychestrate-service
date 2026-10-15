@@ -1,0 +1,112 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}{{ channel_name }} - Notification Channel - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+{{ ui.breadcrumb([("Notifications", url_for('config.notifications_overview')), (channel_name, None)]) }}
+
+<div class="page-header">
+    <h1>{{ channel_name }} {{ ui.status_badge(state) }}</h1>
+    <p>{{ kind_label }} channel, created {{ created_at | format_datetime('%Y-%m-%d %H:%M') }}</p>
+</div>
+
+{% if unprotected %}
+<div class="pyc-preview-notice" role="alert" data-role="unprotected-notice">This channel was made before secrets moved to the secrets vault, so {{ unprotected | join(', ') }} {{ 'is' if unprotected | length == 1 else 'are' }} still stored unprotected in the database.{% if can_manage %} Replace {{ 'it' if unprotected | length == 1 else 'each' }} below and the old value is removed.{% endif %}</div>
+{% endif %}
+
+<div class="card" data-role="settings">
+    <h2 class="card-header">Settings</h2>
+    <dl class="pyc-key-value">
+        {% for setting in settings %}
+        <dt>{{ setting.label }}</dt>
+        <dd>
+            {% if setting.secret and setting.in_vault %}
+            Stored in the secrets vault as <code>{{ setting.vault_name }}</code>
+            {% elif setting.secret %}
+            <span class="badge badge-warning">Stored unprotected</span>
+            {% elif setting.is_mapping %}
+            <code>{{ setting.value | tojson }}</code>
+            {% else %}
+            {{ setting.value | display }}
+            {% endif %}
+        </dd>
+        {% endfor %}
+    </dl>
+</div>
+
+{% if can_manage %}
+<div class="card" data-role="test">
+    <h2 class="card-header">Send a test message</h2>
+    <form action="{{ url_for('config.notification_channel_test', channel_id=channel_id) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="recipient">Send it to</label>
+            <input type="text" id="recipient" name="recipient" class="form-control narrow" required maxlength="320" aria-describedby="recipient-help">
+            <div class="form-text" id="recipient-help">{{ recipient_help }}</div>
+        </div>
+        <button type="submit" class="btn btn-primary">Send Test</button>
+    </form>
+</div>
+
+{% if secret_fields %}
+<div class="card" data-role="secrets">
+    <h2 class="card-header">Replace a secret</h2>
+    {% for field in secret_fields %}
+    <form action="{{ url_for('config.notification_channel_secrets', channel_id=channel_id) }}" method="post" data-secret-setting="{{ field.name }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="setting" value="{{ field.name }}">
+        <div class="form-group">
+            <label for="value-{{ field.name }}">New {{ field.label | lower }}</label>
+            <input type="password" id="value-{{ field.name }}" name="value" class="form-control narrow" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-secondary">Replace {{ field.label }}</button>
+    </form>
+    {% endfor %}
+    <p class="muted mt">The new value becomes a new version of the secret in the vault; the channel follows it.</p>
+</div>
+{% endif %}
+
+<div class="card" data-role="manage">
+    <h2 class="card-header">Manage</h2>
+    <div class="actions-row">
+        <form action="{{ url_for('config.notification_channel_state', channel_id=channel_id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="disabled" value="{{ '0' if state == 'disabled' else '1' }}">
+            <button type="submit" class="btn btn-secondary">{{ 'Turn On' if state == 'disabled' else 'Turn Off' }}</button>
+        </form>
+        {% if not using_rules %}
+        <form action="{{ url_for('config.notification_channel_delete', channel_id=channel_id) }}" method="post" data-confirm="Delete this channel and the secrets stored for it?" data-confirm-type="{{ channel_name }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {{ ui.confirm_button("Delete Channel", class="btn btn-danger") }}
+        </form>
+        {% endif %}
+    </div>
+    {% if using_rules %}
+    <p class="muted mt" data-role="in-use">Rules send through this channel ({% for rule in using_rules %}{{ rule.event_label | lower }}{{ ', ' if not loop.last }}{% endfor %}). Delete them before deleting the channel.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card" data-role="deliveries">
+    <h2 class="card-header" id="recent-heading">Recent messages through this channel</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table" aria-labelledby="recent-heading">
+        <thead>
+            <tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">To</th><th scope="col">Result</th><th scope="col">Detail</th></tr>
+        </thead>
+        <tbody>
+            {% for row in deliveries %}
+            <tr>
+                <td>{{ row.when | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ row.event_label }}</td>
+                <td>{{ row.recipient }}</td>
+                <td>{{ ui.status_badge(row.outcome) }}</td>
+                <td>{{ row.detail if row.detail else '' }}</td>
+            </tr>
+            {% else %}
+            {{ ui.empty_state("Nothing has been sent through this channel yet.", hint="Send a test message to check that it works.", colspan=5) }}
+            {% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% endblock %}

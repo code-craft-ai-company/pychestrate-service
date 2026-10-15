@@ -9,15 +9,25 @@ The production webservice runs on ``ccai.webworks`` (see
 :mod:`app_pychestrate_main`). This module is the webworks-native
 REST surface for the notification channel CRUD endpoints.
 
-Three routes:
+Routes (reading needs ``system:notifications.read``, everything else
+``system:notifications.write``):
 
 * ``POST /api/v1/notifications/channels``
-  — create a channel.
+  — create a channel. A secret setting is sent in ``secrets`` and stored in
+  the secrets vault, or ``config`` names an existing vault secret as
+  ``secret://<name>``; plain text in a secret setting is refused.
 * ``GET  /api/v1/notifications/channels``
   — list channels with optional ``scope_level`` and ``project_id``
   query filters.
 * ``GET  /api/v1/notifications/channels/{channel_id}``
-  — read one channel.
+  — read one channel. Its ``config`` shows secrets as ``secret://``
+  references, never as values.
+* ``PATCH /api/v1/notifications/channels/{channel_id}``
+  — ``{"disabled": bool, "config": {...}, "secrets": {...}}``; any of them.
+* ``DELETE /api/v1/notifications/channels/{channel_id}``
+  — refused (409) while a routing rule sends through the channel.
+* ``POST /api/v1/notifications/channels/{channel_id}/test``
+  — ``{"recipient": "..."}`` sends a test message and reports how it went.
 
 Error responses are RFC 7807 problem documents per the convention
 in :mod:`api.problem_json_webworks`. Validation and lookup errors
@@ -46,7 +56,10 @@ from ccai.pychestrate.webservice.notifications import (
 )
 from ccai.pychestrate.webservice.notifications.exceptions import (
     ChannelAlreadyExistsError,
+    ChannelConfigInvalidError,
+    ChannelInUseError,
     ChannelNotFoundError,
+    ChannelSecretAccessDeniedError,
     UnsupportedChannelKindError,
 )
 from ccai.pychestrate.webservice.notifications.models import (
@@ -55,6 +68,9 @@ from ccai.pychestrate.webservice.notifications.models import (
 
 
 CHANNELS_PATH = "/notifications/channels"
+
+READ_PERMISSION = "system:notifications.read"
+WRITE_PERMISSION = "system:notifications.write"
 
 
 class _ProblemAbort(Exception):
@@ -243,6 +259,7 @@ def _channel_to_dict(channel: Any) -> dict:
             channel.updated_at.isoformat() if channel.updated_at is not None else None
         ),
     }
+    rtnval.update(notification_service.describe_channel(channel=channel))
     return rtnval
 
 
@@ -274,6 +291,11 @@ def handle_create_channel(request: Request) -> Response:
         config_value = payload.get("config", None)
         if config_value is None:
             config_value = {}
+        if isinstance(config_value, dict) is False:
+            _abort_problem(request=request, status=400, detail="config must be a JSON object")
+        secrets_value = payload.get("secrets", None)
+        if secrets_value is not None and isinstance(secrets_value, dict) is False:
+            _abort_problem(request=request, status=400, detail="secrets must be a JSON object")
 
         try:
             channel = notification_service.create_channel(
@@ -284,11 +306,17 @@ def handle_create_channel(request: Request) -> Response:
                 project_id=payload.get("project_id", None),
                 config=config_value,
                 actor_user_id=actor_user_id,
+                secrets=secrets_value,
+                principal=getattr(request, "auth_principal", None),
             )
         except SemanticError as xcpt:
             _abort_problem(
                 request=request, status=400, detail=str(xcpt)
             )
+        except ChannelConfigInvalidError as xcpt:
+            _abort_problem(request=request, status=400, detail=str(xcpt), extensions={"problems": xcpt.problems})
+        except ChannelSecretAccessDeniedError as xcpt:
+            _abort_problem(request=request, status=403, detail=str(xcpt))
         except UnsupportedChannelKindError as xcpt:
             _abort_problem(
                 request=request,
@@ -383,6 +411,109 @@ def handle_read_channel(request: Request) -> Response:
     return rtnval
 
 
+def handle_update_channel(request: Request) -> Response:
+    """
+        ``PATCH /api/v1/notifications/channels/{channel_id}`` — switch a
+        channel on or off, change its plain settings, and replace or rotate
+        its secrets. Any of ``disabled``, ``config`` and ``secrets``.
+
+        :param request: Incoming webworks request.
+        :returns: JSON response (200) with the channel, or a problem response.
+    """
+    channel_id = request.path_params.get("channel_id", "")
+    try:
+        payload = _decode_json_or_abort(request=request)
+        db_session = _require_session(request=request)
+        unknown = [key for key in payload if key not in ("disabled", "config", "secrets")]
+        if len(unknown) > 0:
+            _abort_problem(request=request, status=400, detail="Only disabled, config and secrets can be changed; not: {}.".format(", ".join(unknown)))
+        if len(payload) == 0:
+            _abort_problem(request=request, status=400, detail="Send at least one of disabled, config and secrets.")
+        disabled = payload.get("disabled", None)
+        if disabled is not None and isinstance(disabled, bool) is False:
+            _abort_problem(request=request, status=400, detail="disabled must be true or false")
+        for member in ("config", "secrets"):
+            if payload.get(member, None) is not None and isinstance(payload[member], dict) is False:
+                _abort_problem(request=request, status=400, detail="{} must be a JSON object".format(member))
+        try:
+            channel = notification_service.update_channel(
+                db_session=db_session,
+                channel_id=channel_id,
+                disabled=disabled,
+                config=payload.get("config", None),
+                secrets=payload.get("secrets", None),
+                principal=getattr(request, "auth_principal", None),
+            )
+        except ChannelNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"channel_id": channel_id})
+        except ChannelConfigInvalidError as xcpt:
+            _abort_problem(request=request, status=400, detail=str(xcpt), extensions={"problems": xcpt.problems})
+        except ChannelSecretAccessDeniedError as xcpt:
+            _abort_problem(request=request, status=403, detail=str(xcpt))
+        rtnval: Response = JSONResponse(content=_channel_to_dict(channel), status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+def handle_delete_channel(request: Request) -> Response:
+    """
+        ``DELETE /api/v1/notifications/channels/{channel_id}`` — delete a
+        channel and the vault secrets stored for it. Refused with 409 while a
+        routing rule sends through it.
+
+        :param request: Incoming webworks request.
+        :returns: 204, or a problem response.
+    """
+    channel_id = request.path_params.get("channel_id", "")
+    try:
+        db_session = _require_session(request=request)
+        try:
+            notification_service.delete_channel(
+                db_session=db_session, channel_id=channel_id, principal=getattr(request, "auth_principal", None),
+            )
+        except ChannelNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"channel_id": channel_id})
+        except ChannelInUseError as xcpt:
+            _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"channel_id": channel_id})
+        rtnval: Response = Response(status_code=204, body=b"")
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+def handle_test_channel(request: Request) -> Response:
+    """
+        ``POST /api/v1/notifications/channels/{channel_id}/test`` — send a test
+        message through the channel. A message that could not be delivered is
+        a 200 with ``"delivered": false`` and the reason, since the request
+        itself worked.
+
+        :param request: Incoming webworks request.
+        :returns: JSON ``{"delivered", "error_message", "latency_ms"}``, or a problem response.
+    """
+    channel_id = request.path_params.get("channel_id", "")
+    try:
+        payload = _decode_json_or_abort(request=request)
+        db_session = _require_session(request=request)
+        recipient = str(payload.get("recipient", "") or "").strip()
+        if len(recipient) == 0:
+            _abort_problem(request=request, status=400, detail="recipient is required (for email, an address to send the test to).")
+        principal = getattr(request, "auth_principal", None)
+        sent_by = str(getattr(principal, "user_id", "") or "an administrator")
+        try:
+            outcome = notification_service.send_test_message(
+                db_session=db_session, channel_id=channel_id, recipient=recipient, sent_by=sent_by,
+            )
+        except ChannelNotFoundError as xcpt:
+            _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"channel_id": channel_id})
+        body = {"delivered": bool(outcome.delivered), "error_message": outcome.error_message, "latency_ms": int(outcome.latency_ms)}
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -411,11 +542,20 @@ def register_channels_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + CHANNELS_PATH
 
-    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_channels, permission_key="system:ui.admin.view"))
-    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_channel, permission_key="system:ui.admin.view"))
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_channels, permission_key=READ_PERMISSION))
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_channel, permission_key=WRITE_PERMISSION))
     app.attach_route(
         base + "/{channel_id}", methods=["GET"]
-    )(require_rest_permission(handle_read_channel, permission_key="system:ui.admin.view"))
+    )(require_rest_permission(handle_read_channel, permission_key=READ_PERMISSION))
+    app.attach_route(
+        base + "/{channel_id}", methods=["PATCH"]
+    )(require_rest_permission(handle_update_channel, permission_key=WRITE_PERMISSION))
+    app.attach_route(
+        base + "/{channel_id}", methods=["DELETE"]
+    )(require_rest_permission(handle_delete_channel, permission_key=WRITE_PERMISSION))
+    app.attach_route(
+        base + "/{channel_id}/test", methods=["POST"]
+    )(require_rest_permission(handle_test_channel, permission_key=WRITE_PERMISSION))
 
     return
 
@@ -426,4 +566,7 @@ __all__ = [
     "handle_create_channel",
     "handle_list_channels",
     "handle_read_channel",
+    "handle_update_channel",
+    "handle_delete_channel",
+    "handle_test_channel",
 ]

@@ -1,0 +1,130 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Notifications - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Notifications</h1>
+    <p>Be told when a run fails or completes. A channel is where messages go; a rule says which event sends a message through which channel.</p>
+</div>
+
+{% call ui.preview_notice() %}Only run results are sent today: a run failing or completing. Reservations expiring, devices being quarantined, outbound webhooks and alert rules do not send messages yet.{% endcall %}
+
+<div class="card" data-role="channels">
+    <h2 class="card-header" id="channels-heading">Channels</h2>
+    {% if can_manage %}
+    <div class="toolbar toolbar--end">
+        <a href="{{ url_for('config.notification_channel_create') }}" class="btn btn-primary">{{ ui.icon("add") }} Add Channel</a>
+    </div>
+    {% endif %}
+    <div class="table-scroll" tabindex="0"><table class="data-table" aria-labelledby="channels-heading">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Used by</th>
+                <th scope="col">State</th>
+                <th scope="col">Last message</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in channels %}
+            <tr data-channel="{{ row.name }}">
+                <td><a href="{{ url_for('config.notification_channel_detail', channel_id=row.channel_id) }}" class="strong">{{ row.name }}</a>
+                    {% if row.unprotected %}<br><span class="badge badge-warning">Secret stored unprotected</span>{% endif %}</td>
+                <td>{{ row.kind_label }}</td>
+                <td>{{ row.scope_label }}</td>
+                <td>{{ ui.status_badge(row.state) }}</td>
+                <td>{% if row.last_outcome %}{{ ui.status_badge(row.last_outcome) }} <span class="muted">{{ row.last_when | format_datetime('%Y-%m-%d %H:%M') }}</span>{% else %}<span class="muted">Nothing sent yet</span>{% endif %}</td>
+                <td><a href="{{ url_for('config.notification_channel_detail', channel_id=row.channel_id) }}" class="btn btn-sm btn-secondary">Open</a></td>
+            </tr>
+            {% else %}
+            {{ ui.empty_state("No channels yet.", hint="Add an email server, a Slack or Teams webhook, PagerDuty or a webhook. Then add a rule to send a message through it.", action_url=url_for('config.notification_channel_create') if can_manage else None, action_label="Add Channel" if can_manage else None, colspan=6) }}
+            {% endfor %}
+        </tbody>
+    </table></div>
+</div>
+
+<div class="card" data-role="rules">
+    <h2 class="card-header" id="rules-heading">Rules</h2>
+    {% if can_manage and channels %}
+    <div class="toolbar toolbar--end">
+        <a href="{{ url_for('config.notification_rule_create') }}" class="btn btn-primary">{{ ui.icon("add") }} Add Rule</a>
+    </div>
+    {% endif %}
+    <div class="table-scroll" tabindex="0"><table class="data-table" aria-labelledby="rules-heading">
+        <thead>
+            <tr>
+                <th scope="col">When</th>
+                <th scope="col">Project</th>
+                <th scope="col">Send through</th>
+                <th scope="col">To</th>
+                <th scope="col">Limit</th>
+                <th scope="col">State</th>
+                {% if can_manage %}<th scope="col">Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for rule in rules %}
+            <tr data-rule="{{ rule.rule_id }}">
+                <td>{{ rule.event_label }}</td>
+                <td>{{ rule.project }}</td>
+                <td>{{ rule.channels | join(', ') }}</td>
+                <td>{{ rule.recipients | join(', ') }}</td>
+                <td>{% if rule.rate_limit %}{{ rule.rate_limit }} a minute{% else %}<span class="muted">No limit</span>{% endif %}</td>
+                <td>{{ ui.status_badge(rule.state) }}</td>
+                {% if can_manage %}
+                <td>
+                    <div class="row-actions">
+                        <form action="{{ url_for('config.notification_rule_state', rule_id=rule.rule_id) }}" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="disabled" value="{{ '0' if rule.state == 'disabled' else '1' }}">
+                            <button type="submit" class="btn btn-sm btn-secondary">{{ 'Turn On' if rule.state == 'disabled' else 'Turn Off' }}</button>
+                        </form>
+                        <form action="{{ url_for('config.notification_rule_delete', rule_id=rule.rule_id) }}" method="post" data-confirm="Delete this rule? Nothing more is sent for it.">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            {{ ui.confirm_button("Delete", class="btn btn-sm btn-danger") }}
+                        </form>
+                    </div>
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            {{ ui.empty_state("No rules yet, so nothing is sent.", hint="A rule says: when this happens, send a message through that channel to these people." if channels else "Add a channel first; a rule sends through a channel.", colspan=7 if can_manage else 6) }}
+            {% endfor %}
+        </tbody>
+    </table></div>
+</div>
+
+<div class="card" data-role="deliveries">
+    <h2 class="card-header" id="deliveries-heading">Recent messages</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table" aria-labelledby="deliveries-heading">
+        <thead>
+            <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Event</th>
+                <th scope="col">Channel</th>
+                <th scope="col">To</th>
+                <th scope="col">Result</th>
+                <th scope="col">Detail</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in deliveries %}
+            <tr>
+                <td>{{ row.when | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ row.event_label }}</td>
+                <td><a href="{{ url_for('config.notification_channel_detail', channel_id=row.channel_id) }}">{{ row.channel }}</a></td>
+                <td>{{ row.recipient }}</td>
+                <td>{{ ui.status_badge(row.outcome) }}</td>
+                <td>{{ row.detail if row.detail else '' }}</td>
+            </tr>
+            {% else %}
+            {{ ui.empty_state("Nothing has been sent yet.", hint="Messages appear here as runs fail or complete, and when you send a test message from a channel.", colspan=6) }}
+            {% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% endblock %}

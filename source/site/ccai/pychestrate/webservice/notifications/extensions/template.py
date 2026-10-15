@@ -50,6 +50,9 @@ class NotificationTemplateExtension(ResourceExtension):
     #: routes another topic to it is skipped (a "run failed" message about a completed run is wrong).
     event_topics: ClassVar[Tuple[str, ...]] = ()
 
+    #: True for a template that is only the "send a test message" button's text: a routing rule may not use it.
+    is_test_message: ClassVar[bool] = False
+
     is_published: ClassVar[bool] = True
     published_docs_url: ClassVar[str] = (
         "/docs/extensions/resources/NotificationTemplateExtension.html"

@@ -263,6 +263,15 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:webhooks.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # Notification channels and routing rules (audit ORG-F08).
+        PermissionGrant(
+            permission_key="system:notifications.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:notifications.write",
+            effect=PermissionEffect.ALLOW,
+        ),
         # 8-embeddable-views / 8-plugin-api PR p21b: embed catalog +
         # signed-URL issuance, and the plugin-api meta surface.
         PermissionGrant(

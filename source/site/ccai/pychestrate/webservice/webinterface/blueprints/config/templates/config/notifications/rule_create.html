@@ -1,0 +1,75 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Add Notification Rule - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+{{ ui.breadcrumb([("Notifications", url_for('config.notifications_overview')), ("Add Rule", None)]) }}
+
+<div class="page-header">
+    <h1>Add Rule</h1>
+    <p>Send a message through a channel when something happens</p>
+</div>
+
+{% if not channels %}
+{{ ui.empty_state("There is no channel to send through yet.", hint="Add a channel first, then come back to add a rule.", action_url=url_for('config.notification_channel_create'), action_label="Add Channel") }}
+{% else %}
+<div class="card narrow">
+    <form method="post" data-role="rule-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {{ ui.error_summary(errors, error_labels) }}
+
+        <div class="form-group" id="events" role="group" aria-labelledby="events-label" aria-describedby="events-help">
+            <p class="strong" id="events-label">When *</p>
+            {% for event in events %}
+            <label for="event-{{ loop.index }}"><input type="checkbox" id="event-{{ loop.index }}" name="events" value="{{ event.topic }}"
+                   {% if form_data %}{% if event.topic in form_data.getlist('events') %}checked{% endif %}{% elif loop.first %}checked{% endif %}> {{ event.label }}</label>
+            {% endfor %}
+            <div class="form-text" id="events-help">Each event you tick gets a rule with the message text that fits it.</div>
+            {{ ui.field_error(errors, 'events') }}
+        </div>
+
+        <div class="form-group">
+            <label for="project_id">For</label>
+            <select id="project_id" name="project_id" class="form-control"{{ ui.invalid_attrs(errors, 'project_id') }}>
+                <option value="">Every project</option>
+                {% for project in projects %}
+                <option value="{{ project.project_id }}" {% if form_data and form_data.project_id == project.project_id %}selected{% endif %}>{{ project.name }}</option>
+                {% endfor %}
+            </select>
+            {{ ui.field_error(errors, 'project_id') }}
+        </div>
+
+        <div class="form-group" id="channel_ids" role="group" aria-labelledby="channels-label">
+            <p class="strong" id="channels-label">Send through *</p>
+            {% for channel in channels %}
+            <label for="channel-{{ loop.index }}"><input type="checkbox" id="channel-{{ loop.index }}" name="channel_ids" value="{{ channel.channel_id }}"
+                   {% if form_data %}{% if channel.channel_id in form_data.getlist('channel_ids') %}checked{% endif %}{% elif channels | length == 1 %}checked{% endif %}>
+                {{ channel.name }} <span class="muted">({{ channel.kind_label }}{% if channel.disabled %}, off{% endif %})</span></label>
+            {% endfor %}
+            {{ ui.field_error(errors, 'channel_ids') }}
+        </div>
+
+        <div class="form-group">
+            <label for="recipients">To *</label>
+            <textarea id="recipients" name="recipients" class="form-control" rows="3" required{{ ui.invalid_attrs(errors, 'recipients', 'recipients-help') }}>{{ form_data.recipients if form_data else '' }}</textarea>
+            <div class="form-text" id="recipients-help">One per line. For email, addresses. For Slack, a channel such as #builds. For Teams, PagerDuty and webhooks, any label.</div>
+            {{ ui.field_error(errors, 'recipients') }}
+        </div>
+
+        <div class="form-group">
+            <label for="rate_limit_per_minute">Limit</label>
+            <input type="number" id="rate_limit_per_minute" name="rate_limit_per_minute" class="form-control" min="1" max="10000" placeholder="No limit"
+                   value="{{ form_data.rate_limit_per_minute if form_data else '' }}"{{ ui.invalid_attrs(errors, 'rate_limit_per_minute', 'rate_limit_per_minute-help') }}>
+            <div class="form-text" id="rate_limit_per_minute-help">The most messages this rule sends in a minute, so a broken pipeline cannot flood a channel. Empty means no limit.</div>
+            {{ ui.field_error(errors, 'rate_limit_per_minute') }}
+        </div>
+
+        <div class="actions-row">
+            <button type="submit" class="btn btn-primary">Add Rule</button>
+            <a href="{{ url_for('config.notifications_overview') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

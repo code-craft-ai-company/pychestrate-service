@@ -55,7 +55,7 @@ ADMIN_ONLY = {
     "system:secrets.read", "system:secrets.write", "system:audit.read", "system:flags.admin", "system:directory.sync", "system:auth.admin",
     "system:auth.read", "system:ui.admin.view", "system:ui.profile.manage", "system:backups.write", "system:projects.write",
     "system:projects.members.manage", "system:rpa.job_types.manage", "system:plugin_api.read", "system:source_integrations.write",
-    "system:metrics.write", "system:embed.read", "system:embed.sign",
+    "system:metrics.write", "system:embed.read", "system:embed.sign", "system:notifications.read", "system:notifications.write",
 }
 
 

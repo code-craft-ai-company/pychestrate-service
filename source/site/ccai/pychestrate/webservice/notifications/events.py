@@ -19,3 +19,11 @@ class NotificationEventTopics:
 
     NOTIFICATION_DISPATCHED: str = "entity.notification.dispatched"
     NOTIFICATION_FAILED: str = "entity.notification.failed"
+
+    #: Changes an administrator makes, recorded in the audit log (see ``audit.extensions.notification_events``).
+    CHANNEL_CREATED: str = "entity.notification.channel_created"
+    CHANNEL_UPDATED: str = "entity.notification.channel_updated"
+    CHANNEL_DELETED: str = "entity.notification.channel_deleted"
+    RULE_CREATED: str = "entity.notification.rule_created"
+    RULE_UPDATED: str = "entity.notification.rule_updated"
+    RULE_DELETED: str = "entity.notification.rule_deleted"

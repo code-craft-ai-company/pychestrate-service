@@ -190,7 +190,7 @@ def route_event(
             continue
         try:
             template = notification_service._resolve_template(template_name=route.template_name)
-            if len(template.event_topics) > 0 and topic not in template.event_topics:
+            if template.is_test_message is True or (len(template.event_topics) > 0 and topic not in template.event_topics):
                 outcomes.append(RouteOutcome(route=route, delivered=False, skipped_reason="template_not_for_event"))
                 continue
             channel = notification_service.read_channel(db_session=db_session, channel_id=route.channel_id)

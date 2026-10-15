@@ -24,11 +24,18 @@
       `user_notification_preferences`,
       `dispatch_envelopes`, `dispatch_attempts`, `dead_letters`.
 - [ ] T1.2 — Implement `entities.py` dataclasses + enums.
-- [ ] T1.3 — Declare `NotificationChannelProtocol` in `factories.py`.
-- [ ] T1.4 — Ship `SmtpEmailChannel` reference impl.
-- [ ] T1.5 — Implement `service.register_channel` and the channel
+- [x] T1.3 — Declare `NotificationChannelProtocol` in `factories.py`.
+      *Done in `factories/channel.py`; since 2026-10-15 a kind also declares its
+      settings (`config_fields`, which are secret) and its labels.*
+- [x] T1.4 — Ship `SmtpEmailChannel` reference impl.
+- [x] T1.5 — Implement `service.register_channel` and the channel
       CRUD REST endpoints.
-- [ ] T1.6 — Implement a hard-coded in-tree `RunFailedTemplate` as
+      *Done as `service.create_channel`, `update_channel` (switch, settings,
+      secrets), `delete_channel` and `send_test_message`, with
+      `POST|GET|PATCH|DELETE /api/v1/notifications/channels` and `POST .../test`,
+      and the Admin, Notifications page (2026-10-15, audit ORG-F08). Not done:
+      project-scoped channels in the page (the API takes `scope_level`).*
+- [x] T1.6 — Implement a hard-coded in-tree `RunFailedTemplate` as
       the first `NotificationTemplateExtension`.
 - [x] T1.7 — Implement `subscriber.py` wildcard bus subscription and
       wire it to `router.compute_routes` → `dispatcher.dispatch`.
@@ -43,7 +50,7 @@
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Ship `SlackWebhookChannel`, `MsTeamsWebhookChannel`,
+- [x] T2.1 — Ship `SlackWebhookChannel`, `MsTeamsWebhookChannel`,
       `PagerDutyEventsV2Channel`, `GenericWebhookChannel` reference
       impls.
 - [ ] T2.2 — Implement `service.create_routing_rule` and routing rule
@@ -75,9 +82,11 @@
 - [ ] T3.1 — Implement `rate_limiter.py` per-recipient sliding window
       and digest buffer with 60 s flush.
 - [ ] T3.2 — Implement `digest.py` rendering.
-- [ ] T3.3 — Resolve channel config secret refs via
-      `2-global-variables` `secret_ref_dereferencer` at send time;
-      ensure plaintext never leaves the dispatcher.
+- [x] T3.3 — Resolve channel config secret refs at send time; ensure
+      plaintext never leaves the dispatcher.
+      *Changed 2026-10-15: through the secrets vault directly
+      (`read_secret_for_service`), not the variables module's stub
+      `secret_ref_dereferencer`. See design.md, Security Considerations.*
 - [ ] T3.4 — Subscribe to `entity.project.deleted` and
       `entity.user.deleted` to scrub rules, channels, and prefs.
 - [ ] T3.5 — Emit all metrics, logs, and trace spans listed in
