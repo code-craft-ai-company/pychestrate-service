@@ -643,6 +643,19 @@ def handle_role_edit(request: Request) -> Response:
         submitted: Optional[Dict[str, Any]] = None
         status_code = 200
 
+        if role.is_system is True and method == "GET":
+            # A form that is refused when saved is a trap: say so here, and point at the way to get a version that can be changed.
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_detail", role_id=role_id),
+                message=(
+                    "Built-in roles cannot be changed: their permissions are defined by the system. "
+                    "Choose Copy Role to make a version you can change."
+                ),
+                category=flash.CATEGORY_WARNING,
+            )
+            return response
+
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
             multi_form = _parse_form_multi(request=request)

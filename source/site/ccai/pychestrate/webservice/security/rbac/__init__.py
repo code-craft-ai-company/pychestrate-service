@@ -34,6 +34,7 @@ from ccai.pychestrate.webservice.security.rbac.extensions.project_roles import (
     ProjectViewerRole,
 )
 from ccai.pychestrate.webservice.security.rbac.extensions.role_extension import RoleExtension
+from ccai.pychestrate.webservice.security.rbac.extensions.workflow_roles import WORKFLOW_ROLES
 
 
 def register_builtin_extensions() -> None:
@@ -48,6 +49,8 @@ def register_builtin_extensions() -> None:
     register_resource_extension(base_class=PermissionExtension, extension=ProjectPermissionExtension)
     register_resource_extension(base_class=RoleExtension, extension=SystemAdminRole)
     register_resource_extension(base_class=RoleExtension, extension=AuditorRole)
+    for workflow_role in WORKFLOW_ROLES:
+        register_resource_extension(base_class=RoleExtension, extension=workflow_role)
     register_resource_extension(base_class=RoleExtension, extension=ProjectOwnerRole)
     register_resource_extension(base_class=RoleExtension, extension=ProjectEditorRole)
     register_resource_extension(base_class=RoleExtension, extension=ProjectViewerRole)

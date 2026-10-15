@@ -267,6 +267,15 @@ preview tag.
 
 ### Added
 
+- Six built-in roles for the common workflows (ADM-06): **read-only**, **tester**, **developer**, **release-manager**, **lab-manager** and **platform-operator**.
+  Building a role meant choosing from 73 keys, so the first job on a new installation was working out what a tester or a developer needs. Each role is
+  *read-only plus what the role does* (a developer can do everything a tester can), none holds an administrative key (users, roles, secret values, sign-in,
+  audit, the Admin menu, restoring backups, feature flags, creating projects), and every menu entry a role shows is complete (a test checks no entry is
+  half-shown). They are built in, so they follow the product and cannot be edited in place; an administrator with `system:rbac.admin` copies one (Roles, Copy
+  Role) to make a version they own, and a custom role with the same name is never replaced. The roles are in `security/rbac/extensions/workflow_roles.py`. Also
+  fixed with them: built-in roles were stored with a blank description (the Roles page showed none), now the catalog's is shown and kept in step; and opening a
+  built-in role's edit address showed a form that was refused when saved, it now goes to the role's page and points at Copy Role.
+
 - Dashboards can be deleted (ORC-26). A dashboard could be created, renamed and re-tiled but never removed, although the service already deleted one on request.
   `DELETE /api/v1/projects/{id}/dashboards/{dashboard_id}` (`dashboards_delete`, `204`) removes the dashboard and its tiles (`404` for an unknown dashboard or
   another project's; `403` without `system:dashboards.write`; the existing `entity.dashboard.deleted` is published). The Dashboards page has a **Delete** button

@@ -1955,25 +1955,27 @@ def ensure_catalog_roles_persisted(*, db_session: Any) -> None:
     from ccai.pychestrate.webservice.security.rbac.catalog import (
         load_catalog_from_registry,
     )
-    from ccai.pychestrate.webservice.security.rbac.models import RbacRole
+    from ccai.pychestrate.webservice.security.rbac.models import RbacRole, RoleSource
     from ccai.pychestrate.webservice.security.rbac.seeding import (
         ensure_role_persisted,
     )
 
     catalog = load_catalog_from_registry()
-    existing_names = set()
-    rows = db_session.query(RbacRole.role_name).all()
-    for row in rows:
-        existing_names.add(row[0])
+    existing = {row.role_name: row for row in db_session.query(RbacRole).all()}
 
-    created_any = False
+    changed = False
     for role_name in catalog.roles:
-        if role_name in existing_names:
-            continue
-        ensure_role_persisted(db_session=db_session, role_name=role_name)
-        created_any = True
+        description = catalog.role_descriptions.get(role_name, "")
+        row = existing.get(role_name)
+        if row is None:
+            ensure_role_persisted(db_session=db_session, role_name=role_name, description=description)
+            changed = True
+        elif row.source != RoleSource.CUSTOM and row.description != description:
+            # The catalog says what a built-in role is for; a custom role of the same name is someone's own and is never touched.
+            row.description = description
+            changed = True
 
-    if created_any is True:
+    if changed is True:
         db_session.commit()
     return
 

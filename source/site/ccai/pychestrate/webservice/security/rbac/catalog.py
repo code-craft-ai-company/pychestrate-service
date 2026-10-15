@@ -36,9 +36,11 @@ class CatalogSnapshot:
 
         :param permissions: Mapping of permission_key to descriptor.
         :param roles: Mapping of role_name to tuple of grants.
+        :param role_descriptions: Mapping of role_name to its description, so the Roles page can say what a built-in role is for.
     """
     permissions: Dict[str, PermissionDescriptor] = field(default_factory=dict)
     roles: Dict[str, Tuple[PermissionGrant, ...]] = field(default_factory=dict)
+    role_descriptions: Dict[str, str] = field(default_factory=dict)
 
 
 def load_catalog_from_registry() -> CatalogSnapshot:
@@ -72,8 +74,10 @@ def load_catalog_from_registry() -> CatalogSnapshot:
         raise PermissionKeyCollisionError(err_msg) from None
 
     roles: Dict[str, Tuple[PermissionGrant, ...]] = {}
+    role_descriptions: Dict[str, str] = {}
     for role_pack in role_packs:
         roles[role_pack.role_name] = role_pack.permissions
+        role_descriptions[role_pack.role_name] = str(role_pack.description or "")
 
-    rtnval = CatalogSnapshot(permissions=permissions, roles=roles)
+    rtnval = CatalogSnapshot(permissions=permissions, roles=roles, role_descriptions=role_descriptions)
     return rtnval

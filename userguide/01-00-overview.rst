@@ -125,7 +125,30 @@ Users, roles, and permissions
     ``system:users.read``), granted through system roles such as
     ``system-admin`` and ``auditor``. Project roles decide what members
     may do inside a project. Security-relevant changes are recorded in
-    the audit log. On the role forms (**Admin**, **Roles**) the permissions
+    the audit log. Six roles come ready for the common ways of working:
+    **read-only** (see everything that is safe to see, change nothing),
+    **tester** (run tests, keep the test catalog, cancel runs), **developer**
+    (what a tester does, plus start builds and pipelines, edit pipelines,
+    dashboards, alerts and SLOs, run RPA jobs and keep the secrets of the
+    projects they belong to), **release-manager** (start builds and pipelines,
+    publish releases to channels, keep release templates), **lab-manager**
+    (register and change lab devices, manage pools, reservations and
+    allocations) and **platform-operator** (manage environments, provisioning,
+    drift checks and guards, pods and clients, and the dashboards, alerts and
+    webhooks that watch them). Each is *read-only plus what the role does*, so
+    a developer can do everything a tester can. None holds an administrative
+    permission: users, roles, secret values, sign-in settings, the audit log,
+    the Admin menu and restoring backups stay with **system-admin**. A role
+    says which features a person may use; which projects they may use them in
+    is still decided by project membership. These six are built in: they
+    follow the product as it grows and cannot be edited in place. An
+    administrator who holds ``system:rbac.admin`` (the **system-admin** role
+    has it) manages roles from **Admin**, **Roles**: create a custom role, edit
+    or delete a custom role, or **Copy Role** on a built-in one to get a
+    version they can change. Giving a role to a person is done from the
+    person's page and needs ``system:users.write``. A custom role with the
+    same name as a built-in one is never replaced.
+    On the role forms (**Admin**, **Roles**) the permissions
     are grouped by product area (*Builds*, *Resource pools*, ...) with a
     filter box; under each area, *View*, *Start*, *Change* and *Administer*
     are the keys ending ``.read``, ``.create``, ``.write`` and ``.admin``, and
