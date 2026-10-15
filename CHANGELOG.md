@@ -29,6 +29,11 @@ preview tag.
 
 ### Fixed
 
+- **A failed pipeline run says which stage and step failed and why, and the run list keeps itself current (ORC-13).** Seen on real runs in the lab: a failed run's line said "Failed · 1 of 2 stages completed ·
+  stage_failure", the service's internal token, while the step's own reason ("dispatch failed: No candidate pod satisfies ...") sat behind the run's arrow; and right after Run the list showed "Running · 0 of 2
+  stages completed" and stayed so until the page was reloaded. The line now reads `Stage "test", step "check" failed: <first line of the step's reason>` (cut at 200 characters; a reason that is already a
+  sentence is shown as it is), and while any listed run is going the page refetches the list every 5 seconds (at most ten minutes), redraws only when something changed, keeps a run the person opened open, and
+  stops when every run is final or the page is left.
 - **A pipeline's second stage can now run (ORC-13).** Found by running a real two-stage pipeline (a makefile build, then a test) on a real pod in the lab: the build stage completed and the test stage failed with
   "dispatch failed: Path component canonicalizes to empty", so no pipeline with a second stage could complete. The first stage is dispatched from the request, which knows the project's slug; the later ones are
   dispatched from the handler that sees a stage's job finish, which passed an empty slug (the results location of a job is named after it) and no user. It now reads the project's slug and the user who started the

@@ -73,7 +73,12 @@ builds and tests, are under **Orchestration**, **Pipelines**. To start a saved
 pipeline, open it and choose **Run**: the dialog says how many stages will start
 and from which commit (the one it was saved from), and the page then says the run
 started, or why it did not (for example that no enrolled pod in the project
-matches), and lists it under **Runs**. Scripts do the same with ``POST
+matches), and lists it under **Runs**. While a run is going that list refreshes
+itself every few seconds; a failed run's line names the stage and step that
+failed and why (the step's own first line, for example "Stage "test", step
+"check" failed: dispatch failed: No candidate pod satisfies the catalog entry's
+required capabilities."), and a run opened with its arrow shows every stage and
+step, each with a link to its own run. Scripts do the same with ``POST
 /api/v1/projects/{id}/pipeline-runs`` and ``{"pipeline_id": "<id>"}``.
 
 

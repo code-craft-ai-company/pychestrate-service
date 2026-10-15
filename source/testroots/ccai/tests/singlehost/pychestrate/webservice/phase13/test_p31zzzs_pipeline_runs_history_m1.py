@@ -159,6 +159,85 @@ def test_a_run_expands_to_its_stages_and_steps_and_links_each_steps_own_run(brow
     return
 
 
+def test_a_failed_run_with_only_the_services_token_names_the_stage_and_step_that_failed(browser: Browser):
+    """
+    **Feature: pipeline run history (ORC-13)**
+    **Property: the service records only "stage_failure" on a failed run (seen on a real pod); the run's line then
+    names the stage and step that failed and the first line of the step's own reason, cut at 200 characters
+    ("Stage “test”, step “check” failed: dispatch failed: No candidate pod satisfies ..."); a failed stage with no failed
+    step says which stage; a run with no stage to name shows the token as words ("Stage failure"); a reason that is already a sentence is shown as it is.**
+    """
+    reason = "dispatch failed: No candidate pod satisfies the catalog entry's required capabilities.\nENTRY_ID: f97a5bbf\nREQUIRED: ['lab-browser']"
+
+    def _failed_run(run_id: str, *, step_reason: Any, stage_reason: Any, with_step: bool, token: str, started: str) -> Dict[str, Any]:
+        run = _run(run_id, PIPELINE_ID, "failed", started, reason=token)
+        stage = run["stages"][1]
+        stage["stage_id"], stage["final_state_reason"] = "test", stage_reason
+        stage["steps"][0].update({"step_id": "check", "state": "failed" if with_step else "pending", "final_state_reason": step_reason})
+        return run
+
+    long_reason = "x" * 300
+    runs = {"items": [
+        _failed_run("run-1", step_reason=reason, stage_reason=None, with_step=True, token="stage_failure", started="2026-09-29T14:00:00+00:00"),
+        _failed_run("run-2", step_reason=None, stage_reason=None, with_step=False, token="stage_failure", started="2026-09-29T13:00:00+00:00"),
+        _failed_run("run-3", step_reason=long_reason, stage_reason=None, with_step=True, token="stage_failure", started="2026-09-29T12:00:00+00:00"),
+        _failed_run("run-4", step_reason="ignored", stage_reason=None, with_step=True, token="Stage 'test' failed: no pod", started="2026-09-29T11:00:00+00:00"),
+    ], "meta": {"page": 1, "per_page": 100, "total": 4}}
+    runs["items"][1]["stages"][1]["state"] = "pending"
+    runs["items"][1]["stages"][0]["state"] = "completed"
+    page = _open(browser, runs=runs)
+    try:
+        lines = [page.locator('[data-role="run-row"]').nth(index).locator('[data-role="run-reason"]').inner_text() for index in range(4)]
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        lines,
+        [
+            "Stage \u201Ctest\u201D, step \u201Ccheck\u201D failed: dispatch failed: No candidate pod satisfies the catalog entry's required capabilities.",
+            "Stage failure",
+            "Stage \u201Ctest\u201D, step \u201Ccheck\u201D failed: " + "x" * 199 + "\u2026",
+            "Stage 'test' failed: no pod",
+        ],
+    )
+    return
+
+
+def test_the_runs_refresh_while_one_is_going_keep_an_opened_run_open_and_stop_when_all_are_final(browser: Browser):
+    """
+    **Feature: pipeline run history (ORC-13)**
+    **Property: right after Run the page listed the new run as "Running" and never changed; while a run is going the
+    list is now fetched again every 5 seconds, the run turns "Completed" without a reload, a run the person opened is
+    still open after the refresh, and once every run is final the page stops asking.**
+    """
+    calls = []
+
+    def answer(query: Any) -> Dict[str, Any]:
+        calls.append(1)
+        state = "running" if len(calls) < 2 else "completed"
+        return {"items": [_run("run-1", PIPELINE_ID, state, "2026-09-29T10:00:00+00:00")], "meta": {"page": 1, "per_page": 100, "total": 1}}
+
+    page = _open(browser, runs=answer)
+    try:
+        first_state = page.locator('[data-role="run-row"]').first.get_attribute("data-state")
+        page.locator('[data-role="run-row"] summary').first.click()
+        page.wait_for_timeout(6500)
+        row = page.locator('[data-role="run-row"]').first
+        second_state = row.get_attribute("data-state")
+        still_open = row.locator("details").evaluate("(el) => el.open")
+        asked_when_final = len(calls)
+        page.wait_for_timeout(6000)
+        asked_later = len(calls)
+    finally:
+        page.context.close()
+
+    testbase.assert_equal(
+        (first_state, second_state, still_open, asked_when_final, asked_later),
+        ("running", "completed", True, 2, 2),
+    )
+    return
+
+
 def test_a_pipeline_never_run_a_refusal_and_a_failed_request_each_say_so(browser: Browser):
     """
     **Feature: pipeline run history (ORC-13)**

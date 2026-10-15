@@ -16,6 +16,10 @@ const COLUMN_GAP = 80;
 const ROW_GAP = 24;
 const CANVAS_PADDING = 20;
 const PROJECTS_API_PATH = "/api/v1/projects";
+// While a run is still going the list refreshes itself, quietly, every few seconds, for at most ten minutes (the page can be left open).
+const RUNS_POLL_MS = 5000;
+const RUNS_POLL_MAX = 120;
+const RUN_FINAL_STATES = ["completed", "succeeded", "failed", "cancelled", "canceled"];
 function pipeline_delete_message_for_status(status, name) {
   if (status === 204 || status === 200) {
     const rtnval2 = "Pipeline \u201C" + name + "\u201D deleted.";
@@ -65,6 +69,25 @@ function stage_progress_text(run) {
   }
   const done = stages.filter((stage) => stage.state === "completed" || stage.state === "succeeded").length;
   return String(done) + " of " + String(stages.length) + (stages.length === 1 ? " stage" : " stages") + " completed";
+}
+// What a failed run says on its line: the stage and step that failed and why, in the step's own words (first line, cut at 200
+// characters). The service records only a token ("stage_failure") on the run itself; the reason is on the step.
+function failure_summary(run) {
+  const failed = (item) => String(item.state).toLowerCase() === "failed";
+  const stages = Array.isArray(run.stages) ? run.stages.slice().sort((left, right) => left.stage_index - right.stage_index) : [];
+  const stage = stages.find(failed);
+  if (stage === void 0) {
+    return "";
+  }
+  const steps = Array.isArray(stage.steps) ? stage.steps.slice().sort((left, right) => left.step_index - right.step_index) : [];
+  const step = steps.find(failed);
+  const where = "Stage \u201C" + String(stage.stage_id) + "\u201D" + (step !== void 0 ? ", step \u201C" + String(step.step_id) + "\u201D" : "") + " failed";
+  const raw = step !== void 0 && typeof step.final_state_reason === "string" && step.final_state_reason.trim().length > 0 ? step.final_state_reason : typeof stage.final_state_reason === "string" ? stage.final_state_reason : "";
+  let why = raw.trim().split("\n")[0].trim();
+  if (why.length > 200) {
+    why = why.slice(0, 199) + "\u2026";
+  }
+  return why.length > 0 ? where + ": " + why : where + ".";
 }
 // Newest first; a run that has not started yet sorts as newest.
 function sort_runs_newest_first(runs) {
@@ -282,6 +305,9 @@ class PycPipelineDetail extends HTMLElement {
   _run_pending;
   _run_notice;
   _runs;
+  _runs_timer;
+  _runs_polls;
+  _open_runs;
   constructor() {
     super();
     this._pipeline_id = "";
@@ -300,6 +326,16 @@ class PycPipelineDetail extends HTMLElement {
     this._run_pending = false;
     this._run_notice = null;
     this._runs = { status: "idle", items: [], error_status: 0 };
+    this._runs_timer = null;
+    this._runs_polls = 0;
+    this._open_runs = new Set();
+  }
+  disconnectedCallback() {
+    if (this._runs_timer !== null) {
+      clearTimeout(this._runs_timer);
+      this._runs_timer = null;
+    }
+    return;
   }
   /**
    * Observed attributes -- ``pipeline-id`` and ``project-id`` may
@@ -404,9 +440,17 @@ class PycPipelineDetail extends HTMLElement {
   }
   // The project's pipeline runs, kept to this pipeline's. A person without
   // access to runs still sees the pipeline, with a note.
-  async _load_runs() {
-    this._runs = { status: "loading", items: [], error_status: 0 };
-    this._render_body();
+  async _load_runs(quiet = false) {
+    if (this._runs_timer !== null) {
+      clearTimeout(this._runs_timer);
+      this._runs_timer = null;
+    }
+    if (quiet === false) {
+      this._runs_polls = 0;
+      this._runs = { status: "loading", items: [], error_status: 0 };
+      this._render_body();
+    }
+    const before = JSON.stringify(this._runs);
     try {
       const response = await fetch(pipeline_runs_url(this._project_id), {
         method: "GET",
@@ -417,7 +461,7 @@ class PycPipelineDetail extends HTMLElement {
         const body = await response.json();
         const items = body !== null && Array.isArray(body.items) ? body.items : [];
         this._runs = { status: "ok", items: sort_runs_newest_first(items.filter((run) => run.pipeline_id === this._pipeline_id)), error_status: 0 };
-      } else {
+      } else if (quiet === false) {
         this._runs = { status: "error", items: [], error_status: response.status };
         if (response.status === 401) {
           announce_session_expired();
@@ -428,9 +472,27 @@ class PycPipelineDetail extends HTMLElement {
         "pychestrate.ui.pipelines.runs_fetch_failed",
         { reason: String(reason) }
       );
-      this._runs = { status: "error", items: [], error_status: 0 };
+      if (quiet === false) {
+        this._runs = { status: "error", items: [], error_status: 0 };
+      }
     }
-    this._render_body();
+    // A quiet refresh that found nothing new leaves the page alone, so a run the person opened stays as it is.
+    if (quiet === false || JSON.stringify(this._runs) !== before) {
+      this._render_body();
+    }
+    this._schedule_runs_poll();
+    return;
+  }
+  _schedule_runs_poll() {
+    const going = this._runs.status === "ok" && this._runs.items.some((run) => RUN_FINAL_STATES.indexOf(String(run.state).toLowerCase()) < 0);
+    if (going === false || this._runs_polls >= RUNS_POLL_MAX || this.isConnected === false) {
+      return;
+    }
+    this._runs_polls = this._runs_polls + 1;
+    this._runs_timer = setTimeout(() => {
+      this._runs_timer = null;
+      void this._load_runs(true);
+    }, RUNS_POLL_MS);
     return;
   }
   /**
@@ -1035,6 +1097,15 @@ class PycPipelineDetail extends HTMLElement {
     item.setAttribute("data-role", "run-row");
     item.setAttribute("data-state", String(run.state));
     const details = document.createElement("details");
+    // A run the person opened stays open when the list refreshes.
+    details.open = this._open_runs.has(String(run.run_id));
+    details.addEventListener("toggle", () => {
+      if (details.open === true) {
+        this._open_runs.add(String(run.run_id));
+      } else {
+        this._open_runs.delete(String(run.run_id));
+      }
+    });
     const summary = document.createElement("summary");
     summary.classList.add("pyc-pipeline-detail__run-summary");
     const chip = document.createElement("span");
@@ -1056,11 +1127,17 @@ class PycPipelineDetail extends HTMLElement {
       summary.appendChild(meta);
     }
     // Why a run did not finish is what a person came for: it stays on the line, not behind the disclosure.
-    if (typeof run.final_state_reason === "string" && run.final_state_reason.length > 0) {
+    let line_reason = typeof run.final_state_reason === "string" ? run.final_state_reason : "";
+    if (/^[a-z0-9_]+$/.test(line_reason) === true) {
+      // A machine token ("stage_failure") says nothing a person can act on: name the stage and step that failed and why.
+      const failure = failure_summary(run);
+      line_reason = failure.length > 0 ? failure : words(line_reason);
+    }
+    if (line_reason.length > 0) {
       const reason = document.createElement("span");
       reason.classList.add("pyc-pipeline-detail__run-reason", "pyc-pipeline-detail__run-reason--line");
       reason.setAttribute("data-role", "run-reason");
-      reason.textContent = run.final_state_reason;
+      reason.textContent = line_reason;
       summary.appendChild(reason);
     }
     details.appendChild(summary);
