@@ -2595,6 +2595,15 @@ paths:
   /clients/{client_id}/heartbeat:
     parameters:
       - $ref: '#/components/parameters/ClientIdParam'
+      - in: header
+        name: X-Pychestrate-Client-Version
+        required: false
+        description: >-
+          The version of the pod client (letters, digits and `. _ + -`, at most 64
+          characters). When present and plausible it is recorded as the client's
+          `last_agent_version`, which the Clients page shows as the runtime version;
+          anything else is ignored.
+        schema: { type: string, maxLength: 64, example: 0.3.1 }
     get:
       tags: [clients]
       summary: Pod-client liveness ping.

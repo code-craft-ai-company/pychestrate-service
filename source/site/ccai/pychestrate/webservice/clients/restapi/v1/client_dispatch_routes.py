@@ -76,6 +76,7 @@ __version__ = "1.0.0"
 
 import json
 import logging
+import re
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -564,10 +565,36 @@ def _collect_pending_cancellations(
     return rtnval
 
 
+#: The header a pod sends on every call to say which version of the client it runs (the Clients page shows it as the runtime version).
+CLIENT_VERSION_HEADER: str = "X-Pychestrate-Client-Version"
+
+_CLIENT_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$")
+
+
+def _reported_agent_version(request: Request) -> Optional[str]:
+    """
+        The client version the pod reported in :data:`CLIENT_VERSION_HEADER`, when it is a plausible version string (letters, digits and
+        ``. _ + -``, at most 64 characters); None when it sent none or sent something else, so nothing it sends is stored as is.
+
+        :param request: Incoming webworks request.
+
+        :returns: The version, or None.
+    """
+    headers = getattr(request, "headers", None)
+    raw = headers.get(CLIENT_VERSION_HEADER, None) if headers is not None else None
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    rtnval = text if _CLIENT_VERSION_PATTERN.match(text) is not None else None
+    return rtnval
+
+
 def handle_client_heartbeat(request: Request) -> Response:
     """
         ``GET /api/v1/clients/{client_id}/heartbeat`` -- liveness
-        ping plus cancel delivery. Updates ``last_seen`` on the
+        ping plus cancel delivery. Records the client version from the
+        ``X-Pychestrate-Client-Version`` header, when the pod sent a plausible one,
+        so the Clients page can show it. Updates ``last_seen`` on the
         client row via
         :func:`clients.registry.service.record_heartbeat`, then
         drains any cancel requests queued for the calling client.
@@ -605,7 +632,7 @@ def handle_client_heartbeat(request: Request) -> Response:
                     db_session=db_session,
                     client_id=client_id,
                     received_at=now,
-                    agent_version=None,
+                    agent_version=_reported_agent_version(request),
                     transport_name=LONG_POLL_TRANSPORT_NAME,
                 )
             except ClientNotFoundError as xcpt:

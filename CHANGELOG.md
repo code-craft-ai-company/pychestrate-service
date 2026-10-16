@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **The Clients page shows a client's runtime version (E2E-18).** The column read "—" for every live client: the heartbeat recorded no version (it passed None) and nothing else did after enrolment. The pod client
+  (`pychestrate-client` d4fc230) now sends `X-Pychestrate-Client-Version` on every call, and the heartbeat records it as the client's `last_agent_version` when it is a plausible version string (letters, digits and
+  `. _ + -`, at most 64 characters; anything else is ignored, so nothing a pod sends is stored as is). The header is in the OpenAPI heartbeat operation. Verified on the lab pod: the API returns
+  `last_agent_version: 0.0.1` and the client's page reads "Runtime version 0.0.1". A client older than this change shows a dash until it is upgraded.
 - **Draining a pod now stops new work reaching it (pod lifecycle).** Tried on the lab pod: Drain moved it to "draining" and changed nothing else, because no dispatch path looked at the pod's state, so the
   next test run was sent to the draining pod. A pod that is draining, released or failed is now offered to no dispatch path (test runs, builds, provisioning runs, pipeline stages, RPA jobs); a pod whose client is lost
   is still targeted (the dispatcher waits for it to reconnect), and so is one with no recorded state. When no pod can take a job and some are draining, the 409 says so ("... enroll a client/pod first. Pods that are
