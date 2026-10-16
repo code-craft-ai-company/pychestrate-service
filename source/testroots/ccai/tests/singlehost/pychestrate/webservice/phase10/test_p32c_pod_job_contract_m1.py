@@ -39,6 +39,9 @@ from ccai.pychestrate.webservice.jobs.envelope import canonical as envelope_cano
 from ccai.pychestrate.webservice.jobs.envelope.schema import JobSourceRef
 from ccai.pychestrate.webservice.orchestration.build.service import BuildRunInputs, build_params_for
 from ccai.pychestrate.webservice.orchestration.rpa.service import git_source_block, rpa_envelope_params
+from ccai.pychestrate.webservice.orchestration.infra.runs.factories.terraform_driver import TerraformInfraDriver
+from ccai.pychestrate.webservice.orchestration.infra.runs.models import InfraAction
+from ccai.pychestrate.webservice.orchestration.infra.runs.service import InfraRunInputs, provision_params_for
 from ccai.pychestrate.webservice.orchestration.test.factories.testbase_runner import (
     TestbaseRunnerKind,
 )
@@ -137,6 +140,29 @@ def test_the_rpa_trigger_produces_exactly_the_params_and_source_block_the_contra
     testbase.assert_equal(
         (len(contract["rpa_envelope_params"]) >= 6, produced),
         (True, {case["name"]: {"params": case["params"], "envelope_source": case["envelope_source"]} for case in contract["rpa_envelope_params"]}),
+    )
+    return
+
+
+def test_the_infra_trigger_produces_exactly_the_params_the_contract_records_and_the_driver_accepts_them():
+    """
+    **Feature: one contract for both sides (E2E-14)**
+    **Property: for each provisioning case in the contract, the params an infra trigger puts in the envelope (environment, action, driver name, the driver inputs and their digest) are the
+    recorded ones, and the service's terraform driver accepts those driver inputs, so the pod is never tested against inputs the service would have refused.**
+    """
+    contract = _contract()
+    digest = contract["provision_envelope_digest"]
+    produced: Dict[str, Any] = {}
+    accepted: Dict[str, Any] = {}
+    for case in contract["provision_envelope_params"]:
+        trigger = case["trigger"]
+        inputs = InfraRunInputs(environment_id=trigger["environment_id"], driver_name=trigger["driver_name"], action=InfraAction(trigger["action"]), driver_inputs=trigger["driver_inputs"])
+        produced[case["name"]] = provision_params_for(inputs=inputs, digest=digest)
+        accepted[case["name"]] = TerraformInfraDriver.validate_inputs(action=trigger["action"], inputs=trigger["driver_inputs"])
+
+    testbase.assert_equal(
+        (len(contract["provision_envelope_params"]) >= 3, produced, accepted),
+        (True, {case["name"]: case["params"] for case in contract["provision_envelope_params"]}, {case["name"]: (True, ()) for case in contract["provision_envelope_params"]}),
     )
     return
 

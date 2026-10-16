@@ -22,6 +22,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import functools
+import gc
+
 from typing import Tuple
 
 from ccai import testbase
@@ -45,6 +48,25 @@ from ccai.pychestrate.webservice.extensions.rest_endpoint_protocol import (
     RestEndpointDescriptor,
     RestEndpointExtension,
 )
+
+
+def _releases_synthetic_extensions(test_function):
+    """
+        Collect garbage as soon as a test that mounts deliberately invalid synthetic extensions returns.
+
+        The router finds extensions through ``RestEndpointExtension.__subclasses__()``, and a class made inside a test sits in a reference cycle,
+        so it stays registered until the collector next runs. A leftover class with a duplicate name, a duplicate descriptor, an unsupported
+        method or no endpoints makes every later test that mounts all extensions fail with a ConfigurationError, depending only on when the
+        collector happened to run (the full suite errored on that in four unrelated tests).
+    """
+    @functools.wraps(test_function)
+    def wrapper():
+        try:
+            test_function()
+        finally:
+            gc.collect()
+        return
+    return wrapper
 
 
 def _build_extension_class(
@@ -245,6 +267,7 @@ def test_mount_extension_routes_discovers_example_when_extensions_omitted():
 # Collision: duplicate ext_name across two subclasses
 # ---------------------------------------------------------------------------
 
+@_releases_synthetic_extensions
 def test_mount_routes_rejects_duplicate_ext_name():
     """
     **Feature: 8-rest-api-v1 (T2.5 partial)**
@@ -277,6 +300,7 @@ def test_mount_routes_rejects_duplicate_ext_name():
 # Collision: duplicate (method, path_suffix) within a single extension
 # ---------------------------------------------------------------------------
 
+@_releases_synthetic_extensions
 def test_mount_routes_rejects_internal_duplicate_descriptor():
     """
     **Feature: 8-rest-api-v1 (T2.5 partial)**
@@ -304,10 +328,32 @@ def test_mount_routes_rejects_internal_duplicate_descriptor():
     return
 
 
+def test_a_deliberately_invalid_extension_does_not_stay_registered_after_its_test():
+    """
+    **Feature: 8-rest-api-v1 (T2.5 partial)**
+    **Property: with the garbage collector switched off, a test that mounts an extension with a duplicate descriptor leaves no synthetic
+    extension class registered, so a later test that mounts every extension is not broken by it.**
+    """
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        test_mount_routes_rejects_internal_duplicate_descriptor()
+        lingering = sorted(
+            str(getattr(subclass, "ext_name", None)) for subclass in RestEndpointExtension.__subclasses__()
+            if "Synthetic" in subclass.__qualname__
+        )
+    finally:
+        if was_enabled:
+            gc.enable()
+    testbase.assert_equal(lingering, [])
+    return
+
+
 # ---------------------------------------------------------------------------
 # Per-descriptor invariants
 # ---------------------------------------------------------------------------
 
+@_releases_synthetic_extensions
 def test_mount_routes_rejects_unsupported_method():
     """
     **Feature: 8-rest-api-v1 (T2.5 partial)**
@@ -333,6 +379,7 @@ def test_mount_routes_rejects_unsupported_method():
     return
 
 
+@_releases_synthetic_extensions
 def test_mount_routes_rejects_path_suffix_without_leading_slash():
     """
     **Feature: 8-rest-api-v1 (T2.5 partial)**
@@ -358,6 +405,7 @@ def test_mount_routes_rejects_path_suffix_without_leading_slash():
     return
 
 
+@_releases_synthetic_extensions
 def test_mount_routes_rejects_extension_with_no_endpoints():
     """
     **Feature: 8-rest-api-v1 (T2.5 partial)**

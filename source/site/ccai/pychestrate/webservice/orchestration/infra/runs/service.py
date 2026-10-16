@@ -230,6 +230,26 @@ class InfraRunInputs:
     driver_inputs: Mapping[str, Any] = field(default_factory=dict)
 
 
+def provision_params_for(*, inputs: InfraRunInputs, digest: str) -> Dict[str, Any]:
+    """
+        The ``params`` of a provisioning job's envelope: what the pod reads its driver, action and driver inputs from. Kept in one place so
+        the service-and-pod contract (``specs/contracts/pod-job-contract.json``) checks exactly what is sent.
+
+        :param inputs: The caller's infra-run inputs.
+        :param digest: The canonical digest of the driver inputs.
+
+        :returns: The params map.
+    """
+    rtnval: Dict[str, Any] = {
+        "environment_id": inputs.environment_id,
+        "action": inputs.action.value,
+        "driver_name": inputs.driver_name,
+        "driver_inputs": dict(inputs.driver_inputs),
+        "inputs_canonical_sha256": digest,
+    }
+    return rtnval
+
+
 @dataclass(frozen=True)
 class InfraTriggerAspects:
     """
@@ -573,13 +593,7 @@ def _dispatch_provision_job(
         job_type=job_type,
     )
 
-    provision_spec: Dict[str, Any] = {
-        "environment_id": inputs.environment_id,
-        "action": inputs.action.value,
-        "driver_name": inputs.driver_name,
-        "driver_inputs": dict(inputs.driver_inputs),
-        "inputs_canonical_sha256": digest,
-    }
+    provision_spec: Dict[str, Any] = provision_params_for(inputs=inputs, digest=digest)
 
     soft_deadline = triggered_at + timedelta(
         seconds=aspects.soft_deadline_seconds,
