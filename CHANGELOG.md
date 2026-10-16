@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- **An RPA packet can point at a vault secret instead of holding its value (ADM-07).** Write `{"$secret": "company/db-password"}` where a job needs a secret (see the RPA page of the user guide). The reference is checked when
+  a specification is saved or a run supplies it, as the signed-in user, through the vault's own read path (the secret must exist, not be expired, and be readable by that user; every failing reference is listed with its packet
+  path, in the form next to the packet or as a 422 `errors` list). At dispatch the service reads it once and puts the value into the payload sent to the pod only: the specification, its revisions, the job row and the packet
+  digest keep the reference (so rotating a secret does not change the digest or defeat the idempotency window), and the secret values are scrubbed from the archived envelope when the job ends. A secret that has gone fails the
+  run before anything is created. A pipeline step, schedule or lab tool can run a specification whose default packet holds references but cannot supply references of its own. Plain values at a job type's secret fields still
+  work; the specification page now warns that they are stored in plain text and the REST specification lists them as `inline_secret_fields`. The scrub also covers plain values at declared secret fields, for jobs that end
+  from now on; the archives of jobs that ended earlier are not rewritten. Design: `specs/model-convergence.md` section 11.
 - **The legacy secret store is removed (ADM-07, steps 2 and 3 together).** Admin, **Secrets (legacy)** and **Secret Scopes (legacy)** are gone, with their menu entries, the *Import into the vault* button and
   `SecretManager`; the vault under **System**, **Secrets** is the one place secrets live, and the Admin overview's Configuration tile now links to it. Nothing read the old store (the audit's "consumers point at
   the legacy store" was already untrue), and staging held nothing in it but soft-deleted test leftovers (listed row by row before this change: 12 deleted secrets, 18 scopes, no live secret, no scope grant), so the

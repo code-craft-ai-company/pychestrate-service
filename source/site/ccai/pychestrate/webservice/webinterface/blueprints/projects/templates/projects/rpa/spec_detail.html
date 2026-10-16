@@ -104,6 +104,14 @@
 </div>
 {% endif %}
 
+{% if spec.inline_secret_fields %}
+<div class="alert alert-warning mt" role="note" data-role="inline-secrets">
+    The default packet keeps {{ spec.inline_secret_fields | length }} secret {{ 'value' if spec.inline_secret_fields | length == 1 else 'values' }} in plain text
+    ({% for field in spec.inline_secret_fields %}<code>{{ field }}</code>{% if not loop.last %}, {% endif %}{% endfor %}).
+    Put each in the vault (System, Secrets) and replace it with <code>{"$secret": "name-in-the-vault"}</code>, so it is not stored with the specification.
+</div>
+{% endif %}
+
 <div class="card mt">
     <h2 class="card-header">Specification Details</h2>
     <div class="table-scroll" tabindex="0"><table class="data-table">

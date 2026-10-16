@@ -63,7 +63,7 @@
             <label for="default_packet">Default Work Packet (JSON)</label>
             <textarea id="default_packet" name="default_packet" class="form-control mono" rows="8"
                       placeholder='{"region": "eu-west", "dry_run": false}'{{ ui.invalid_attrs(errors, 'default_packet', 'default_packet-help') }}>{{ form_data.default_packet if form_data else '{}' }}</textarea>
-            <div class="form-text" id="default_packet-help">Packet fields every run starts from. The packet submitted at run time overrides these keys.</div>
+            <div class="form-text" id="default_packet-help">Packet fields every run starts from. The packet submitted at run time overrides these keys. Keep secrets out of the packet: write <code>{"$secret": "company/db-password"}</code> where the job needs one, naming a secret in the vault (System, Secrets). The service reads it when the job starts; you must be allowed to read it.</div>
             {{ ui.field_error(errors, 'default_packet') }}
         </div>
 

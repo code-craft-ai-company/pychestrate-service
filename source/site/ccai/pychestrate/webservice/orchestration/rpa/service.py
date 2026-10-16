@@ -67,6 +67,7 @@ from ccai.pychestrate.webservice.jobs.run.state import (
 )
 from ccai.pychestrate.webservice.jobs.reconcile.reconciler import DEADLINE_ACTOR
 from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent, subscribe
+from ccai.pychestrate.webservice.jobs.envelope import repository as envelope_repository
 from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
 from ccai.pychestrate.webservice.orchestration.rpa import repository
 from ccai.pychestrate.webservice.orchestration.rpa.errors import (
@@ -81,6 +82,7 @@ from ccai.pychestrate.webservice.orchestration.rpa.errors import (
     RpaJobTypeInvalidError,
     RpaJobTypeNotFoundError,
     RpaJobTypeRetiredError,
+    RpaSecretReferenceError,
     RpaSpecInvalidError,
     RpaSpecNotFoundError,
     RpaVersionNotActiveError,
@@ -111,12 +113,25 @@ from ccai.pychestrate.webservice.projects.bridge import registry_project_uuid_fo
 from ccai.pychestrate.webservice.orchestration.rpa.packet import (
     DEFAULT_MAX_PACKET_BYTES,
     enforce_packet_size,
+    find_secret_refs,
+    inline_secret_paths,
     is_valid_type_id,
     merge_packet,
     packet_digest,
     redact_packet,
+    secret_ref_placeholder,
+    substitute_secret_refs,
     validate_packet,
     validate_schema_document,
+)
+from ccai.pychestrate.webservice.secrets import secrets_service
+from ccai.pychestrate.webservice.secrets.exceptions import (
+    SecretAccessDeniedError,
+    SecretNotFoundError,
+    SecretVersionExpiredError,
+)
+from ccai.pychestrate.webservice.secrets.secrets_aspects import (
+    build_default_aspects as build_default_secrets_aspects,
 )
 
 
@@ -128,6 +143,9 @@ DEFAULT_RPA_HARD_DEADLINE_SECONDS: int = 7200
 DEFAULT_IDEMPOTENCY_WINDOW_SECONDS: int = 60
 LIST_JOBS_DEFAULT_LIMIT: int = 50
 RPA_ACTOR: str = "system:rpa-orchestrator"
+
+#: Names the RPA service to the vault when it resolves a reference at dispatch (error messages only).
+RPA_VAULT_SERVICE_IDENTITY: str = "rpa"
 
 TERMINAL_STATUSES: Tuple[RpaJobStatus, ...] = (
     RpaJobStatus.SUCCEEDED,
@@ -227,6 +245,16 @@ class RpaTriggerAspects:
         :param idempotency_key: Caller key; ``None`` derives one from
                                 ``(project, spec, packet digest,
                                 cause kind)``.
+        :param principal: The signed-in user's vault principal, used to check the
+                          vault secret references a run's own packet supplies
+                          (``specs/model-convergence.md`` section 11). ``None``
+                          for a caller with no signed-in user: it may run a
+                          specification whose default packet holds references,
+                          but may not supply references of its own.
+        :param references_checked: ``True`` when the caller already ran
+                                   :func:`check_trigger_packet` with the same
+                                   ``principal``, so the references are not read
+                                   (and audited) a second time.
     """
     actor_id: Optional[str] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
@@ -238,6 +266,8 @@ class RpaTriggerAspects:
     idempotency_key: Optional[str] = None
     idempotency_window_seconds: int = DEFAULT_IDEMPOTENCY_WINDOW_SECONDS
     max_packet_bytes: int = DEFAULT_MAX_PACKET_BYTES
+    principal: Any = None
+    references_checked: bool = False
 
 
 @dataclass(frozen=True)
@@ -297,6 +327,9 @@ class RpaSpecView:
     # above is the stored value (needed for merging); anything that
     # shows or returns it must redact these paths first.
     secret_fields: Tuple[str, ...] = ()
+    # Declared secret paths at which the stored default packet holds a plain value rather than a vault
+    # reference (``specs/model-convergence.md`` section 11): secrets kept in plain text.
+    inline_secret_fields: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -856,6 +889,132 @@ def _require_job_type_row(*, db_session: DbSession, type_id: str) -> RpaJobType:
 
 
 # ---------------------------------------------------------------------------
+# Vault secret references in packets (specs/model-convergence.md section 11)
+# ---------------------------------------------------------------------------
+
+
+def _check_secret_refs(*, db_session: DbSession, principal: Any, packet: Mapping[str, Any]) -> None:
+    """
+        Check, as the signed-in user, every vault secret reference in ``packet``: the secret exists, has not expired, and the user may read it. This
+        is the vault's own read path, so its access rules and audit apply, as when a notification channel is bound to a vault secret. Every failing
+        reference is listed with its packet path; no value is ever put in the message.
+
+        :param db_session: Active session.
+        :param principal: The user's vault principal, or ``None`` when nobody is signed in (a packet with references is then refused).
+        :param packet: The packet to check.
+
+        :raises: RpaSecretReferenceError
+    """
+    refs = find_secret_refs(packet)
+    if len(refs) == 0:
+        return
+    issues: List[Tuple[str, str]] = []
+    if principal is None:
+        for path, ref in refs:
+            issues.append((path, "a vault secret reference ({}) needs a signed-in user, who is checked for access to it".format(ref)))
+        raise RpaSecretReferenceError("A vault secret reference cannot be used without a signed-in user.", issues=issues)
+    for path, ref in refs:
+        try:
+            read = secrets_service.read_secret(
+                db_session=db_session, principal=principal, secret_ref=ref, aspects=build_default_secrets_aspects(),
+            )
+        except SecretNotFoundError:
+            db_session.rollback()
+            issues.append((path, "there is no secret named {} in the secrets vault".format(ref)))
+        except SecretVersionExpiredError:
+            db_session.rollback()
+            issues.append((path, "the secret {} has expired; rotate it in the secrets vault".format(ref)))
+        except SecretAccessDeniedError:
+            db_session.rollback()
+            issues.append((path, "you may not read the vault secret {}".format(ref)))
+        else:
+            read.plaintext.close()
+    if len(issues) > 0:
+        err_lines = ["{} vault secret reference(s) in the packet cannot be used:".format(len(issues))]
+        err_lines.extend("  {}: {}".format(path, message) for path, message in issues)
+        raise RpaSecretReferenceError(os.linesep.join(err_lines), issues=issues)
+    return
+
+
+def _packet_for_schema_check(packet: Mapping[str, Any]) -> Dict[str, Any]:
+    """
+        ``packet`` with each vault secret reference replaced by a text placeholder, so the job type's JSON Schema is checked (and a bad packet reported)
+        before the vault is touched; a field declared ``string`` accepts a reference.
+    """
+    rtnval = substitute_secret_refs(packet, lambda _path, ref: secret_ref_placeholder(ref))
+    return rtnval
+
+
+def _resolve_secret_refs(*, db_session: DbSession, packet: Mapping[str, Any]) -> Dict[str, Any]:
+    """
+        ``packet`` with each vault secret reference replaced by the secret's value, for the payload sent to the pod and nowhere else. A reference that no longer
+        resolves (the secret was deleted, has expired or is not text) fails, naming the packet path and the secret, before anything is created or dispatched.
+
+        :raises: RpaSecretReferenceError
+    """
+    refs = find_secret_refs(packet)
+    if len(refs) == 0:
+        rtnval = dict(packet)
+        return rtnval
+    issues: List[Tuple[str, str]] = []
+    values: Dict[str, str] = {}
+    for path, ref in refs:
+        if ref in values:
+            continue
+        try:
+            read = secrets_service.read_secret_for_service(
+                db_session=db_session, secret_ref=ref, service_identity=RPA_VAULT_SERVICE_IDENTITY,
+            )
+        except (SecretNotFoundError, SecretVersionExpiredError):
+            issues.append((path, "the secret {} is missing or has expired; restore or rotate it in the secrets vault".format(ref)))
+            continue
+        try:
+            values[ref] = read.plaintext.reveal().decode("utf-8")
+        except UnicodeDecodeError:
+            issues.append((path, "the secret {} is not text".format(ref)))
+        finally:
+            read.plaintext.close()
+    if len(issues) > 0:
+        err_lines = ["{} vault secret reference(s) in the packet cannot be resolved:".format(len(issues))]
+        err_lines.extend("  {}: {}".format(path, message) for path, message in issues)
+        raise RpaSecretReferenceError(os.linesep.join(err_lines), issues=issues)
+    rtnval = substitute_secret_refs(packet, lambda _path, ref: values[ref])
+    return rtnval
+
+
+def _scrub_archived_secrets(*, db_session: DbSession, row: RpaJob) -> int:
+    """
+        Replace, in the archived envelopes of a finished job, the values at its secret locations -- the job type's declared secret fields and every
+        place the packet held a vault reference -- with the redaction marker. The archive keeps the payload as sent so the pod can fetch it; once the
+        job is over nothing reads those values, and nothing else purges the archive.
+
+        :returns: How many archived envelopes were changed.
+    """
+    type_row = repository.find_job_type(db_session=db_session, type_id=row.type_id)
+    paths = [str(p) for p in ((type_row.secret_fields if type_row is not None else None) or [])]
+    paths.extend(path for path, _ref in find_secret_refs(dict(row.work_packet or {})))
+    if len(paths) == 0:
+        return 0
+
+    def _rewrite(params: Dict[str, Any]) -> Dict[str, Any]:
+        packet = params.get("work_packet", None)
+        if isinstance(packet, dict) is False:
+            return params
+        rewritten = dict(params)
+        rewritten["work_packet"] = redact_packet(packet=packet, secret_fields=paths)
+        return rewritten
+
+    try:
+        rtnval = envelope_repository.rewrite_archived_params(db_session=db_session, run_id=str(row.job_id), rewrite=_rewrite)
+    except (ValueError, TypeError, KeyError):
+        _LOGGER.exception("pychestrate.rpa.envelope_scrub_failed job_id=%s", str(row.job_id))
+        return 0
+    if rtnval > 0:
+        _LOGGER.info("pychestrate.rpa.envelope_scrubbed job_id=%s envelopes=%d", str(row.job_id), rtnval)
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # Specifications
 # ---------------------------------------------------------------------------
 
@@ -903,16 +1062,19 @@ def create_spec(
         db_session: DbSession,
         project_id: str,
         inputs: RpaSpecInputs,
-        actor_id: Optional[str] = None
+        actor_id: Optional[str] = None,
+        principal: Any = None
     ) -> RpaSpecView:
     """
-        Create a project specification.
+        Create a project specification. Vault secret references in its default packet are checked as the signed-in user (``principal``).
 
         :raises: RpaSpecInvalidError, DuplicateRpaSpecError,
-                 RpaJobTypeNotFoundError, RpaVersionNotActiveError.
+                 RpaJobTypeNotFoundError, RpaVersionNotActiveError,
+                 RpaSecretReferenceError.
     """
     project_ref = str(project_id)
     _validate_spec_inputs(db_session=db_session, inputs=inputs)
+    _check_secret_refs(db_session=db_session, principal=principal, packet=dict(inputs.default_packet or {}))
     name = str(inputs.name).strip()
     if repository.find_spec_by_name(db_session=db_session, project_id=project_ref, name=name) is not None:
         err_lines = ["An RPA specification with that name already exists in the project."]
@@ -960,17 +1122,19 @@ def update_spec(
         db_session: DbSession,
         spec_id: str,
         inputs: RpaSpecInputs,
-        actor_id: Optional[str] = None
+        actor_id: Optional[str] = None,
+        principal: Any = None
     ) -> RpaSpecView:
     """
         Replace a specification's fields, bump its revision, and
-        snapshot the new revision.
+        snapshot the new revision. Vault secret references in its default packet are checked as the signed-in user (``principal``).
 
         :raises: RpaSpecNotFoundError, RpaSpecInvalidError,
-                 DuplicateRpaSpecError.
+                 DuplicateRpaSpecError, RpaSecretReferenceError.
     """
     row = _require_spec_row(db_session=db_session, spec_id=spec_id)
     _validate_spec_inputs(db_session=db_session, inputs=inputs)
+    _check_secret_refs(db_session=db_session, principal=principal, packet=dict(inputs.default_packet or {}))
     name = str(inputs.name).strip()
     existing = repository.find_spec_by_name(
         db_session=db_session, project_id=row.project_id, name=name,
@@ -1141,19 +1305,22 @@ def check_trigger_packet(
         project_id: str,
         spec_id: str,
         work_packet: Optional[Mapping[str, Any]] = None,
-        max_packet_bytes: int = DEFAULT_MAX_PACKET_BYTES
+        max_packet_bytes: int = DEFAULT_MAX_PACKET_BYTES,
+        principal: Any = None
     ) -> Dict[str, Any]:
     """
         Run the checks :func:`trigger_job` applies to a work packet --
         specification in the project, job type runnable, a version to
-        resolve, packet size and JSON Schema -- without creating
-        anything. Callers run it before choosing pods, so a caller
-        with a bad packet learns that, not "no pod available".
+        resolve, packet size, JSON Schema, and the vault secret
+        references the caller's own packet supplies (checked as
+        ``principal``) -- without creating anything. Callers run it
+        before choosing pods, so a caller with a bad packet learns
+        that, not "no pod available".
 
         :returns: The merged packet.
         :raises: RpaSpecNotFoundError, RpaJobTypeRetiredError,
                  RpaVersionNotActiveError, PacketValidationError,
-                 PacketTooLargeError.
+                 PacketTooLargeError, RpaSecretReferenceError.
     """
     project_ref = str(project_id)
     spec_row = _require_spec_row(db_session=db_session, spec_id=spec_id)
@@ -1171,7 +1338,8 @@ def check_trigger_packet(
         work_packet=dict(work_packet or {}),
     )
     enforce_packet_size(packet=merged, max_bytes=max_packet_bytes)
-    validate_packet(packet=merged, schema=type_row.packet_schema)
+    _check_secret_refs(db_session=db_session, principal=principal, packet=dict(work_packet or {}))
+    validate_packet(packet=_packet_for_schema_check(merged), schema=type_row.packet_schema)
     rtnval = merged
     return rtnval
 
@@ -1214,7 +1382,9 @@ def trigger_job(
         work_packet=dict(work_packet or {}),
     )
     enforce_packet_size(packet=merged, max_bytes=effective.max_packet_bytes)
-    validate_packet(packet=merged, schema=type_row.packet_schema)
+    if effective.references_checked is False:
+        _check_secret_refs(db_session=db_session, principal=effective.principal, packet=dict(work_packet or {}))
+    validate_packet(packet=_packet_for_schema_check(merged), schema=type_row.packet_schema)
     digest = packet_digest(merged)
     redacted = redact_packet(packet=merged, secret_fields=list(type_row.secret_fields or []))
 
@@ -1238,6 +1408,10 @@ def trigger_job(
 
     required = list(type_row.capability_requirements or []) + list(spec_row.required_capabilities or [])
     candidates = _check_capabilities(required=required, candidates=tuple(effective.candidates))
+
+    # References become values here, for the payload sent to the pod and nowhere else; a secret that no longer resolves fails the
+    # trigger before a job row exists. The stored job, the specification and the digest keep the references.
+    dispatch_packet = _resolve_secret_refs(db_session=db_session, packet=merged)
 
     job_id = new_uuid()
     job_row = repository.insert_job(
@@ -1303,7 +1477,7 @@ def trigger_job(
         version_row=version_row,
         layer5_project_id=layer5_project_id,
         job_type_string=job_type_string,
-        merged_packet=merged,
+        merged_packet=dispatch_packet,
         digest=digest,
         timeout_minutes=timeout_minutes,
         aspects=effective,
@@ -1594,6 +1768,7 @@ def apply_run_terminal(
     row.completed_at = utc_now()
     row.final_state_reason = reason or ""
     db_session.flush()
+    _scrub_archived_secrets(db_session=db_session, row=row)
 
     enqueue_event(
         db_session=db_session,
@@ -1966,6 +2141,7 @@ def _spec_to_view(*, db_session: DbSession, row: RpaSpec) -> RpaSpecView:
         packet_schema=schema,
         resolved_version=resolved,
         secret_fields=secret_fields,
+        inline_secret_fields=tuple(inline_secret_paths(packet=dict(row.default_packet or {}), secret_fields=secret_fields)),
     )
     return rtnval
 

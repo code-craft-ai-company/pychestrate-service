@@ -24,7 +24,7 @@ import os
 import re
 import uuid
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 from ccai.pychestrate.webservice.projects.legacy_identity import (
     LEGACY_PROJECT_NAMESPACE,
@@ -38,6 +38,10 @@ from ccai.pychestrate.webservice.orchestration.rpa.errors import (
 
 #: Marker written in place of a secret value on the persisted packet.
 REDACTION_MARKER: str = "***REDACTED***"
+
+#: The key of the object that stands for a vault secret in a packet: ``{"$secret": "company/db-password"}``
+#: (``specs/model-convergence.md`` section 11). The service resolves it at dispatch; the pod never sees it.
+SECRET_REF_KEY: str = "$secret"
 
 #: Default cap on the canonical JSON size of a merged packet (1 MiB).
 DEFAULT_MAX_PACKET_BYTES: int = 1024 * 1024
@@ -183,7 +187,8 @@ def _redact_at(node: Any, segments: List[str]) -> None:
         if head not in node:
             return
         if len(rest) == 0:
-            node[head] = REDACTION_MARKER
+            if is_secret_ref(node[head]) is False:
+                node[head] = REDACTION_MARKER
             return
         _redact_at(node[head], rest)
         return
@@ -201,10 +206,143 @@ def _redact_at(node: Any, segments: List[str]) -> None:
         if index < 0 or index >= len(node):
             return
         if len(rest) == 0:
-            node[index] = REDACTION_MARKER
+            if is_secret_ref(node[index]) is False:
+                node[index] = REDACTION_MARKER
             return
         _redact_at(node[index], rest)
     return
+
+
+def is_secret_ref(value: Any) -> bool:
+    """
+        Whether ``value`` is a vault secret reference: an object holding only the key :data:`SECRET_REF_KEY`, whose value is a non-empty string.
+        A reference is not itself a secret, so redaction leaves it as it is.
+    """
+    if isinstance(value, dict) is False or len(value) != 1 or SECRET_REF_KEY not in value:
+        return False
+    ref = value[SECRET_REF_KEY]
+    rtnval = isinstance(ref, str) and len(ref.strip()) > 0
+    return rtnval
+
+
+def secret_ref_name(value: Mapping[str, Any]) -> str:
+    """
+        The vault secret ref a reference object names (see :func:`is_secret_ref`).
+    """
+    rtnval = str(value[SECRET_REF_KEY]).strip()
+    return rtnval
+
+
+def _pointer(segments: List[str]) -> str:
+    """
+        A JSON pointer (``/a/0/b``) for ``segments``.
+    """
+    rtnval = "".join("/" + str(s).replace("~", "~0").replace("/", "~1") for s in segments)
+    return rtnval
+
+
+def find_secret_refs(packet: Any) -> List[Tuple[str, str]]:
+    """
+        Every vault secret reference in ``packet``, in document order.
+
+        :param packet: A packet (or any JSON value).
+
+        :returns: ``(json pointer, vault secret ref)`` pairs.
+    """
+    found: List[Tuple[str, str]] = []
+
+    def _walk(node: Any, segments: List[str]) -> None:
+        if is_secret_ref(node):
+            found.append((_pointer(segments), secret_ref_name(node)))
+            return
+        if isinstance(node, dict):
+            for key, child in node.items():
+                _walk(child, segments + [str(key)])
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                _walk(child, segments + [str(index)])
+        return
+
+    _walk(packet, [])
+    return found
+
+
+def substitute_secret_refs(packet: Mapping[str, Any], replace: Callable[[str, str], str]) -> Dict[str, Any]:
+    """
+        A deep copy of ``packet`` with every vault secret reference replaced by what ``replace(pointer, ref)`` returns. The input is not modified.
+
+        :param packet: A packet.
+        :param replace: Called once per reference with its JSON pointer and its vault ref.
+
+        :returns: The copy.
+    """
+    def _copy(node: Any, segments: List[str]) -> Any:
+        if is_secret_ref(node):
+            return replace(_pointer(segments), secret_ref_name(node))
+        if isinstance(node, dict):
+            return {key: _copy(child, segments + [str(key)]) for key, child in node.items()}
+        if isinstance(node, list):
+            return [_copy(child, segments + [str(index)]) for index, child in enumerate(node)]
+        return copy.deepcopy(node)
+
+    rtnval: Dict[str, Any] = _copy(dict(packet), [])
+    return rtnval
+
+
+def secret_ref_placeholder(ref: str) -> str:
+    """
+        The text that stands in for a reference while a packet is checked against the job type's schema, before the vault is touched.
+    """
+    rtnval = "<vault secret {}>".format(ref)
+    return rtnval
+
+
+def _values_at(node: Any, segments: List[str], taken: List[str]) -> Iterator[Tuple[List[str], Any]]:
+    """
+        Every ``(concrete path, value)`` at the declared path ``segments`` (``*`` matches each list element) that exists in ``node``.
+    """
+    if len(segments) == 0:
+        yield taken, node
+        return
+    head, rest = segments[0], segments[1:]
+    if isinstance(node, dict):
+        if head in node:
+            yield from _values_at(node[head], rest, taken + [head])
+    elif isinstance(node, list):
+        if head == "*":
+            for index, child in enumerate(node):
+                yield from _values_at(child, rest, taken + [str(index)])
+        else:
+            try:
+                index = int(head)
+            except ValueError:
+                return
+            if 0 <= index < len(node):
+                yield from _values_at(node[index], rest, taken + [str(index)])
+    return
+
+
+def inline_secret_paths(*, packet: Mapping[str, Any], secret_fields: Iterable[str]) -> List[str]:
+    """
+        The declared secret paths at which ``packet`` holds a plain value rather than a vault reference (a value of any kind that is not empty, not
+        the redaction marker and not a reference): secrets stored in plain text, which the specification page asks to replace.
+
+        :param packet: A packet, such as a specification's stored default.
+        :param secret_fields: Secret paths declared by the job type.
+
+        :returns: JSON pointers, sorted.
+    """
+    found = set()
+    for field_path in list(secret_fields or []):
+        segments = _split_pointer(field_path)
+        if len(segments) == 0:
+            continue
+        for concrete, value in _values_at(dict(packet or {}), segments, []):
+            if value is None or value == "" or value == REDACTION_MARKER or is_secret_ref(value):
+                continue
+            found.add(_pointer(concrete))
+    rtnval = sorted(found)
+    return rtnval
 
 
 def redact_packet(*, packet: Mapping[str, Any], secret_fields: Iterable[str]) -> Dict[str, Any]:

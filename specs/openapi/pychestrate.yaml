@@ -6719,6 +6719,12 @@ paths:
         (packet keys win), validates it against the job type's JSON
         schema, redacts `secret_fields` in storage, mints a signed
         `job_kind=rpa` envelope, and dispatches it to an eligible pod.
+        A vault secret reference (`{"$secret": "<ref>"}`) anywhere in the
+        packet is replaced by the secret's value in the payload sent to the
+        pod only; the stored job, the specification and the packet digest
+        keep the reference, and the archived envelope's secret values are
+        scrubbed when the job ends. A reference whose secret has been deleted
+        or has expired fails the request with 422 before anything is created.
         The packet is validated before any pod is chosen. An identical
         request within the idempotency window (60 s) returns the original
         job with `replayed: true` and status 200 instead of starting a new
@@ -12173,7 +12179,17 @@ components:
         execution_mode: { type: string, enum: [process, tasker] }
         version_selector: { type: string, description: '`latest-active` or an exact version label.' }
         resolved_version: { type: [string, 'null'] }
-        default_packet: { type: object }
+        default_packet:
+          type: object
+          description: |
+            The stored defaults, with a plain value at a job type's `secret_fields` path replaced by `***REDACTED***`. A vault secret reference
+            (`{"$secret": "<vault secret ref>"}`) is shown as written: it is not a secret.
+        inline_secret_fields:
+          type: array
+          items: { type: string }
+          description: |
+            JSON pointers of the job type's `secret_fields` paths at which the stored default holds a plain value rather than a vault secret
+            reference (a secret kept in plain text). Empty when every secret is a reference.
         packet_schema: { type: [object, 'null'] }
         target_pod_id: { type: [string, 'null'] }
         required_capabilities:
@@ -12204,7 +12220,12 @@ components:
         name: { type: string, maxLength: 128 }
         type_id: { type: string }
         version_selector: { type: string, default: latest-active }
-        default_packet: { type: object }
+        default_packet:
+          type: object
+          description: |
+            Packet fields every run starts from. Put a secret in the vault and write `{"$secret": "<vault secret ref>"}` where the job needs it; the
+            service resolves it when the job is dispatched and never stores the value. Each reference is checked as the caller (the secret must exist,
+            not be expired, and be readable by the caller); a reference that fails is refused with 422 and an `errors` list of `{path, message}`.
         target_pod_id: { type: [string, 'null'] }
         required_capabilities:
           type: array
@@ -12216,7 +12237,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        work_packet: { type: object, description: Merged over the specification's default packet; packet keys win. }
+        work_packet:
+          type: object
+          description: |
+            Merged over the specification's default packet; packet keys win. A field can be a vault secret reference, `{"$secret": "<vault secret ref>"}`;
+            the caller must be allowed to read the secret (checked before any pod is chosen, 422 with an `errors` list otherwise).
         idempotency_key: { type: string }
         allow_duplicate: { type: boolean, default: false, description: Start a new job even when an identical one was submitted within the idempotency window. }
 

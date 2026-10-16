@@ -18,9 +18,10 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
 import os
 
-from typing import List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -68,6 +69,44 @@ def persist_signed_envelope(
     db_session.add(row)
     db_session.flush()
     return row
+
+
+def rewrite_archived_params(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        rewrite: Callable[[Dict[str, Any]], Dict[str, Any]]
+    ) -> int:
+    """
+        Apply ``rewrite`` to the ``params`` of every archived envelope of a run and store the result, in the same canonical JSON form, in both payload
+        columns. Used to scrub secret values out of the archive once a run is over (nothing reads them then). The ``signature`` column keeps the
+        signature of the original bytes, so a rewritten payload no longer verifies: it is a record of what was sent, not something to replay.
+        Flushes but does not commit.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: The run whose envelopes to rewrite.
+        :param rewrite: Takes the ``params`` dict and returns the one to store (return it unchanged to leave an envelope alone).
+
+        :returns: How many archived envelopes were changed.
+    """
+    records = db_session.query(JobEnvelopeRecord).filter(JobEnvelopeRecord.run_id == run_id).all()
+    changed = 0
+    for record in records:
+        payload = json.loads(record.canonical_payload_text or record.canonical_payload.decode("utf-8"))
+        params = payload.get("params", None)
+        if isinstance(params, dict) is False:
+            continue
+        rewritten = rewrite(params)
+        if rewritten == params:
+            continue
+        payload["params"] = rewritten
+        text = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        record.canonical_payload = text.encode("utf-8")
+        record.canonical_payload_text = text
+        changed += 1
+    if changed > 0:
+        db_session.flush()
+    return changed
 
 
 def get_envelope(

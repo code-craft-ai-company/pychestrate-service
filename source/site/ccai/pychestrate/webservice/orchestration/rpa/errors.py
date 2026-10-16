@@ -106,6 +106,13 @@ class PacketValidationError(RpaError):
         return
 
 
+class RpaSecretReferenceError(PacketValidationError):
+    """
+        Raised when a vault secret reference in a packet cannot be used: the secret does not exist or has expired, the person saving or running it may
+        not read it, or there is no signed-in user to check. ``issues`` carries ``(json_pointer, message)`` pairs, one per reference, and never a value.
+    """
+
+
 class PacketTooLargeError(RpaError):
     """
         Raised when the serialized work packet exceeds the size cap.

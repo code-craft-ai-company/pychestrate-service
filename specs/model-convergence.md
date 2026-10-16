@@ -196,3 +196,32 @@ secrets hold 18 scopes and 12 secrets: all 12 secrets are soft-deleted leftovers
 
 **Not part of this step.** RPA taking secret values inline in the packet (the audit's second example for #366) is a separate finding. PROJECT-, PIPELINE- and JOB-scope variables on the
 Admin page, and a cross-worker invalidation for the effective-value cache, stay as the #367 comment lists them.
+
+## 11. RPA: secrets by reference, not by value (ADM-07, #366)
+
+**Finding.** An RPA work packet carries secret values inline. A job type can declare `secret_fields`, and the job row stores a redacted copy, but a specification's `default_packet` is stored
+exactly as typed (so the database holds the secret in plain text, and so does every spec revision), and a run's own packet is typed or sent with the value in it. The vault (section 9) is where secrets
+live; nothing in RPA could point at it.
+
+**Decisions (2026-10-16).**
+
+1. **A reference is the object `{"$secret": "<vault secret ref>"}`**, e.g. `{"$secret": "company/db-password"}`, anywhere in a packet. Nothing else is in the object. A plain string stays a plain string, so
+   existing specs and jobs keep working unchanged.
+2. **Binding is checked when a reference is saved or supplied**, with the signed-in user's own access, through the vault's own read path (so its access rules and audit apply), exactly as a notification
+   channel does when it is bound to a vault secret: the secret must exist, must not have expired, and the user must be allowed to read it. Every failing reference is listed with its packet path. This runs when a
+   specification is created or edited, and when a run supplies a packet of its own (REST, web UI).
+3. **A caller with no signed-in user may run a specification whose default packet holds references** (a pipeline step, a schedule, an MCP lab tool): the user who saved the specification was checked then.
+   It may not supply references in a run's own packet, because nobody was checked for them; that is refused with a message saying so.
+4. **References are resolved at dispatch, once, by the service** (`read_secret_for_service`, which writes no audit record per read; the binding is the audited event), and only into the payload sent to the pod. The
+   stored default packet, its revisions, the job row's `work_packet` (a reference is not a secret, so it is shown as the reference) and the packet digest never hold the value. The digest is computed on the packet
+   with references in it, so rotating a secret neither changes it nor defeats the idempotency window.
+5. **Validation sees a placeholder.** The job type's JSON Schema is checked against the packet with each reference replaced by a text placeholder (`<vault secret NAME>`), so a field declared `string` accepts a
+   reference, and a bad packet is reported before the vault is touched.
+6. **A reference that no longer resolves fails the trigger before anything is created or dispatched**, naming the packet path and the secret (never a value): the secret was deleted or has expired. In REST that is the
+   same 422 with an `errors` list as any packet problem.
+7. **Inline values at declared secret fields stay accepted** (nothing existing breaks), but the specification now says so: the REST spec has `inline_secret_fields` (the declared secret paths whose stored default is a plain
+   value, not a reference) and the specification page shows a notice naming them and how to replace them.
+8. **The pod does not change.** It already receives the resolved packet in the envelope and writes it to its run directory; it never sees a reference.
+
+**Not part of this step.** A picker for vault secrets inside the JSON packet editor (the field help documents the syntax; a picker is a UI feature of its own). References in a job type version's `environment`
+(stored as typed, can also hold secrets). Short-lived leases through the envelope's `scoped_secrets` (the pod does not read them yet). Refusing inline values at declared secret fields (decision 7 makes them visible, not forbidden).

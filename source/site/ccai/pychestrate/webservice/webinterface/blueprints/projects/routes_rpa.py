@@ -483,6 +483,19 @@ RPA_SPEC_FIELD_LABELS: Dict[str, str] = {
 }
 
 
+def _vault_principal(*, auth: Any) -> Any:
+    """
+        The vault principal for the signed-in user, who is checked for access to the vault secrets a packet points at.
+    """
+    from ccai.pychestrate.webservice.security.auth.models import AuthProviderKind  # noqa: E402
+    from ccai.pychestrate.webservice.security.auth.session_service import AuthPrincipal  # noqa: E402
+
+    rtnval = AuthPrincipal(
+        user_id=str(auth.user_id), session_id="", provider_kind=AuthProviderKind.LOCAL, provider_name="local",
+    )
+    return rtnval
+
+
 def _rpa_spec_field_errors(*, exc: BaseException, parsing_field: Optional[str] = None) -> Dict[str, str]:
     """
         The ``{field: message}`` for a refused specification form, or an
@@ -501,12 +514,15 @@ def _rpa_spec_field_errors(*, exc: BaseException, parsing_field: Optional[str] =
     """
     from ccai.pychestrate.webservice.orchestration.rpa.errors import (  # noqa: E402
         DuplicateRpaSpecError,
+        RpaSecretReferenceError,
         RpaVersionNotActiveError,
     )
 
     message = getattr(exc, "message", None) or str(exc)
     rtnval: Dict[str, str] = {}
-    if isinstance(exc, DuplicateRpaSpecError) is True:
+    if isinstance(exc, RpaSecretReferenceError) is True:
+        rtnval = {"default_packet": "; ".join("{}: {}".format(path, text) for path, text in exc.issues) or message}
+    elif isinstance(exc, DuplicateRpaSpecError) is True:
         rtnval = {"name": message}
     elif isinstance(exc, RpaVersionNotActiveError) is True:
         rtnval = {"version_selector": message}
@@ -634,7 +650,7 @@ def handle_rpa_spec_create(request: Request) -> Response:
             )
             spec = rpa.create_spec(
                 db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), inputs=inputs,
-                actor_id=auth.user_id,
+                actor_id=auth.user_id, principal=_vault_principal(auth=auth),
             )
             response = _redirect_with_flash(
                 session=auth.session,
@@ -925,7 +941,7 @@ def handle_rpa_run(request: Request) -> Response:
             # reported as such even when no pod is available.
             rpa.check_trigger_packet(
                 db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), spec_id=spec_id,
-                work_packet=work_packet,
+                work_packet=work_packet, principal=_vault_principal(auth=auth),
             )
             candidates = _resolve_candidates(
                 db_session=db_session, project_id=_rpa_project_key(db_session=db_session, project_id=project_id), target_pod_id=spec.target_pod_id,
@@ -940,6 +956,8 @@ def handle_rpa_run(request: Request) -> Response:
                 "candidates": candidates,
                 "project_slug": project_slug,
                 "trigger_cause": {"kind": "manual", "via": "web"},
+                "principal": _vault_principal(auth=auth),
+                "references_checked": True,
             }
             if allow_duplicate is True:
                 aspect_kwargs["idempotency_window_seconds"] = 0

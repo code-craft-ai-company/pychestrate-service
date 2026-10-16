@@ -76,6 +76,7 @@ from ccai.pychestrate.webservice.orchestration.rpa.errors import (
     RpaJobTypeInvalidError,
     RpaJobTypeNotFoundError,
     RpaJobTypeRetiredError,
+    RpaSecretReferenceError,
     RpaSpecInvalidError,
     RpaSpecNotFoundError,
     RpaVersionNotActiveError,
@@ -360,6 +361,8 @@ def _spec_to_dict(view: Any) -> Dict[str, Any]:
         "default_packet": redact_packet(
             packet=dict(view.default_packet), secret_fields=list(view.secret_fields)
         ),
+        # Declared secret paths whose stored default is a plain value, not a {"$secret": "<vault ref>"} reference.
+        "inline_secret_fields": list(view.inline_secret_fields),
         "packet_schema": dict(view.packet_schema) if view.packet_schema else None,
         "target_pod_id": view.target_pod_id,
         "required_capabilities": list(view.required_capabilities),
@@ -743,8 +746,11 @@ def handle_create_spec(request: Request) -> Response:
         try:
             view = rpa_service.create_spec(
                 db_session=db_session, project_id=project_id, inputs=inputs,
-                actor_id=_actor_id(principal),
+                actor_id=_actor_id(principal), principal=principal,
             )
+        except RpaSecretReferenceError as xcpt:
+            _abort_for_trigger_error(request=request, xcpt=xcpt, spec_id="")
+            view = None
         except DuplicateRpaSpecError as xcpt:
             _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"name": inputs.name})
             view = None
@@ -834,8 +840,11 @@ def handle_update_spec(request: Request) -> Response:
         inputs = _spec_inputs_from_body(request=request, body=merged)
         try:
             view = rpa_service.update_spec(
-                db_session=db_session, spec_id=spec_id, inputs=inputs, actor_id=_actor_id(principal),
+                db_session=db_session, spec_id=spec_id, inputs=inputs, actor_id=_actor_id(principal), principal=principal,
             )
+        except RpaSecretReferenceError as xcpt:
+            _abort_for_trigger_error(request=request, xcpt=xcpt, spec_id=spec_id)
+            view = None
         except DuplicateRpaSpecError as xcpt:
             _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"name": inputs.name})
             view = None
@@ -958,6 +967,7 @@ def handle_trigger_job(request: Request) -> Response:
         try:
             rpa_service.check_trigger_packet(
                 db_session=db_session, project_id=project_id, spec_id=spec_id, work_packet=work_packet,
+                principal=principal,
             )
         except _TRIGGER_ERRORS as xcpt:
             _abort_for_trigger_error(request=request, xcpt=xcpt, spec_id=spec_id)
@@ -981,6 +991,8 @@ def handle_trigger_job(request: Request) -> Response:
             "candidates": candidates,
             "project_slug": str(getattr(project_row, "slug", "") or getattr(project_row, "name", "") or ""),
             "trigger_cause": {"kind": "api"},
+            "principal": principal,
+            "references_checked": True,
             "idempotency_key": str(idempotency_key) if idempotency_key else None,
         }
         if allow_duplicate is True:

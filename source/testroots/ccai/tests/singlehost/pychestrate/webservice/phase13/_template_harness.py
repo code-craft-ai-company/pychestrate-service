@@ -104,7 +104,8 @@ def ensure_routes_registered() -> None:
         :returns: None.
     """
     global _routes_registered
-    if _routes_registered is True:
+    # Other tests reset the ``url_for`` registry; the flag alone would then leave it empty for every later render.
+    if _routes_registered is True and len(url_for_module.get_registry_snapshot()) > 0:
         return
 
     from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -137,8 +138,8 @@ def strict_environment() -> jinja2.Environment:
         :returns: Configured environment.
     """
     global _environment
+    ensure_routes_registered()
     if _environment is None:
-        ensure_routes_registered()
         env = build_jinja_environment(
             template_search_paths=template_search_paths(),
             strict_undefined=True,

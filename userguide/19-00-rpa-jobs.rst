@@ -37,6 +37,22 @@ Work packet
     the job type marks as secret are redacted everywhere except the
     signed envelope the pod receives.
 
+Secrets in a packet
+    Keep a secret out of the packet by pointing at the vault instead: write
+    ``{"$secret": "company/db-password"}`` where the job needs the value, naming a secret
+    in **System**, **Secrets**. The reference is checked when you save or run it, with your
+    own access (the secret must exist, must not have expired, and you must be allowed to
+    read it); every reference that fails is listed with its packet path. The service reads
+    the secret once, when the job is dispatched, and puts the value into the packet the pod
+    receives and nowhere else: the specification, its revisions, the job record and the
+    packet digest keep the reference, and the value is removed from the archived copy of
+    the job's envelope when the job ends. A pipeline step, schedule or lab tool (no signed-in
+    user) can run a specification whose default packet holds references, but cannot supply
+    references of its own. If the secret is deleted or expires, the run is refused before
+    anything starts, naming the path and the secret. A plain value at a field the job type
+    marks secret still works, but the specification page warns that it is stored in plain
+    text (the REST specification lists those paths as ``inline_secret_fields``).
+
 Job
     One triggered execution. It moves through ``pending``,
     ``dispatching``, ``running`` and ends ``succeeded``, ``failed``,
@@ -206,6 +222,9 @@ All three fields are optional. The service checks, in this order:
    * ``422`` with an ``errors`` list of ``{path, message}`` pairs when
      it fails the job type's schema, for example
      ``{"path": "/customer_id", "message": "... is not of type 'integer'"}``;
+   * ``422`` with the same ``errors`` list when a vault secret reference in
+     the packet names a secret that does not exist, has expired or that you
+     may not read;
    * ``413`` when the packet is larger than 1 MiB.
 
 3. The version. ``409`` when the job type is retired or the selector
