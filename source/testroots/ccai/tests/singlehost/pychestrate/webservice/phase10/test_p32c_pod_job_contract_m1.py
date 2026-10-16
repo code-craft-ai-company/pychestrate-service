@@ -35,6 +35,9 @@ from ccai.pychestrate.webservice.ingest.progress.factories.testbase_v1 import (
 from ccai.pychestrate.webservice.orchestration.test.catalog.payloads import (
     TestCatalogEntrySnapshot,
 )
+from ccai.pychestrate.webservice.jobs.envelope import canonical as envelope_canonical
+from ccai.pychestrate.webservice.jobs.envelope.schema import JobSourceRef
+from ccai.pychestrate.webservice.orchestration.build.service import BuildRunInputs, build_params_for
 from ccai.pychestrate.webservice.orchestration.test.factories.testbase_runner import (
     TestbaseRunnerKind,
 )
@@ -85,6 +88,29 @@ def test_the_test_runner_produces_exactly_the_params_the_contract_records():
     testbase.assert_equal(
         (len(contract["test_run_envelope_params"]) >= 2, produced),
         (True, {case["name"]: case["params"] for case in contract["test_run_envelope_params"]}),
+    )
+    return
+
+
+def test_the_build_trigger_produces_exactly_the_params_and_source_block_the_contract_records():
+    """
+    **Feature: one contract for both sides (E2E-14)**
+    **Property: for each build case in the contract, the params a build trigger puts in the envelope (runner kind, ``runner_inputs`` with the make ``targets``, the environment, and a
+    ``git_url``, ``git_ref`` or ``source_dir`` the inputs name) and the envelope's ``source`` block for a source integration (kind, url, ref, integration id, and a credentials
+    *reference*, never a credential) are the recorded ones, so a renamed key fails here until the contract, and with it the pod, is changed on purpose.**
+    """
+    contract = _contract()
+    digest = contract["build_envelope_digest"]
+    produced: Dict[str, Any] = {}
+    for case in contract["build_envelope_params"]:
+        trigger = case["trigger"]
+        params = build_params_for(inputs=BuildRunInputs(runner_kind=trigger["runner_kind"], runner_inputs=trigger["runner_inputs"], env=trigger["env"]), digest=digest)
+        source = JobSourceRef(**case["source_ref"]) if case["source_ref"] is not None else None
+        produced[case["name"]] = {"params": params, "envelope_source": envelope_canonical._source_to_dict(source=source)}
+
+    testbase.assert_equal(
+        (len(contract["build_envelope_params"]) >= 5, produced),
+        (True, {case["name"]: {"params": case["params"], "envelope_source": case["envelope_source"]} for case in contract["build_envelope_params"]}),
     )
     return
 

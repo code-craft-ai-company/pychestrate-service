@@ -29,6 +29,10 @@ preview tag.
 
 ### Fixed
 
+- **The service-and-pod contract now covers build envelopes (E2E-14).** `specs/contracts/pod-job-contract.json` recorded test runs only; it now records six build cases (a source integration's repository with targets and an
+  environment, a private repository's credentials *reference*, a repository or a directory named in the runner inputs, no source) with what the service puts in the envelope (`build_params_for`, the source block) and what the
+  pod must derive from it (runner kind, make targets, environment, and where the source comes from). Both repositories' tests check their side against the file (`pychestrate-client` 798d074; the service's test fails
+  when the client checkout's copy differs). Developer-facing: nothing a user sees changes.
 - **The Clients page shows a client's runtime version (E2E-18).** The column read "—" for every live client: the heartbeat recorded no version (it passed None) and nothing else did after enrolment. The pod client
   (`pychestrate-client` d4fc230) now sends `X-Pychestrate-Client-Version` on every call, and the heartbeat records it as the client's `last_agent_version` when it is a plausible version string (letters, digits and
   `. _ + -`, at most 64 characters; anything else is ignored, so nothing a pod sends is stored as is). The header is in the OpenAPI heartbeat operation. Verified on the lab pod: the API returns

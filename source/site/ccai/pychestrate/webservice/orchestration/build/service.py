@@ -213,6 +213,35 @@ class BuildRunInputs:
     source_integration_id: Optional[str] = None
 
 
+def build_params_for(*, inputs: BuildRunInputs, digest: str) -> Dict[str, Any]:
+    """
+        The ``params`` of a build job's envelope: what the pod reads its runner kind, make targets (in ``runner_inputs``), environment and
+        source (``runner_inputs.git_url`` / ``source_dir``) from. Kept in one place so the service-and-pod contract
+        (``specs/contracts/pod-job-contract.json``) checks exactly what is sent.
+
+        :param inputs: The caller's build-run inputs.
+        :param digest: The repro digest stamped into the spec.
+
+        :returns: The params map.
+    """
+    rtnval: Dict[str, Any] = {
+        "runner_kind": inputs.runner_kind,
+        "runner_inputs": dict(inputs.runner_inputs),
+        "repro_digest_sha256": digest,
+        "input_files": dict(inputs.input_files),
+        "env": dict(inputs.env),
+        "toolchain": [
+            {
+                "key": entry.key,
+                "version": entry.version,
+                "fingerprint_sha256": entry.fingerprint_sha256,
+            }
+            for entry in inputs.toolchain
+        ],
+    }
+    return rtnval
+
+
 @dataclass(frozen=True)
 class BuildTriggerAspects:
     """
@@ -564,21 +593,7 @@ def _dispatch_build_job(
         job_type=job_type,
     )
 
-    build_spec: Dict[str, Any] = {
-        "runner_kind": inputs.runner_kind,
-        "runner_inputs": dict(inputs.runner_inputs),
-        "repro_digest_sha256": digest,
-        "input_files": dict(inputs.input_files),
-        "env": dict(inputs.env),
-        "toolchain": [
-            {
-                "key": entry.key,
-                "version": entry.version,
-                "fingerprint_sha256": entry.fingerprint_sha256,
-            }
-            for entry in inputs.toolchain
-        ],
-    }
+    build_spec: Dict[str, Any] = build_params_for(inputs=inputs, digest=digest)
 
     soft_deadline = triggered_at + timedelta(
         seconds=aspects.soft_deadline_seconds,
