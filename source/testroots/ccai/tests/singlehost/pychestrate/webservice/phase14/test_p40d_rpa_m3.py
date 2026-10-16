@@ -66,6 +66,7 @@ from ccai.pychestrate.webservice.orchestration.rpa import service as rpa_service
 from ccai.pychestrate.webservice.orchestration.rpa.restapi.v1 import rpa_routes
 from ccai.pychestrate.webservice.webinterface.site_shell import ui_profile
 
+from ccai.pychestrate.webservice.variables import models as _variables_models  # noqa: F401  (the UI profile reads the variables table)
 from ccai.pychestrate.webservice.jobs.run.state import models as _run_state_models  # noqa: F401
 from ccai.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
 from ccai.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401

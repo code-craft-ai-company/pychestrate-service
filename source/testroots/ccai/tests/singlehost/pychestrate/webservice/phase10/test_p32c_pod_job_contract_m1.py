@@ -38,6 +38,7 @@ from ccai.pychestrate.webservice.orchestration.test.catalog.payloads import (
 from ccai.pychestrate.webservice.jobs.envelope import canonical as envelope_canonical
 from ccai.pychestrate.webservice.jobs.envelope.schema import JobSourceRef
 from ccai.pychestrate.webservice.orchestration.build.service import BuildRunInputs, build_params_for
+from ccai.pychestrate.webservice.orchestration.rpa.service import git_source_block, rpa_envelope_params
 from ccai.pychestrate.webservice.orchestration.test.factories.testbase_runner import (
     TestbaseRunnerKind,
 )
@@ -111,6 +112,31 @@ def test_the_build_trigger_produces_exactly_the_params_and_source_block_the_cont
     testbase.assert_equal(
         (len(contract["build_envelope_params"]) >= 5, produced),
         (True, {case["name"]: {"params": case["params"], "envelope_source": case["envelope_source"]} for case in contract["build_envelope_params"]}),
+    )
+    return
+
+
+def test_the_rpa_trigger_produces_exactly_the_params_and_source_block_the_contract_records():
+    """
+    **Feature: one contract for both sides (E2E-14)**
+    **Property: for each RPA case in the contract, the params an RPA trigger puts in the envelope (job type, version, execution mode, the ``source`` map, entrypoint, environment, work packet,
+    timeout, spec) and the structured ``source`` block for a git version (``url#ref`` or ``url@@ref``, a bare url meaning ``main``; none for a directory or a package) are the recorded ones.**
+    """
+    contract = _contract()
+    produced: Dict[str, Any] = {}
+    for case in contract["rpa_envelope_params"]:
+        service = case["service"]
+        params = rpa_envelope_params(
+            type_id=service["type_id"], version=service["version"], execution_mode=service["execution_mode"], source_kind=service["source_kind"], source_ref=service["source_ref"],
+            entrypoint=service["entrypoint"], environment=service["environment"], work_packet=service["work_packet"], packet_digest=service["packet_digest"],
+            timeout_minutes=service["timeout_minutes"], spec_id=service["spec_id"], spec_name=service["spec_name"], spec_revision=service["spec_revision"],
+        )
+        source = git_source_block(source_kind=service["source_kind"], source_ref=service["source_ref"])
+        produced[case["name"]] = {"params": params, "envelope_source": envelope_canonical._source_to_dict(source=source)}
+
+    testbase.assert_equal(
+        (len(contract["rpa_envelope_params"]) >= 6, produced),
+        (True, {case["name"]: {"params": case["params"], "envelope_source": case["envelope_source"]} for case in contract["rpa_envelope_params"]}),
     )
     return
 

@@ -1348,16 +1348,54 @@ def trigger_job(
     return rtnval
 
 
-def _source_ref_for_version(version_row: RpaJobTypeVersion) -> Optional[JobSourceRef]:
+def rpa_envelope_params(
+        *,
+        type_id: str,
+        version: str,
+        execution_mode: str,
+        source_kind: str,
+        source_ref: str,
+        entrypoint: Mapping[str, Any],
+        environment: Mapping[str, Any],
+        work_packet: Mapping[str, Any],
+        packet_digest: str,
+        timeout_minutes: int,
+        spec_id: Optional[str],
+        spec_name: str,
+        spec_revision: int
+    ) -> Dict[str, Any]:
     """
-        Build the structured envelope ``source`` block for a git
-        version (``url#ref`` or ``url@ref``; bare url means ``main``).
-        Non-git sources carry no ``source`` block -- the payload's
-        ``source`` map describes them.
+        The ``params`` of an RPA job's envelope: what the pod reads the job type, the execution mode, where its code comes from, the
+        entrypoint, the environment, the work packet and the timeout from. Kept in one place so the service-and-pod contract
+        (``specs/contracts/pod-job-contract.json``) checks exactly what is sent.
+
+        :returns: The params map.
     """
-    if version_row.source_kind != RpaSourceKind.GIT:
+    rtnval: Dict[str, Any] = {
+        "type_id": type_id,
+        "version": version,
+        "execution_mode": execution_mode,
+        "source": {"kind": source_kind, "ref": source_ref},
+        "entrypoint": dict(entrypoint or {}),
+        "environment": dict(environment or {}),
+        "work_packet": dict(work_packet),
+        "packet_digest": packet_digest,
+        "timeout_minutes": timeout_minutes,
+        "spec_id": spec_id,
+        "spec_name": spec_name,
+        "spec_revision": spec_revision,
+    }
+    return rtnval
+
+
+def git_source_block(*, source_kind: str, source_ref: str) -> Optional[JobSourceRef]:
+    """
+        The structured envelope ``source`` block for a git version (``url#ref`` or ``url@@ref``; a bare url means ``main``); None for a
+        version whose code is a package or a directory on the pod (the params' ``source`` map describes those).
+    """
+    if source_kind != RpaSourceKind.GIT.value:
         return None
-    text = str(version_row.source_ref or "").strip()
+    text = str(source_ref or "").strip()
     if len(text) == 0:
         return None
     url = text
@@ -1367,6 +1405,14 @@ def _source_ref_for_version(version_row: RpaJobTypeVersion) -> Optional[JobSourc
             url, ref = text.rsplit(separator, 1)
             break
     rtnval = JobSourceRef(kind="git", url=url, ref=ref or "main", integration_id="", credentials_ref="")
+    return rtnval
+
+
+def _source_ref_for_version(version_row: RpaJobTypeVersion) -> Optional[JobSourceRef]:
+    """
+        The structured envelope ``source`` block for a version (see :func:`git_source_block`).
+    """
+    rtnval = git_source_block(source_kind=version_row.source_kind.value, source_ref=str(version_row.source_ref or ""))
     return rtnval
 
 
@@ -1405,20 +1451,21 @@ def _dispatch_rpa_job(
     )
 
     source_ref = _source_ref_for_version(version_row)
-    payload: Dict[str, Any] = {
-        "type_id": type_row.type_id,
-        "version": version_row.version,
-        "execution_mode": type_row.execution_mode.value,
-        "source": {"kind": version_row.source_kind.value, "ref": version_row.source_ref},
-        "entrypoint": dict(version_row.entrypoint or {}),
-        "environment": dict(version_row.environment or {}),
-        "work_packet": merged_packet,
-        "packet_digest": digest,
-        "timeout_minutes": timeout_minutes,
-        "spec_id": str(job_row.spec_id) if job_row.spec_id is not None else None,
-        "spec_name": job_row.spec_name,
-        "spec_revision": job_row.spec_revision,
-    }
+    payload: Dict[str, Any] = rpa_envelope_params(
+        type_id=type_row.type_id,
+        version=version_row.version,
+        execution_mode=type_row.execution_mode.value,
+        source_kind=version_row.source_kind.value,
+        source_ref=version_row.source_ref,
+        entrypoint=version_row.entrypoint or {},
+        environment=version_row.environment or {},
+        work_packet=merged_packet,
+        packet_digest=digest,
+        timeout_minutes=timeout_minutes,
+        spec_id=str(job_row.spec_id) if job_row.spec_id is not None else None,
+        spec_name=job_row.spec_name,
+        spec_revision=job_row.spec_revision,
+    )
 
     triggered_at = utc_now()
     soft_deadline = triggered_at + timedelta(
