@@ -1,7 +1,7 @@
 """
-.. module:: test_global_variable_store_serialization
+.. module:: test_system_variable_values_serialization
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Property tests for GlobalVariableStore serialization round-trip
+    :synopsis: Property tests for SystemVariableStore serialization round-trip
 
 .. moduleauthor:: Code Craft AI LLC
 
@@ -23,7 +23,7 @@ import string
 import json
 
 from ccai.pychestrate.core.orm import VariableType
-from ccai.pychestrate.core.managers.global_variable_store import (
+from ccai.pychestrate.webservice.variables.system_store import (
     serialize_value,
     deserialize_value,
     validate_value,

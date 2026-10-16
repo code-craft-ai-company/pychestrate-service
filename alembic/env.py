@@ -22,7 +22,7 @@ through to a production deploy:
   feature module's own tables) AND
   :data:`PychestrateModelBase.metadata` (the legacy ``core.orm``
   models -- ``user``, ``password_history``, ``sessions``,
-  ``global_variables``, ``permissions``, ``system_roles``, …).
+  ``projects``, ``permissions``, ``system_roles``, …).
   Alembic accepts a ``Sequence[MetaData]`` here and treats the
   union as a single schema target.
 
@@ -112,7 +112,7 @@ from ccai.pychestrate.webservice.persistence.schema import (  # noqa: E402
 )
 # Importing ``core.orm`` registers the legacy ``user`` /
 # ``password_history`` / ``sessions`` / ``permissions`` /
-# ``system_roles`` / ``global_variables`` (etc.) tables on
+# ``system_roles`` / ``projects`` (etc.) tables on
 # ``PychestrateModelBase.metadata``. Alembic walks both bases.
 from ccai.pychestrate.core.orm import (  # noqa: E402
     PychestrateModelBase,

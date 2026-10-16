@@ -812,61 +812,13 @@ class PasswordHistory(PychestrateModelBase, SerializableModel):
 
 class VariableType(str, enum.Enum):
     """
-        Enum-like class to represent the supported types for global variables.
+        Enum-like class to represent the supported types for variables.
     """
     STRING = 'string'
     INTEGER = 'integer'
     FLOAT = 'float'
     BOOLEAN = 'boolean'
     JSON = 'json'
-
-
-class GlobalVariable(PychestrateModelBase, SerializableModel):
-    """
-        A data model for storing system-wide configuration variables.
-        Variables are stored with type information and JSON-encoded values.
-    """
-    __tablename__ = 'global_variables'
-
-    id = Column('gvar_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
-    name = Column('gvar_name', VARCHAR(128), unique=True, nullable=False, index=True,
-                  doc="Unique name for the global variable")
-    value_json = Column('gvar_value_json', Text, nullable=False,
-                        doc="JSON-encoded value of the variable")
-    var_type = Column('gvar_type', VARCHAR(16), nullable=False,
-                      doc="Type of the variable (string, integer, float, boolean, json)")
-    description = Column('gvar_description', VARCHAR(512), nullable=True,
-                         doc="Human-readable description of the variable's purpose")
-    default_value_json = Column('gvar_default_value_json', Text, nullable=True,
-                                doc="JSON-encoded default value for the variable")
-    created_at = Column('gvar_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
-                        doc="Timestamp when the variable was created")
-    updated_at = Column('gvar_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
-                        doc="Timestamp when the variable was last updated")
-    updated_by_id = Column('gvar_updated_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
-                           doc="Reference to the user who last updated this variable")
-
-
-class GlobalVariableHistory(PychestrateModelBase, SerializableModel):
-    """
-        A data model for tracking changes to global variables.
-        Provides an audit trail of all variable modifications.
-    """
-    __tablename__ = 'global_variable_history'
-
-    id = Column('gvarhist_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
-    variable_id = Column('gvarhist_variable_id', BigInteger, ForeignKey('global_variables.gvar_id'), nullable=False, index=True,
-                         doc="Reference to the global variable")
-    variable_name = Column('gvarhist_variable_name', VARCHAR(128), nullable=False,
-                           doc="Denormalized variable name for history after deletion")
-    old_value_json = Column('gvarhist_old_value_json', Text, nullable=True,
-                            doc="JSON-encoded previous value")
-    new_value_json = Column('gvarhist_new_value_json', Text, nullable=True,
-                            doc="JSON-encoded new value")
-    changed_by_id = Column('gvarhist_changed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
-                           doc="Reference to the user who made the change")
-    changed_at = Column('gvarhist_changed_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
-                        doc="Timestamp when the change was made")
 
 
 class SecretType(str, enum.Enum):

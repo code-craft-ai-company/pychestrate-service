@@ -25,6 +25,7 @@ import string
 from ccai.testbase.mocking import Mock
 
 from ccai.pychestrate.core.managers.project_manager import ProjectManager
+from ccai.pychestrate.webservice.variables.models import VariableValueType
 
 
 # =============================================================================
@@ -50,15 +51,14 @@ def create_mock_project_variable(var_id, name, value, var_type='string'):
 
 
 def create_mock_global_variable(var_id, name, value, var_type='string'):
-    """Create a mock global variable object."""
+    """Create a mock SYSTEM-scope variable binding (the modern store's row; string values only)."""
     mock_var = Mock()
     mock_var.configure(recursive=True)
     ctx = mock_var.mock_context()
     ctx.set_attribute('id', var_id)
     ctx.set_attribute('name', name)
-    ctx.set_attribute('value_json', json.dumps(value))
-    ctx.set_attribute('var_type', var_type)
-    ctx.set_attribute('is_sensitive', False)
+    ctx.set_attribute('value_type', VariableValueType.STRING)
+    ctx.set_attribute('value_text', value)
     return mock_var
 
 
@@ -68,7 +68,7 @@ def create_mock_session_for_variable_resolution(project_var=None, global_var=Non
     
     Query flow for resolve_variable:
     1. Query ProjectVariable to check project scope
-    2. Query GlobalVariable to check global scope (only if project var not found)
+    2. Query the SYSTEM-scope variable bindings (only if project var not found)
     """
     mock_session = Mock()
     mock_session.configure(recursive=True)

@@ -12,7 +12,6 @@ __credits__ = []
 __version__ = "1.0.0"
 
 from ccai.pychestrate.core.managers.user_manager import UserManager
-from ccai.pychestrate.core.managers.global_variable_store import GlobalVariableStore
 from ccai.pychestrate.core.managers.resource_manager import ResourceManager
 from ccai.pychestrate.core.managers.ip_pool_manager import IPPoolManager
 from ccai.pychestrate.core.managers.allocation_manager import AllocationManager
@@ -27,7 +26,6 @@ from ccai.pychestrate.core.managers.watch_manager import WatchManager
 
 __all__ = [
     "UserManager",
-    "GlobalVariableStore",
     "ResourceManager",
     "IPPoolManager",
     "AllocationManager",

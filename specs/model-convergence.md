@@ -172,3 +172,27 @@ store their secrets in the vault, and the secret pickers the forms offer list va
    choice, afterwards, on the same page). The legacy description and type are not carried (the vault records neither).
 4. **Then the pages become read-only, then go** (step 2 and step 3, not part of this step): creating a legacy secret or scope is refused with a pointer to the vault; the pages and their
    tables are removed once the import has run everywhere.
+
+## 10. The legacy variable and secret stores removed (ADM-08 #367 and ADM-07 #366), step 3
+
+**State checked 2026-10-16 on staging (a copy of the database, read-only, every row listed).** `global_variables` and `global_variable_history` hold 0 rows. The legacy
+secrets hold 18 scopes and 12 secrets: all 12 secrets are soft-deleted leftovers of the August browser tests (`brsct…`, `brsdl…`, `brsed…`), and no scope holds a live secret
+(`company` and `ci-verify-…` are empty). Nothing of value is in any legacy table, and the real secret (`company/github`) is in the vault. Deleting them loses test leftovers only.
+
+**Decisions.**
+
+1. **Variables.** What `SystemVariableStore` inherited from the legacy `GlobalVariableStore` (the value checks, the parsing of typed text, the request and response types, the errors)
+   moves into `variables/system_store.py`, and the legacy class goes. The request and response types are renamed `SystemVariable*`: "Global" described a table that is gone.
+   `VariableType` stays in `core.orm` (project variables use it). `ProjectManager.resolve_variable` is the one other reader of the legacy table (no product code calls it, but it would
+   have started returning nothing): its global fallback reads the SYSTEM bindings of the modern store.
+2. **Secrets: the read-only step is skipped.** Step 2 (pages read-only) protected a transition nobody is in: the import has been available since step 1 and there is nothing left to import.
+   The legacy pages (Admin, Secrets (legacy); Secret Scopes (legacy)), their templates, menu entries, the import route, `legacy_import.py` and `SecretManager` are removed together. So is
+   `RepositoryManager`'s optional `secret_manager` fallback, which no builder ever configured.
+3. **The tables are dropped by migrations that refuse to destroy live data.** The variable tables are dropped outright (the copy into the modern store ran in `f7b2c9a4d1e6`, earlier in
+   the same chain, so any database that reaches the drop has been copied). The secret tables are dropped only when no *live* (not soft-deleted) legacy secret exists; otherwise the
+   migration stops before changing anything, naming the count and saying to deploy the previous release, run *Import into the vault*, and upgrade again. Soft-deleted secrets and empty scopes
+   are dropped: nothing can read them. The downgrades recreate the tables empty, so a rollback to the previous release starts (the data is not restored: restore it from the pre-deploy backup).
+4. **Backup first.** The pre-deploy backup (`pychestrate-backup.service`) runs before each of the two deploys; the staging rows were listed before the change.
+
+**Not part of this step.** RPA taking secret values inline in the packet (the audit's second example for #366) is a separate finding. PROJECT-, PIPELINE- and JOB-scope variables on the
+Admin page, and a cross-worker invalidation for the effective-value cache, stay as the #367 comment lists them.

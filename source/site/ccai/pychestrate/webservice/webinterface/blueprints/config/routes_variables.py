@@ -21,7 +21,7 @@ The global-variable routes served under the config blueprint:
 Variable values are typed via the :class:`VariableType` enum
 (``string`` / ``integer`` / ``float`` / ``boolean`` / ``json``).
 The form's raw ``value`` string is parsed via
-:meth:`GlobalVariableStore.parse_value_from_string` -- which the
+:meth:`SystemVariableStore.parse_value_from_string` -- which the
 manager owns and the routes module just dispatches to.
 """
 
@@ -162,7 +162,7 @@ def _resolve_variable_type(*, var_type_str: str) -> Any:
         :returns: VariableType enum value.
         :raises: ValueError on unknown type.
     """
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
         VariableType,
     )
     rtnval = VariableType(var_type_str)
@@ -178,12 +178,12 @@ def _build_variable_create_request(
         default_value: Any
     ) -> Any:
     """
-        Construct a :class:`GlobalVariableCreateRequest`. Lazy-import.
+        Construct a :class:`SystemVariableCreateRequest`. Lazy-import.
     """
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
-        GlobalVariableCreateRequest,
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
+        SystemVariableCreateRequest,
     )
-    rtnval = GlobalVariableCreateRequest(
+    rtnval = SystemVariableCreateRequest(
         name=name,
         value=value,
         var_type=var_type,
@@ -199,12 +199,12 @@ def _build_variable_update_request(
         description: Optional[str]
     ) -> Any:
     """
-        Construct a :class:`GlobalVariableUpdateRequest`. Lazy-import.
+        Construct a :class:`SystemVariableUpdateRequest`. Lazy-import.
     """
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
-        GlobalVariableUpdateRequest,
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
+        SystemVariableUpdateRequest,
     )
-    rtnval = GlobalVariableUpdateRequest(
+    rtnval = SystemVariableUpdateRequest(
         value=value,
         description=description,
     )
@@ -365,7 +365,7 @@ def _variable_field_errors(*, exc: BaseException, default_field: Optional[str] =
 
         :returns: One entry, or an empty dict.
     """
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
         DuplicateVariableError,
         TypeValidationError,
         VariableValidationError,
@@ -511,13 +511,13 @@ def handle_variable_create(request: Request) -> Response:
 
         try:
             if VARIABLE_NAME_PATTERN.match(name) is None:
-                from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+                from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
                     VariableValidationError,
                 )
                 raise VariableValidationError(VARIABLE_NAME_RULE, field="name")
             reserved_owner = system_owner_of(name)
             if reserved_owner is not None:
-                from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+                from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
                     VariableValidationError,
                 )
                 raise VariableValidationError(system_owned_message(name, reserved_owner), field="name")

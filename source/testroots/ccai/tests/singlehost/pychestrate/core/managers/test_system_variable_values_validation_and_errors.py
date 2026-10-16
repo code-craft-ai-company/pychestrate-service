@@ -1,7 +1,7 @@
 """
-.. module:: test_global_variable_store_crud
+.. module:: test_system_variable_values_validation_and_errors
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Tests for GlobalVariableStore CRUD operations
+    :synopsis: Tests for the system variable value checks, the typed-text parsing and the errors
 
 .. moduleauthor:: Code Craft AI LLC
 
@@ -18,10 +18,10 @@ __version__ = "1.0.0"
 
 
 from ccai.pychestrate.core.orm import VariableType
-from ccai.pychestrate.core.managers.global_variable_store import (
-    GlobalVariableStore,
-    GlobalVariableCreateRequest,
-    GlobalVariableUpdateRequest,
+from ccai.pychestrate.webservice.variables.system_store import (
+    SystemVariableStore,
+    SystemVariableCreateRequest,
+    SystemVariableUpdateRequest,
     VariableValidationError,
     VariableNotFoundError,
     DuplicateVariableError,
@@ -72,7 +72,7 @@ def test_validate_value_string_accepts_strings():
     String type should accept string values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value("hello", VariableType.STRING) is True
     assert store.validate_value("", VariableType.STRING) is True
@@ -87,7 +87,7 @@ def test_validate_value_string_rejects_non_strings():
     String type should reject non-string values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(123, VariableType.STRING) is False
     assert store.validate_value(True, VariableType.STRING) is False
@@ -102,7 +102,7 @@ def test_validate_value_integer_accepts_integers():
     Integer type should accept integer values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(42, VariableType.INTEGER) is True
     assert store.validate_value(0, VariableType.INTEGER) is True
@@ -117,7 +117,7 @@ def test_validate_value_integer_rejects_booleans():
     Integer type should reject boolean values (even though bool is subclass of int).
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(True, VariableType.INTEGER) is False
     assert store.validate_value(False, VariableType.INTEGER) is False
@@ -131,7 +131,7 @@ def test_validate_value_float_accepts_floats_and_ints():
     Float type should accept float and integer values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(3.14, VariableType.FLOAT) is True
     assert store.validate_value(42, VariableType.FLOAT) is True
@@ -146,7 +146,7 @@ def test_validate_value_float_rejects_booleans():
     Float type should reject boolean values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(True, VariableType.FLOAT) is False
     assert store.validate_value(False, VariableType.FLOAT) is False
@@ -160,7 +160,7 @@ def test_validate_value_boolean_accepts_booleans():
     Boolean type should accept boolean values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(True, VariableType.BOOLEAN) is True
     assert store.validate_value(False, VariableType.BOOLEAN) is True
@@ -174,7 +174,7 @@ def test_validate_value_boolean_rejects_non_booleans():
     Boolean type should reject non-boolean values.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value(1, VariableType.BOOLEAN) is False
     assert store.validate_value(0, VariableType.BOOLEAN) is False
@@ -189,7 +189,7 @@ def test_validate_value_json_accepts_json_serializable():
     JSON type should accept any JSON-serializable value.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     assert store.validate_value({"key": "value"}, VariableType.JSON) is True
     assert store.validate_value([1, 2, 3], VariableType.JSON) is True
@@ -206,7 +206,7 @@ def test_validate_value_accepts_none_for_all_types():
     None should be valid for all variable types.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     for var_type in VariableType:
         assert store.validate_value(None, var_type) is True, \
@@ -225,7 +225,7 @@ def test_serialize_and_deserialize_string():
     String values should serialize and deserialize correctly.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     original = "Hello, World!"
     serialized = store.serialize_value(original, VariableType.STRING)
@@ -242,7 +242,7 @@ def test_serialize_and_deserialize_integer():
     Integer values should serialize and deserialize correctly.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     original = 42
     serialized = store.serialize_value(original, VariableType.INTEGER)
@@ -259,7 +259,7 @@ def test_serialize_and_deserialize_float():
     Float values should serialize and deserialize correctly.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     original = 3.14159
     serialized = store.serialize_value(original, VariableType.FLOAT)
@@ -276,7 +276,7 @@ def test_serialize_and_deserialize_boolean():
     Boolean values should serialize and deserialize correctly.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     for original in [True, False]:
         serialized = store.serialize_value(original, VariableType.BOOLEAN)
@@ -293,7 +293,7 @@ def test_serialize_and_deserialize_json():
     JSON values should serialize and deserialize correctly.
     """
     mock_session = create_mock_session()
-    store = GlobalVariableStore(mock_session)
+    store = SystemVariableStore(mock_session)
     
     original = {"key": "value", "nested": {"list": [1, 2, 3]}}
     serialized = store.serialize_value(original, VariableType.JSON)

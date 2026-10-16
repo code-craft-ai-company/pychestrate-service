@@ -36,7 +36,7 @@ The deployment profile
 
 An administrator sets the deployment-wide default at
 ``/admin/ui-profile`` (permission ``system:ui.profile.manage``). The
-selection is stored as the global variable ``ui.profile.surfaces``. At
+selection is stored as the system variable ``ui.profile.surfaces``. At
 least one surface must stay enabled. Saving takes effect on the next
 page load for everyone and is recorded in the audit log.
 

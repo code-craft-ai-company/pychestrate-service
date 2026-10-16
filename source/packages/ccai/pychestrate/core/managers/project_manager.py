@@ -1919,7 +1919,7 @@ class ProjectManager:
     
     def resolve_variable(self, project_id: int, name: str) -> Any:
         """
-        Resolve variable value, checking project then global scope.
+        Resolve variable value, checking project then system scope.
         
         :param project_id: The project's unique identifier
         :param name: The variable name to resolve
@@ -1927,7 +1927,10 @@ class ProjectManager:
         
         Validates: Requirements 11.5
         """
-        from ccai.pychestrate.core.orm import ProjectVariable, GlobalVariable
+        from ccai.pychestrate.core.orm import ProjectVariable
+        from ccai.pychestrate.webservice.variables import service as variable_service
+        from ccai.pychestrate.webservice.variables.models import VariableBinding, VariableScope
+        from ccai.pychestrate.webservice.variables.system_store import SYSTEM_SCOPE_ID
         
         # First check project variables
         project_var = self._db_session.query(ProjectVariable).filter(
@@ -1938,14 +1941,16 @@ class ProjectManager:
         if project_var:
             return deserialize_variable_value(project_var.value_json, project_var.var_type)
         
-        # Then check global variables
-        global_var = self._db_session.query(GlobalVariable).filter(
-            GlobalVariable.name == name
+        # Then the system variables: the SYSTEM-scope bindings the runtime and the Admin Variables pages share
+        system_var = self._db_session.query(VariableBinding).filter(
+            VariableBinding.scope == VariableScope.SYSTEM,
+            VariableBinding.scope_id == SYSTEM_SCOPE_ID,
+            VariableBinding.name == name,
         ).first()
-        
-        if global_var:
-            return deserialize_variable_value(global_var.value_json, global_var.var_type)
-        
+
+        if system_var:
+            return variable_service.decode_binding_value(binding=system_var)
+
         return None
 
     

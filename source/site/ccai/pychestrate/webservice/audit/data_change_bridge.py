@@ -88,7 +88,6 @@ _EXCLUDED_TABLES = frozenset((
     "user",
     "permissions",
     "system_roles",
-    "global_variable_history",
     "secret_versions",
     "health_transition_logs",
     "resource_metadata_history",
@@ -164,7 +163,6 @@ _LABEL_ATTRIBUTES = (
 
 _ENTITY_NAMES = {
     "allocations": "allocation",
-    "global_variables": "variable",
     "health_check_configs": "health check",
     "ip_allocations": "IP allocation",
     "ip_pools": "IP pool",

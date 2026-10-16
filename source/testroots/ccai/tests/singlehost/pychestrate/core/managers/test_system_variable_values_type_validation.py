@@ -1,7 +1,7 @@
 """
-.. module:: test_global_variable_store_type_validation
+.. module:: test_system_variable_values_type_validation
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Property tests for GlobalVariableStore type validation
+    :synopsis: Property tests for SystemVariableStore type validation
 
 .. moduleauthor:: Code Craft AI LLC
 
@@ -22,7 +22,7 @@ import random
 import string
 
 from ccai.pychestrate.core.orm import VariableType
-from ccai.pychestrate.core.managers.global_variable_store import validate_value
+from ccai.pychestrate.webservice.variables.system_store import validate_value
 
 
 # =============================================================================

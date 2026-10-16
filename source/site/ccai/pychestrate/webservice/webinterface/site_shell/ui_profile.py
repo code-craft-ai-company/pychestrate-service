@@ -402,9 +402,9 @@ def set_deployment_surfaces(*, db_session: Any, surfaces: Iterable[Any], actor_i
     if len(parsed) == 0:
         raise ValueError("At least one surface must stay enabled.")
 
-    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
-        GlobalVariableCreateRequest,
-        GlobalVariableUpdateRequest,
+    from ccai.pychestrate.webservice.variables.system_store import (  # noqa: E402
+        SystemVariableCreateRequest,
+        SystemVariableUpdateRequest,
     )
     from ccai.pychestrate.core.orm import VariableType  # noqa: E402
     from ccai.pychestrate.webservice.variables.system_store import SystemVariableStore  # noqa: E402
@@ -414,7 +414,7 @@ def set_deployment_surfaces(*, db_session: Any, surfaces: Iterable[Any], actor_i
     existing = store.get_variable(DEPLOYMENT_VARIABLE_NAME)
     if existing is None:
         store.create_variable(
-            GlobalVariableCreateRequest(
+            SystemVariableCreateRequest(
                 name=DEPLOYMENT_VARIABLE_NAME,
                 value=value,
                 var_type=VariableType.JSON,
@@ -426,7 +426,7 @@ def set_deployment_surfaces(*, db_session: Any, surfaces: Iterable[Any], actor_i
     else:
         store.update_variable(
             DEPLOYMENT_VARIABLE_NAME,
-            GlobalVariableUpdateRequest(value=value),
+            SystemVariableUpdateRequest(value=value),
             user_id=actor_id,
         )
     invalidate_deployment_cache()

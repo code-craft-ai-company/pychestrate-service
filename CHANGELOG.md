@@ -29,6 +29,13 @@ preview tag.
 
 ### Fixed
 
+- **The legacy global-variables store is removed (ADM-08, step 3 of 3 for variables).** The Admin, Variables pages and the runtime have read and written one store since the last step; the old `global_variables` and
+  `global_variable_history` tables, the `GlobalVariable` / `GlobalVariableHistory` models and the `GlobalVariableStore` class are now gone. Nothing you see changes: the pages are the same, on the same data. What the
+  page store kept of the old class (the value checks, the parsing of typed text, the request and response types, the errors) lives in `variables/system_store.py`, and the types are named `SystemVariable*`.
+  `ProjectManager.resolve_variable`, which still read the old table for its global fallback (nothing in the product calls it, but it would have gone on returning nothing), reads the system variables. Migration
+  `b4d6f8a0c2e5` drops the two tables (the earlier migration had already copied their rows; staging held none); its downgrade recreates them empty. The unit tests of the old class that checked values and
+  errors now run against the new module, the two that used mocked sessions are replaced by tests on a real database (`get_value` defaults, the project fallback), and the migration of `f7b2c9a4d1e6` is tested against
+  hand-written legacy tables. The design and the staging row inspection are in `specs/model-convergence.md` section 10.
 - **The service-and-pod contract now covers build, RPA and provisioning envelopes (E2E-14).** `specs/contracts/pod-job-contract.json` recorded test runs only. It now also records three terraform provisioning cases (a plan; an apply with a var file, parallelism and a backend; a destroy with an environment overlay, built by `provision_params_for` and accepted by the service's driver), six build cases (a source integration's repository
   with targets and an environment, a private repository's credentials *reference*, a repository or a directory named in the runner inputs, no source) and six RPA cases (a process job from a git tag, from a url with no
   ref, from a directory on the pod and from an installed package; a tasker job running a workflow file and one running a tasking), each with what the service puts in the envelope (`build_params_for`,

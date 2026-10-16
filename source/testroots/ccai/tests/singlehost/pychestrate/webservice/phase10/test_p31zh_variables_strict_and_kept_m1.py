@@ -33,7 +33,7 @@ from typing import Dict
 
 from ccai import testbase
 
-from ccai.pychestrate.core.managers.global_variable_store import GlobalVariableStore, VariableType
+from ccai.pychestrate.webservice.variables.system_store import SystemVariableStore, VariableType
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import format_variable_value
 
 from ccai.tests.singlehost.pychestrate.webservice.phase10._adm_helpers import (
@@ -62,7 +62,7 @@ def test_only_true_and_false_are_booleans():
     (and with spaces around), and refuses "yes", "no", "on", "off", "1",
     "0" and a typo, saying to use true or false.**
     """
-    store = GlobalVariableStore(None)
+    store = SystemVariableStore(None)
     accepted = [store.parse_value_from_string(text, VariableType.BOOLEAN) for text in ("true", "FALSE", " True ")]
     refused = []
     for text in ("yes", "no", "on", "off", "1", "0", "ture", ""):
@@ -191,7 +191,7 @@ def test_integers_and_floats_are_read_strictly():
     trims spaces) but not "1_000" or "4.5"; a float takes decimals and
     exponents but not "inf", "nan" or "1_0.5".**
     """
-    store = GlobalVariableStore(None)
+    store = SystemVariableStore(None)
 
     def outcome(text: str, kind: VariableType) -> object:
         try:

@@ -292,7 +292,6 @@ Manager                           Imports
 ``user_manager``                               5
 ``secret_manager``                             5
 ``ip_pool_manager``                            5
-``global_variable_store``                      4
 ``build_manager``                              4
 ``test_manager``                               2
 ``release_manager``                            2
@@ -325,7 +324,7 @@ The 21 consumer files cluster as:
 Each of these imports a domain-specific manager that wraps a
 chunk of the legacy ``core.orm`` schema (``Project``,
 ``Repository``, ``Resource``, ``Allocation``, ``IPPool``,
-``HealthCheckConfig``, ``GlobalVariable``, ``User``,
+``HealthCheckConfig``, ``ProjectVariable``, ``User``,
 ``SystemRole``, etc.). Migrating them off ``core.managers``
 requires a modern-stack equivalent for each manager **and** a
 data-layer story for each domain.

@@ -5,10 +5,10 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The Admin Variables pages used to write the legacy ``global_variables`` table, which nothing in the runtime reads: a variable created there did nothing, and one set
-through ``/api/v1/variables`` never appeared there. :class:`SystemVariableStore` has the legacy :class:`GlobalVariableStore`'s interface (it *is* one: it inherits
-the type checks and the parsing of typed text, and raises the same errors, so the page's handlers, templates and field-level messages are untouched) but keeps
-its variables where the runtime looks: the SYSTEM-scope bindings of ``variables_variable_bindings``, with their history in ``variables_binding_history``.
+The Admin Variables pages used to write the legacy ``global_variables`` table, which nothing in the runtime read: a variable created there did nothing, and one set
+through ``/api/v1/variables`` never appeared there. :class:`SystemVariableStore` keeps the pages' variables where the runtime looks: the SYSTEM-scope bindings of
+``variables_variable_bindings``, with their history in ``variables_binding_history``. The legacy store and its tables are gone (``specs/model-convergence.md`` section 10); this module holds
+what the pages kept of it: the value checks, the parsing of typed text, the request and response types and the errors.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -17,22 +17,15 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
+import re
+
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, List, Optional
 
 from sqlalchemy import or_
 
-from ccai.pychestrate.core.managers.global_variable_store import (
-    DuplicateVariableError,
-    GlobalVariableCreateRequest,
-    GlobalVariableListResponse,
-    GlobalVariableResponse,
-    GlobalVariableStore,
-    GlobalVariableUpdateRequest,
-    TypeValidationError,
-    VariableChangeLog,
-    VariableNotFoundError,
-    VariableValidationError,
-)
 from ccai.pychestrate.core.orm import VariableType
 from ccai.pychestrate.webservice.variables import service as variable_service
 from ccai.pychestrate.webservice.variables.exceptions import InvalidVariableValueError
@@ -46,6 +39,179 @@ from ccai.pychestrate.webservice.variables.models import (
 
 #: Global variables are the SYSTEM scope, whose scope id is empty.
 SYSTEM_SCOPE_ID: str = ""
+
+
+# =============================================================================
+# Request/Response dataclasses, errors and value helpers
+# =============================================================================
+
+_INTEGER_TEXT = re.compile(r"^[+-]?\d+\Z")
+_FLOAT_TEXT = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\Z")
+
+
+# =============================================================================
+# Request/Response Dataclasses
+# =============================================================================
+
+@dataclass
+class SystemVariableCreateRequest:
+    """Request dataclass for creating a new system variable."""
+    name: str
+    value: Any
+    var_type: VariableType
+    description: str = ""
+    default_value: Any = None
+
+
+@dataclass
+class SystemVariableUpdateRequest:
+    """Request dataclass for updating an existing system variable."""
+    value: Any
+    description: Optional[str] = None
+
+
+@dataclass
+class SystemVariableResponse:
+    """Response dataclass for system variable data."""
+    id: int
+    name: str
+    value: Any
+    var_type: VariableType
+    description: str
+    default_value: Any
+    created_at: datetime
+    updated_at: datetime
+    updated_by: Optional[str]
+
+
+@dataclass
+class SystemVariableListResponse:
+    """Response dataclass for paginated system variable list."""
+    variables: List[SystemVariableResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass
+class VariableChangeLog:
+    """Dataclass for variable change history entry."""
+    id: int
+    variable_name: str
+    old_value: Any
+    new_value: Any
+    changed_by: Optional[str]
+    changed_at: datetime
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+
+class VariableValidationError(Exception):
+    """Exception raised when variable validation fails."""
+
+    def __init__(self, message: str, field: str = None):
+        self.message = message
+        self.field = field
+        super().__init__(self.message)
+
+
+class VariableNotFoundError(Exception):
+    """Exception raised when a variable is not found."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+
+class DuplicateVariableError(Exception):
+    """Exception raised when attempting to create a variable with duplicate name."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+
+class TypeValidationError(Exception):
+    """Exception raised when value type validation fails."""
+
+    def __init__(self, message: str, expected_type: str = None, actual_type: str = None):
+        self.message = message
+        self.expected_type = expected_type
+        self.actual_type = actual_type
+        super().__init__(self.message)
+
+
+# =============================================================================
+# Type Validation and Serialization Functions
+# =============================================================================
+
+def validate_value(value: Any, var_type: VariableType) -> bool:
+    """
+    Validate that a value matches the expected variable type.
+
+    :param value: The value to validate
+    :param var_type: The expected variable type
+    :returns: True if valid, False otherwise
+    """
+    if value is None:
+        return True  # None is valid for all types
+
+    if var_type == VariableType.STRING:
+        return isinstance(value, str)
+
+    elif var_type == VariableType.INTEGER:
+        # Accept int but not bool (bool is subclass of int in Python)
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    elif var_type == VariableType.FLOAT:
+        # Accept int or float but not bool
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    elif var_type == VariableType.BOOLEAN:
+        return isinstance(value, bool)
+
+    elif var_type == VariableType.JSON:
+        # JSON type accepts any JSON-serializable value
+        try:
+            json.dumps(value)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    return False
+
+
+def serialize_value(value: Any, var_type: VariableType) -> str:
+    """
+    Serialize a value to JSON string for storage.
+
+    :param value: The value to serialize
+    :param var_type: The variable type
+    :returns: JSON-encoded string
+    """
+    return json.dumps(value)
+
+
+def deserialize_value(json_str: str, var_type: VariableType) -> Any:
+    """
+    Deserialize a JSON string to a typed value.
+
+    :param json_str: The JSON-encoded string
+    :param var_type: The expected variable type
+    :returns: The deserialized value
+    """
+    if json_str is None:
+        return None
+
+    value = json.loads(json_str)
+
+    # For float type, ensure we return a float even if stored as int
+    if var_type == VariableType.FLOAT and isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+
+    return value
 
 
 def _modern_type(var_type: VariableType) -> VariableValueType:
@@ -64,16 +230,106 @@ def _page_type(value_type: VariableValueType) -> VariableType:
     return VariableType(value_type.value.lower())
 
 
-class SystemVariableStore(GlobalVariableStore):
+class SystemVariableStore:
     """
-        The legacy store's interface over the modern variables service.
+        The Admin Variables pages' store: the SYSTEM-scope variables of the modern variables service.
     """
+
+    def __init__(self, db_session: Any):
+        """
+            :param db_session: SQLAlchemy session (``None`` is fine for the pure value helpers).
+        """
+        self._db_session = db_session
+
+    # ------------------------------------------------------------------
+    # Value checks and typed text
+    # ------------------------------------------------------------------
+
+    def validate_value(self, value: Any, var_type: VariableType) -> bool:
+        """
+        Validate that a value matches the expected variable type.
+
+        :param value: The value to validate
+        :param var_type: The expected variable type
+        :returns: True if valid, False otherwise
+        """
+        return validate_value(value, var_type)
+
+    def serialize_value(self, value: Any, var_type: VariableType) -> str:
+        """
+        Serialize a value to JSON string for storage.
+
+        :param value: The value to serialize
+        :param var_type: The variable type
+        :returns: JSON-encoded string
+        """
+        return serialize_value(value, var_type)
+
+    def deserialize_value(self, json_str: str, var_type: VariableType) -> Any:
+        """
+        Deserialize a JSON string to a typed value.
+
+        :param json_str: The JSON-encoded string
+        :param var_type: The expected variable type
+        :returns: The deserialized value
+        """
+        return deserialize_value(json_str, var_type)
+
+    def parse_value_from_string(self, value_str: str, var_type: VariableType) -> Any:
+        """
+        Parse a string value into the appropriate type.
+
+        Used by web interface to convert form input to typed values.
+
+        :param value_str: The string value from form input
+        :param var_type: The expected variable type
+        :returns: The parsed value
+        :raises ValueError: If the value cannot be parsed
+        """
+        if var_type == VariableType.STRING:
+            return value_str
+
+        elif var_type == VariableType.INTEGER:
+            # Digits with an optional sign: Python's int() also takes "1_000"
+            # and surrounding spaces, which are not what a person typing a
+            # number means to store.
+            if _INTEGER_TEXT.match(value_str.strip()) is None:
+                raise ValueError(f"'{value_str}' is not a valid integer")
+            return int(value_str.strip())
+
+        elif var_type == VariableType.FLOAT:
+            # A decimal number with an optional sign and exponent; "inf",
+            # "nan" and "1_0.5", which float() accepts, are refused.
+            if _FLOAT_TEXT.match(value_str.strip()) is None:
+                raise ValueError(f"'{value_str}' is not a valid float")
+            return float(value_str.strip())
+
+        elif var_type == VariableType.BOOLEAN:
+            # Only the two words the form's help text names: "yes", "on"
+            # and "1" used to become true without a word, and a typo such
+            # as "ture" is refused rather than guessed at.
+            lower_val = value_str.lower().strip()
+            if lower_val == 'true':
+                return True
+            elif lower_val == 'false':
+                return False
+            else:
+                raise ValueError(f"'{value_str}' is not a valid boolean (use 'true' or 'false')")
+
+        elif var_type == VariableType.JSON:
+            try:
+                return json.loads(value_str)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON: {str(e)}")
+
+        return value_str
+
 
     # ------------------------------------------------------------------
     # Create, read, update, delete
     # ------------------------------------------------------------------
 
-    def create_variable(self, request: GlobalVariableCreateRequest, user_id: Optional[str] = None) -> GlobalVariableResponse:
+    def create_variable(self, request: SystemVariableCreateRequest, user_id: Optional[str] = None) -> SystemVariableResponse:
         """
             Create a global variable.
 
@@ -106,7 +362,7 @@ class SystemVariableStore(GlobalVariableStore):
         )
         return self._to_response(binding)
 
-    def get_variable(self, name: str) -> Optional[GlobalVariableResponse]:
+    def get_variable(self, name: str) -> Optional[SystemVariableResponse]:
         """
             Read a variable by name.
 
@@ -131,7 +387,7 @@ class SystemVariableStore(GlobalVariableStore):
             return default
         return variable_service.decode_binding_value(binding=binding)
 
-    def update_variable(self, name: str, request: GlobalVariableUpdateRequest, user_id: Optional[str] = None) -> GlobalVariableResponse:
+    def update_variable(self, name: str, request: SystemVariableUpdateRequest, user_id: Optional[str] = None) -> SystemVariableResponse:
         """
             Change a variable's value (and, when given, its description). The type does not change.
 
@@ -171,7 +427,7 @@ class SystemVariableStore(GlobalVariableStore):
         )
         return
 
-    def list_variables(self, offset: int = 0, limit: int = 50, search: Optional[str] = None) -> GlobalVariableListResponse:
+    def list_variables(self, offset: int = 0, limit: int = 50, search: Optional[str] = None) -> SystemVariableListResponse:
         """
             A page of variables, by name, optionally those whose name or description contains ``search``.
 
@@ -185,7 +441,7 @@ class SystemVariableStore(GlobalVariableStore):
             query = query.filter(or_(VariableBinding.name.ilike(pattern), VariableBinding.description.ilike(pattern)))
         total = query.count()
         rows = query.order_by(VariableBinding.name).offset(offset).limit(limit).all()
-        return GlobalVariableListResponse(variables=[self._to_response(row) for row in rows], total=total, offset=offset, limit=limit)
+        return SystemVariableListResponse(variables=[self._to_response(row) for row in rows], total=total, offset=offset, limit=limit)
 
     # ------------------------------------------------------------------
     # History
@@ -252,12 +508,12 @@ class SystemVariableStore(GlobalVariableStore):
         except InvalidVariableValueError as xcpt:
             raise TypeValidationError(str(xcpt).splitlines()[0]) from None
 
-    def _to_response(self, binding: VariableBinding) -> GlobalVariableResponse:
+    def _to_response(self, binding: VariableBinding) -> SystemVariableResponse:
         """
             A binding as the page's response.
         """
         default = variable_service.decode_text(encoded=binding.default_value_text, value_type=binding.value_type) if binding.default_value_text is not None else None
-        return GlobalVariableResponse(
+        return SystemVariableResponse(
             id=0, name=binding.name, value=variable_service.decode_binding_value(binding=binding), var_type=_page_type(binding.value_type),
             description=binding.description or "", default_value=default,
             created_at=binding.created_at if binding.created_at is not None else binding.set_at, updated_at=binding.set_at,
@@ -288,4 +544,7 @@ class SystemVariableStore(GlobalVariableStore):
         return user.login_name if user is not None else None
 
 
-__all__ = ["SYSTEM_SCOPE_ID", "SystemVariableStore"]
+__all__ = [
+    "DuplicateVariableError", "SYSTEM_SCOPE_ID", "SystemVariableCreateRequest", "SystemVariableListResponse", "SystemVariableResponse", "SystemVariableStore",
+    "SystemVariableUpdateRequest", "TypeValidationError", "VariableChangeLog", "VariableNotFoundError", "VariableValidationError",
+]

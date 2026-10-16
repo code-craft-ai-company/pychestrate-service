@@ -57,8 +57,8 @@ from ccai.pychestrate.core.managers.build_manager import (
     BuildResponse,
     BuildSpecResponse,
 )
-from ccai.pychestrate.core.managers.global_variable_store import (
-    GlobalVariableResponse,
+from ccai.pychestrate.webservice.variables.system_store import (
+    SystemVariableResponse,
     VariableChangeLog,
 )
 from ccai.pychestrate.core.managers.health_monitor import (
@@ -707,8 +707,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "sessions": _many(_SessionRow),
     "tokens": _many(TokenView),
     "minted": _minted,
-    "variables": _many(GlobalVariableResponse),
-    "variable": _one(GlobalVariableResponse),
+    "variables": _many(SystemVariableResponse),
+    "variable": _one(SystemVariableResponse),
     "system_owners": _by_mode({}, {}),
     "system_owner": _by_mode({"url": "/admin/ui-profile", "label": "Interface profile"}, None),
     "secrets": _many(SecretMetadataResponse),

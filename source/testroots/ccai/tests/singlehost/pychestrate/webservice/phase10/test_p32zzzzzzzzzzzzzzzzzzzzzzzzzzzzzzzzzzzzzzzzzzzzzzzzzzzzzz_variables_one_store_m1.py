@@ -23,7 +23,6 @@ import re
 import time
 import uuid
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 
@@ -31,17 +30,16 @@ import sqlalchemy as sa
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from ccai import testbase
 
-from ccai.pychestrate.core.orm import GlobalVariable, GlobalVariableHistory, PychestrateModelBase
+from ccai.pychestrate.core.orm import PychestrateModelBase, VariableType
 from ccai.pychestrate.webservice.variables import cache as variable_cache
 from ccai.pychestrate.webservice.variables import service as variable_service
 from ccai.pychestrate.webservice.variables.restapi.v1 import variables_routes
 from ccai.pychestrate.webservice.variables.models import VariableBinding, VariableBindingHistory, VariableScope, VariableValueType
-from ccai.pychestrate.webservice.variables.system_store import SystemVariableStore
+from ccai.pychestrate.webservice.variables.system_store import SystemVariableCreateRequest, SystemVariableStore
 
 from ccai.tests.singlehost.pychestrate.webservice.phase10 import _adm_helpers as adm
 from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import ensure_seeded_admin
@@ -164,6 +162,52 @@ def test_a_secret_reference_variable_set_through_the_api_is_listed_and_keeps_its
     return
 
 
+def test_get_value_gives_the_default_for_a_variable_that_is_not_set_and_the_typed_value_for_one_that_is():
+    """
+    **Feature: one variables store (ADM-08)**
+    **Property: ``get_value`` returns the default it is given (``None`` when none is) for a name that is not set, whatever the default's type, and the stored value with its type
+    (an integer stays an integer, a JSON document stays a document) for one that is.**
+    """
+    session = adm.open_db_session()
+    count, document, missing = _name("ui.value.count"), _name("ui.value.doc"), _name("ui.value.absent")
+    try:
+        store = SystemVariableStore(session)
+        store.create_variable(SystemVariableCreateRequest(name=count, value=7, var_type=VariableType.INTEGER))
+        store.create_variable(SystemVariableCreateRequest(name=document, value={"a": [1, 2]}, var_type=VariableType.JSON))
+        observed = (
+            store.get_value(count, default="x"), store.get_value(document), store.get_value(missing), store.get_value(missing, default=5),
+            store.get_value(missing, default=[1, 2]), store.get_value(missing, default={"k": "v"}), store.get_value(missing, default=False),
+        )
+        store.delete_variable(count)
+        store.delete_variable(document)
+    finally:
+        session.close()
+    testbase.assert_equal(observed, (7, {"a": [1, 2]}, None, 5, [1, 2], {"k": "v"}, False))
+    return
+
+
+def test_the_project_managers_fallback_reads_the_system_variables_the_pages_and_the_runtime_share():
+    """
+    **Feature: one variables store (ADM-08)**
+    **Property: ``ProjectManager.resolve_variable`` falls back to the SYSTEM-scope variable of that name (it read the legacy table, which is gone): a variable made on the page
+    resolves through it, a project variable of the same name wins, and after the variable is deleted it resolves to nothing.**
+    """
+    from ccai.pychestrate.core.managers.project_manager import ProjectManager
+
+    name = _name("ui.fallback.limit")
+    session = adm.open_db_session()
+    try:
+        SystemVariableStore(session).create_variable(SystemVariableCreateRequest(name=name, value=15, var_type=VariableType.INTEGER))
+        manager = ProjectManager(session)
+        found = manager.resolve_variable(987654, name)
+        SystemVariableStore(session).delete_variable(name)
+        gone = manager.resolve_variable(987654, name)
+    finally:
+        session.close()
+    testbase.assert_equal((found, gone), (15, None))
+    return
+
+
 def _load_migration() -> Any:
     root = os.path.dirname(os.path.abspath(__file__))
     while not os.path.isdir(os.path.join(root, "alembic", "versions")) and root != os.path.dirname(root):
@@ -179,8 +223,16 @@ def _load_migration() -> Any:
 def _migrate(*, with_existing_binding: str = "") -> Tuple[Dict[str, Any], List[Tuple[str, str, str]]]:
     """Run the migration on a database as it was before it: the old bindings table and the legacy variables with some history."""
     engine = sa.create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    PychestrateModelBase.metadata.create_all(engine, tables=[GlobalVariable.__table__, GlobalVariableHistory.__table__])
     with engine.begin() as connection:
+        # The legacy tables as they were when the migration ran (their ORM classes are gone).
+        connection.execute(sa.text(
+            "CREATE TABLE global_variables (gvar_id INTEGER NOT NULL PRIMARY KEY, gvar_name VARCHAR(128) NOT NULL, gvar_value_json TEXT, gvar_type VARCHAR(16) NOT NULL, "
+            "gvar_description TEXT, gvar_default_value_json TEXT, gvar_created_at DATETIME NOT NULL, gvar_updated_at DATETIME NOT NULL, gvar_updated_by_id BLOB)"
+        ))
+        connection.execute(sa.text(
+            "CREATE TABLE global_variable_history (gvarhist_id INTEGER NOT NULL PRIMARY KEY, gvarhist_variable_id INTEGER NOT NULL, gvarhist_variable_name VARCHAR(128) NOT NULL, "
+            "gvarhist_old_value_json TEXT, gvarhist_new_value_json TEXT, gvarhist_changed_by_id BLOB, gvarhist_changed_at DATETIME NOT NULL)"
+        ))
         connection.execute(sa.text(
             "CREATE TABLE variables_variable_bindings (binding_id CHAR(32) NOT NULL PRIMARY KEY, scope VARCHAR(8) NOT NULL, scope_id VARCHAR(64) NOT NULL, "
             "name VARCHAR(128) NOT NULL, value_type VARCHAR(10) NOT NULL, value_text TEXT, set_by_user_id CHAR(32), set_at DATETIME NOT NULL, "
@@ -189,26 +241,27 @@ def _migrate(*, with_existing_binding: str = "") -> Tuple[Dict[str, Any], List[T
         connection.execute(sa.text(
             "INSERT INTO variables_variable_bindings VALUES ('a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1', 'SYSTEM', '', 'already.there', 'STRING', 'api-set', NULL, '2026-09-01 10:00:00')"
         ))
-    maker = sessionmaker(bind=engine)
-    session = maker()
-    user = uuid.uuid4()
-    made = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
-    later = datetime(2026, 8, 2, 9, 0, tzinfo=timezone.utc)
-    session.add_all([
-        GlobalVariable(id=1, name="legacy.count", value_json="12", var_type="integer", description="How many", default_value_json="5", created_at=made, updated_at=later, updated_by_id=user),
-        GlobalVariable(id=2, name="legacy.text", value_json='"hello"', var_type="string", description="", default_value_json=None, created_at=made, updated_at=made),
-        GlobalVariable(id=3, name="legacy.doc", value_json='{"b":1,"a":[2]}', var_type="json", description="Doc", default_value_json=None, created_at=made, updated_at=made),
-        GlobalVariable(id=4, name="legacy.flag", value_json="true", var_type="boolean", description="", default_value_json=None, created_at=made, updated_at=made),
-        GlobalVariable(id=5, name="already.there", value_json='"legacy-value"', var_type="string", description="old", default_value_json=None, created_at=made, updated_at=made),
-    ])
-    session.add_all([
-        GlobalVariableHistory(variable_id=1, variable_name="legacy.count", old_value_json=None, new_value_json="10", changed_by_id=user, changed_at=made),
-        GlobalVariableHistory(variable_id=1, variable_name="legacy.count", old_value_json="10", new_value_json="12", changed_by_id=user, changed_at=later),
-        GlobalVariableHistory(variable_id=99, variable_name="legacy.gone", old_value_json='"x"', new_value_json=None, changed_by_id=None, changed_at=later),
-        GlobalVariableHistory(variable_id=5, variable_name="already.there", old_value_json=None, new_value_json='"legacy-value"', changed_by_id=None, changed_at=made),
-    ])
-    session.commit()
-    session.close()
+    user = uuid.uuid4().bytes  # the legacy tables stored user ids as 16 raw bytes on SQLite
+    made = "2026-08-01 09:00:00"
+    later = "2026-08-02 09:00:00"
+    variables = [
+        (1, "legacy.count", "12", "integer", "How many", "5", made, later, user),
+        (2, "legacy.text", '"hello"', "string", "", None, made, made, None),
+        (3, "legacy.doc", '{"b":1,"a":[2]}', "json", "Doc", None, made, made, None),
+        (4, "legacy.flag", "true", "boolean", "", None, made, made, None),
+        (5, "already.there", '"legacy-value"', "string", "old", None, made, made, None),
+    ]
+    history_rows = [
+        (1, 1, "legacy.count", None, "10", user, made),
+        (2, 1, "legacy.count", "10", "12", user, later),
+        (3, 99, "legacy.gone", '"x"', None, None, later),
+        (4, 5, "already.there", None, '"legacy-value"', None, made),
+    ]
+    with engine.begin() as connection:
+        for row in variables:
+            connection.execute(sa.text("INSERT INTO global_variables VALUES (:a, :b, :c, :d, :e, :f, :g, :h, :i)"), dict(zip("abcdefghi", row)))
+        for row in history_rows:
+            connection.execute(sa.text("INSERT INTO global_variable_history VALUES (:a, :b, :c, :d, :e, :f, :g)"), dict(zip("abcdefg", row)))
 
     migration = _load_migration()
     with engine.begin() as connection:
