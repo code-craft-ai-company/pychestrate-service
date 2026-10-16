@@ -331,7 +331,6 @@ class RepositoryManager:
         self,
         db_session: DbSession,
         audit_logger=None,
-        secret_manager=None,
         credential_resolver: Optional[Callable[[str], str]] = None,
         event_sink: Optional[Callable[..., List[Any]]] = None
     ):
@@ -340,14 +339,11 @@ class RepositoryManager:
 
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
-        :param secret_manager: Optional legacy SecretManager for ``scope/name``
-                               credential references
         :param credential_resolver: Optional callable ``(secret_ref) -> str``
                                     that reads a repository's credential
                                     secret (it raises
                                     :class:`RepositoryCredentialError` when
-                                    the secret cannot be read). Preferred
-                                    over ``secret_manager``.
+                                    the secret cannot be read).
         :param event_sink: Optional callable
                            ``(*, trigger_source, source_id, event_data)``
                            returning the watch trigger logs, called for
@@ -358,7 +354,6 @@ class RepositoryManager:
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
-        self._secret_manager = secret_manager
         self._credential_resolver = credential_resolver
         self._event_sink = event_sink if event_sink is not None else self._dispatch_to_watches
 
@@ -771,8 +766,7 @@ class RepositoryManager:
         Repositories with ``auth_type == none`` need none. Otherwise the
         repository's ``credential_secret_ref`` is resolved through the
         ``credential_resolver`` the caller supplied (the web UI reads the
-        secrets vault with the acting user's permissions) or, failing
-        that, the legacy ``secret_manager`` (``scope/name`` references).
+        secrets vault with the acting user's permissions).
         A credential that cannot be resolved is an error: it used to be
         swallowed, git ran without credentials and every private
         repository failed.
@@ -796,15 +790,6 @@ class RepositoryManager:
 
         if self._credential_resolver is not None:
             credential = self._credential_resolver(secret_ref)
-        elif self._secret_manager is not None:
-            try:
-                credential = self._secret_manager.resolve_secret_reference(
-                    "${" + secret_ref + "}"
-                )
-            except Exception:
-                raise RepositoryCredentialError(
-                    "The credential secret {} could not be read.".format(secret_ref)
-                ) from None
         else:
             raise RepositoryCredentialError(
                 "No secrets service is available to read the credential secret {}.".format(

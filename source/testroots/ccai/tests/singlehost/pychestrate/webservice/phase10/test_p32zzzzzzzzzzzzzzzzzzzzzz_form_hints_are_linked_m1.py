@@ -77,7 +77,6 @@ def test_every_form_hint_is_named_by_the_aria_describedby_of_its_field():
 RENDERED_PAGES: List[str] = [
     "/admin/users/create",
     "/admin/roles/create",
-    "/admin/secrets/create",
     "/admin/enrollment-tokens",
     "/projects/create",
     "/account/preferences",
@@ -88,7 +87,7 @@ def test_rendered_hints_are_named_by_a_describedby_in_the_page():
     """
     **Feature: form hints (DOC-20)**
     **Property: on the rendered form pages every ``form-text`` hint's id appears in the ``aria-describedby`` of some
-    element on the same page (at least five of the six pages render).**
+    element on the same page (at least four of the five pages render).**
     """
     from ccai.tests.singlehost.pychestrate.webservice.phase10 import _adm_helpers as adm
 
@@ -110,5 +109,5 @@ def test_rendered_hints_are_named_by_a_describedby_in_the_page():
             ident = re.search(r'\bid="([^"]+)"', hint.group(0))
             if ident is None or ident.group(1) not in described:
                 problems.setdefault(path, []).append(hint.group(0)[:120])
-    testbase.assert_equal((rendered >= 5, hints_seen >= 5, problems), (True, True, {}))
+    testbase.assert_equal((rendered >= 4, hints_seen >= 4, problems), (True, True, {}))
     return

@@ -10,8 +10,7 @@ Audit finding ADM-20. Browsers compile an input's ``pattern`` with the
 RegExp ``v`` flag, which rejects an unescaped ``-`` that is not part of a
 range (``[a-z0-9_-]``). An invalid pattern is ignored with only a console
 warning, so the browser check never ran. The patterns now escape the
-hyphen. The project-name pattern matches the server's rule, and the
-server enforces the secret and scope name rule the forms state.
+hyphen. The project-name pattern matches the server's rule.
 
 The ``v``-flag check is a small Python model of the character-class rules
 the templates use, checked against the patterns Chromium rejected.
@@ -30,18 +29,8 @@ import re
 
 from typing import List, Optional, Tuple
 
-import sqlalchemy as sa
-
-from sqlalchemy.orm import sessionmaker
-
 from ccai import testbase
 
-from ccai.pychestrate.core.managers.secret_manager import (
-    SecretManager,
-    SecretManagerError,
-    SecretScopeCreateRequest,
-)
-from ccai.pychestrate.core.orm import PychestrateModelBase
 from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES
 
 
@@ -165,34 +154,3 @@ def test_the_project_name_pattern_matches_the_server_rule():
     testbase.assert_equal(list(browser.values()), [server] * len(patterns))
     return
 
-
-def _secret_manager() -> SecretManager:
-    engine = sa.create_engine("sqlite://")
-    PychestrateModelBase.metadata.create_all(engine)
-    rtnval = SecretManager(sessionmaker(bind=engine)(), encryption_key=b"\x42" * 32)
-    return rtnval
-
-
-def test_the_server_refuses_a_scope_name_the_form_forbids():
-    """
-    **Feature: forms (ADM-20 pattern attributes)**
-    **Property: creating a secret scope named "bad scope!" is refused by
-    the server, not only by the browser.**
-    """
-    refused = False
-    try:
-        _secret_manager().create_scope(SecretScopeCreateRequest(name="bad scope!"))
-    except SecretManagerError:
-        refused = True
-    testbase.assert_equal(refused, True)
-    return
-
-
-def test_the_server_accepts_a_scope_name_the_form_allows():
-    """
-    **Feature: forms (ADM-20 pattern attributes)**
-    **Property: a scope name the form's pattern allows is created.**
-    """
-    scope = _secret_manager().create_scope(SecretScopeCreateRequest(name="ci-builds_2"))
-    testbase.assert_equal(scope.name, "ci-builds_2")
-    return

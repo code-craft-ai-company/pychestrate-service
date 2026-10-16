@@ -398,19 +398,17 @@ class TestManager:
     Validates: Requirements 8.1-8.5, 9.1-9.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None):
+    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None):
         """
         Initialize the TestManager with a database session.
         
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
         :param resource_manager: Optional ResourceManager instance for resource checkout
-        :param secret_manager: Optional SecretManager instance for secret resolution
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._resource_manager = resource_manager
-        self._secret_manager = secret_manager
     
     # =========================================================================
     # Validation Methods

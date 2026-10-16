@@ -48,8 +48,6 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config import (
     routes_enrollment,
     routes_roles,
     routes_rpa_types,
-    routes_scopes,
-    routes_secrets,
     routes_sessions,
     routes_ui_profile,
     routes_users,
@@ -375,8 +373,8 @@ def test_every_admin_route_permission_exists_in_the_rbac_catalog():
     declared: Dict[str, str] = {}
     declared.update(config_routes._ADMIN_ROUTE_PERMISSIONS)
     for module in (
-        routes_users, routes_roles, routes_variables, routes_secrets,
-        routes_scopes, routes_sessions, routes_audit, routes_enrollment,
+        routes_users, routes_roles, routes_variables,
+        routes_sessions, routes_audit, routes_enrollment,
         routes_ui_profile, routes_rpa_types,
     ):
         declared.update(module._ROUTE_PERMISSIONS)

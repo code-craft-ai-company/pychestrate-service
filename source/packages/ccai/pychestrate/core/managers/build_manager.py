@@ -433,7 +433,7 @@ class BuildManager:
     Validates: Requirements 4.1-4.5, 5.1, 5.3-5.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None,
+    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None,
                  event_sink=None):
         """
         Initialize the BuildManager with a database session.
@@ -441,7 +441,6 @@ class BuildManager:
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
         :param resource_manager: Optional ResourceManager instance for resource checkout
-        :param secret_manager: Optional SecretManager instance for secret resolution
         :param event_sink: Optional callable
                            ``(*, trigger_source, source_id, event_data, user_id)``
                            returning the watch trigger logs, called when a
@@ -452,7 +451,6 @@ class BuildManager:
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._resource_manager = resource_manager
-        self._secret_manager = secret_manager
         self._event_sink = event_sink
     
     # =========================================================================

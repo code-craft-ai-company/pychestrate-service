@@ -20,7 +20,7 @@ Correction worth noting: the legacy model's real lookup key is `proj_name`, not 
 ## 2. Call-sites audit
 
 **Uses LEGACY (`projects.proj_id`, keyed on int id / `proj_name`):**
-- All managers in `core/managers/`: `project_manager.py` (CRUD + members + `check_permission`, keys `Project.id`/`Project.name`), `release_manager.py`, `release_template_manager.py`, `repository_manager.py`, `build_manager.py`, `infrastructure_manager.py`, `test_manager.py`, `watch_manager.py`, `secret_manager.py`, `allocation_manager.py`, `resource_manager.py`.
+- All managers in `core/managers/`: `project_manager.py` (CRUD + members + `check_permission`, keys `Project.id`/`Project.name`), `release_manager.py`, `release_template_manager.py`, `repository_manager.py`, `build_manager.py`, `infrastructure_manager.py`, `test_manager.py`, `watch_manager.py`, `allocation_manager.py`, `resource_manager.py`.
 - UI blueprints `webinterface/blueprints/projects/*` (`routes.py`, `routes_releases.py`, `routes_calendar.py`, `routes_tests.py`, `routes_infrastructure.py`, `routes_watches.py`, `routes_builds.py`, `routes_repositories.py`, `routes_release_templates.py`) — URLs key on int `{project_id}` and call legacy managers.
 - Migration `003_project_management_tables.py`.
 

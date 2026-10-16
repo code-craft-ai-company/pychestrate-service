@@ -6,7 +6,7 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The web UI's projects, resources, variables and legacy-secrets pages
+The web UI's projects, resources and variables pages
 write the ``core.orm`` tables through the legacy managers. Those
 managers take an optional ``audit_logger`` but every builder creates
 them without one, and the admin Audit Logs page read a legacy table
@@ -88,7 +88,6 @@ _EXCLUDED_TABLES = frozenset((
     "user",
     "permissions",
     "system_roles",
-    "secret_versions",
     "health_transition_logs",
     "resource_metadata_history",
     "project_channel_history",
@@ -194,8 +193,6 @@ _ENTITY_NAMES = {
     "resource_pools": "resource pool",
     "resource_tags_def": "tag",
     "resources": "resource",
-    "secret_scopes": "secret scope",
-    "secrets": "secret",
 }
 
 _MAX_TEXT_LENGTH: int = 200

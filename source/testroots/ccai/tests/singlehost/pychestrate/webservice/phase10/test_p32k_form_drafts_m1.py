@@ -214,7 +214,7 @@ def test_the_wsgi_wrapper_notes_a_kept_form_hands_the_body_on_and_forgets_it():
 
     passed_through = []
     for kwargs in (
-        {"method": "GET"}, {"path": "/admin/secrets"}, {"content_type": "multipart/form-data; boundary=x"},
+        {"method": "GET"}, {"path": "/admin/variables"}, {"content_type": "multipart/form-data; boundary=x"},
         {"body": b"a=" + b"b" * (form_drafts.MAX_BODY_BYTES + 10)},
     ):
         _call(wrapped, **kwargs)
@@ -346,18 +346,17 @@ def test_an_expired_sign_in_sends_the_person_to_sign_in_and_back_with_the_draft(
 def test_forms_that_may_hold_secrets_are_not_kept():
     """
     **Feature: form drafts (XC-11)**
-    **Property: a secret created with a stale token, and a project form whose only
-    fields are secret-looking, are refused as before, with no draft in the redirect.**
+    **Property: a project form whose only fields are secret-looking, posted with a stale
+    token, is refused as before, with no draft in the redirect.**
     """
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
 
-    secret = _post(handle, cookies, "/admin/secrets", [("csrf_token", "stale"), ("name", "db"), ("value", "s3cret")])
     only_secret = _post(handle, cookies, "/projects/create", [("csrf_token", "stale"), ("password", "hunter2")])
 
     testbase.assert_equal(
-        ["draft=" in (response.header("Location") or "") for response in (secret, only_secret)],
-        [False, False],
+        "draft=" in (only_secret.header("Location") or ""),
+        False,
     )
     return
 

@@ -170,7 +170,7 @@ store their secrets in the vault, and the secret pickers the forms offer list va
    vault's own service, so its access rules and audit apply. A name the vault already holds is skipped, never overwritten; a secret that cannot be decrypted is reported by name and
    changes nothing. The result says how many were imported, skipped and failed. The import never shows or logs a value, and it leaves the legacy rows alone (deleting them is the person's
    choice, afterwards, on the same page). The legacy description and type are not carried (the vault records neither).
-4. **Then the pages become read-only, then go** (step 2 and step 3, not part of this step): creating a legacy secret or scope is refused with a pointer to the vault; the pages and their
+4. **Then the pages become read-only, then go** (step 2 and step 3, not part of this step; done together in section 10): creating a legacy secret or scope is refused with a pointer to the vault; the pages and their
    tables are removed once the import has run everywhere.
 
 ## 10. The legacy variable and secret stores removed (ADM-08 #367 and ADM-07 #366), step 3

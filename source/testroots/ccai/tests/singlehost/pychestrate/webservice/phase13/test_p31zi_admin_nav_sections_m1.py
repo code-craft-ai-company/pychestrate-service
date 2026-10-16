@@ -75,18 +75,20 @@ def test_the_admin_entries_are_kept_together_by_section_in_a_fixed_order():
     return
 
 
-def test_the_secrets_screens_sit_together_under_configuration():
+def test_the_admin_menu_has_no_legacy_secret_entries_and_the_vault_is_still_under_system():
     """
-    **Feature: admin menu (ADM-39)**
-    **Property: the secret scopes and the (legacy) secrets entries are
-    next to each other, with the variables, under Configuration, instead of
-    being scattered through the list.**
+    **Feature: admin menu (ADM-39, ADM-07)**
+    **Property: Admin has no "Secrets (legacy)" or "Secret Scopes (legacy)" entry (those pages are gone), the Variables entry is still under Configuration, and the vault
+    (``system.secrets``, at ``/secrets``) is still in the menu.**
     """
     entries = _admin_entries()
-    ids = [entry.entry_id for entry in entries if entry.section == "Configuration"]
-    scopes, secrets = ids.index("admin.scopes"), ids.index("admin.secrets")
+    configuration = [entry.entry_id for entry in entries if entry.section == "Configuration"]
+    everywhere = {entry.entry_id: entry.route for entry in NAV_ENTRIES}
 
-    testbase.assert_equal((abs(scopes - secrets), "admin.variables" in ids), (1, True))
+    testbase.assert_equal(
+        ("admin.scopes" in everywhere, "admin.secrets" in everywhere, "admin.variables" in configuration, everywhere.get("system.secrets")),
+        (False, False, True, "/secrets"),
+    )
     return
 
 

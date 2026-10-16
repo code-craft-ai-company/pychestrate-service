@@ -16,8 +16,8 @@ surface. This module lands the auth + dashboard slice:
   authenticated dashboard.
 
 The sibling ``routes_*.py`` modules carry the remaining 25
-routes (users / roles / variables / scopes / secrets /
-sessions / audit) on top of the same foundation pieces.
+routes (users / roles / variables / sessions /
+audit) on top of the same foundation pieces.
 
 Foundation pieces consumed
 --------------------------
@@ -98,8 +98,7 @@ from ccai.pychestrate.webservice.webinterface.htmlui.next_validator import (
 # login refactor:
 #
 # * ``ADMIN_PATH`` (``/admin``) hosts the authenticated admin UI
-#   (dashboard, users, roles, variables, scopes, secrets,
-#   sessions, audit). Every ``routes_*.py`` sibling module mounts
+#   (dashboard, users, roles, variables, sessions, audit). Every ``routes_*.py`` sibling module mounts
 #   under this prefix.
 # * The login + logout HTML surface lives at unprefixed
 #   ``/login`` and ``/logout`` per 1-authentication Requirement
@@ -201,8 +200,6 @@ _ADMIN_PAGE_TITLE_TABLE: Tuple[Tuple[str, str], ...] = (
     (ADMIN_PATH + "/users", "Users"),
     (ADMIN_PATH + "/roles", "Roles"),
     (ADMIN_PATH + "/variables", "Variables"),
-    (ADMIN_PATH + "/scopes", "Secret Scopes"),
-    (ADMIN_PATH + "/secrets", "Secrets"),
     (ADMIN_PATH + "/sessions", "Sessions"),
     (ADMIN_PATH + "/audit-logs", "Audit Logs"),
     (ADMIN_PATH + "/enrollment-tokens", "Enrollment Tokens"),
@@ -608,7 +605,7 @@ def _resolve_admin_page_title(*, path: str) -> str:
         Resolve the shell document ``<title>`` for an admin page
         from the request path via :data:`_ADMIN_PAGE_TITLE_TABLE`.
         The longest matching prefix wins so detail pages (e.g.
-        ``/admin/secrets/create``) inherit their section's title.
+        ``/admin/users/create``) inherit their section's title.
         Unmatched paths keep the bare product-name default.
 
         :param path: Request path (e.g. ``"/admin/users/u-1"``).
@@ -2120,12 +2117,9 @@ def register_config_routes(*, app: Any) -> None:
     register_users_routes(app=app)
     register_roles_routes(app=app)
 
-    # D3 features -- variables + scopes.
+    # D3 features -- variables.
     from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
         register_variables_routes,
-    )
-    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_scopes import (  # noqa: E402
-        register_scopes_routes,
     )
     register_variables_routes(app=app)
 
@@ -2146,19 +2140,14 @@ def register_config_routes(*, app: Any) -> None:
         register_notifications_routes,
     )
     register_notifications_routes(app=app)
-    register_scopes_routes(app=app)
 
-    # D4 features -- secrets + sessions + audit.
-    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_secrets import (  # noqa: E402
-        register_secrets_routes,
-    )
+    # D4 features -- sessions + audit.
     from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_sessions import (  # noqa: E402
         register_sessions_routes,
     )
     from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_audit import (  # noqa: E402
         register_audit_routes,
     )
-    register_secrets_routes(app=app)
     register_sessions_routes(app=app)
     register_audit_routes(app=app)
 

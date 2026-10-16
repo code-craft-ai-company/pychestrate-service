@@ -29,6 +29,15 @@ preview tag.
 
 ### Fixed
 
+- **The legacy secret store is removed (ADM-07, steps 2 and 3 together).** Admin, **Secrets (legacy)** and **Secret Scopes (legacy)** are gone, with their menu entries, the *Import into the vault* button and
+  `SecretManager`; the vault under **System**, **Secrets** is the one place secrets live, and the Admin overview's Configuration tile now links to it. Nothing read the old store (the audit's "consumers point at
+  the legacy store" was already untrue), and staging held nothing in it but soft-deleted test leftovers (listed row by row before this change: 12 deleted secrets, 18 scopes, no live secret, no scope grant), so the
+  read-only step was skipped. Migration `c5e7a9b1d3f4` drops `secrets`, `secret_scopes`, `secret_versions` and `scope_permissions`, **but refuses while any legacy secret is live**: it stops before changing anything and says
+  how many would be lost and to deploy the previous release, import them into the vault and upgrade again (deleted secrets and empty scopes do not stop it). Its downgrade recreates the tables empty. `RepositoryManager`
+  lost its `secret_manager` fallback (nothing configured it; credentials resolve through the vault) and the build, infrastructure and test managers lost an unused `secret_manager` parameter. The legacy ORM models are
+  removed. The tests of the removed pages go with them; the form-draft, form-hint, form-error and permission-gate tests that used those pages as examples keep their properties on other pages; the strict-render fixtures
+  no longer register the legacy templates. The migration is tested for all four outcomes (refuses and changes nothing with a live secret; drops everything with only leftovers; harmless on a database without the tables;
+  downgrade). The design and the staging row inspection are in `specs/model-convergence.md` section 10.
 - **The legacy global-variables store is removed (ADM-08, step 3 of 3 for variables).** The Admin, Variables pages and the runtime have read and written one store since the last step; the old `global_variables` and
   `global_variable_history` tables, the `GlobalVariable` / `GlobalVariableHistory` models and the `GlobalVariableStore` class are now gone. Nothing you see changes: the pages are the same, on the same data. What the
   page store kept of the old class (the value checks, the parsing of typed text, the request and response types, the errors) lives in `variables/system_store.py`, and the types are named `SystemVariable*`.

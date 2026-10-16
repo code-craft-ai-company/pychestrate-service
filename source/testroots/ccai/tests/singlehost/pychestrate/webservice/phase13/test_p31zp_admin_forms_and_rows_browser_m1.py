@@ -59,14 +59,12 @@ DESKTOP: Dict[str, Any] = {"viewport": {"width": 1440, "height": 900}}
 ROW_ACTION_TEMPLATES: List[str] = [
     "config/users/list.html",
     "config/variables/list.html",
-    "config/secrets/list.html",
 ]
 
 #: Lists where a row shows both only when it is not built-in / has no secrets,
 #: which the fixtures do not include: their markup is checked instead.
 CONDITIONAL_ACTION_TEMPLATES: List[str] = [
     "config/roles/list.html",
-    "config/secrets/scope_list.html",
 ]
 
 #: Admin lists whose only row action is one destructive button.

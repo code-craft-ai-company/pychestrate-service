@@ -53,7 +53,7 @@ BUNDLES = ["pyc-site-shell", "pyc-admin-bundle"]
 HEALTH = {"status": "ok", "generated_at": "2026-09-29T19:49:03+00:00", "subsystems": []}
 
 #: What the old dashboard offered, by address.
-SHORTCUT_ROUTES = ("/admin/users", "/admin/roles", "/admin/sessions", "/admin/audit-logs", "/admin/variables", "/admin/secrets")
+SHORTCUT_ROUTES = ("/admin/users", "/admin/roles", "/admin/sessions", "/admin/audit-logs", "/admin/variables")
 
 ADMIN_PERMISSIONS = [
     "system:ui.admin.view", "system:users.read", "system:rbac.read", "system:auth.read", "system:audit.read", "system:secrets.read",
@@ -122,7 +122,7 @@ def test_an_administrator_finds_a_way_into_every_admin_area_and_the_user_count(b
         (
             {
                 "people-tile": ["Users -> /admin/users", "Roles -> /admin/roles", "Sessions -> /admin/sessions", "Audit Logs -> /admin/audit-logs"],
-                "configuration-tile": ["Variables -> /admin/variables", "Secrets (legacy) -> /admin/secrets"],
+                "configuration-tile": ["Variables -> /admin/variables", "Secrets -> /secrets"],
             },
             "12 users",
             ["System Health", "Extension Registry", "People & access", "Configuration"],

@@ -454,25 +454,6 @@ NAV_ENTRIES: List[NavEntry] = [
         section="Configuration",
     ),
     NavEntry(
-        entry_id="admin.scopes",
-        label="Secret Scopes (legacy)",
-        route="/admin/scopes",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:secrets.admin"],
-        section="Configuration",
-    ),
-    NavEntry(
-        entry_id="admin.secrets",
-        # Labeled "(legacy)" to distinguish this entry from the
-        # modern ``system.secrets`` entry at /secrets, which
-        # otherwise renders with the identical "Secrets" label.
-        label="Secrets (legacy)",
-        route="/admin/secrets",
-        group_id=GROUP_ADMIN,
-        required_permissions=["system:secrets.read"],
-        section="Configuration",
-    ),
-    NavEntry(
         entry_id="admin.rpa-job-types",
         label="RPA Job Types",
         route="/admin/rpa-job-types",

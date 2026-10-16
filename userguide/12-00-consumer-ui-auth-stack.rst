@@ -109,8 +109,7 @@ Who uses which (as of PR p13ad)
 **Legacy stack** (``SecurityManager`` + ``core.orm`` user/sessions/
 roles tables) is no longer consulted by any consumer-UI auth or RBAC
 path. Other consumer-UI surfaces still call into legacy ``core.managers``
-helpers (``routes_users.py`` -> ``UserManager``, ``routes_secrets.py``
--> ``SecretManager``, ``routes_sessions.py`` -> ``SecurityManager``'s
+helpers (``routes_users.py`` -> ``UserManager``, ``routes_sessions.py`` -> ``SecurityManager``'s
 session listing helper, ``routes_audit.py`` -> ``AuditLogger``;
 ``projects/`` blueprint -> ``ProjectManager`` /
 ``RepositoryManager`` / ``BuildManager`` / ``TestManager`` /
@@ -290,7 +289,6 @@ Manager                           Imports
 ``repository_manager``                         7
 ``allocation_manager``                         7
 ``user_manager``                               5
-``secret_manager``                             5
 ``ip_pool_manager``                            5
 ``build_manager``                              4
 ``test_manager``                               2

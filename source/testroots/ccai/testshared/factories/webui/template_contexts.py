@@ -101,10 +101,6 @@ from ccai.pychestrate.core.managers.resource_manager import (
     ResourceResponse,
     TagResponse,
 )
-from ccai.pychestrate.core.managers.secret_manager import (
-    SecretMetadataResponse,
-    SecretScopeResponse,
-)
 from ccai.pychestrate.core.managers.test_manager import (
     TestCaseResult,
     TestJobResponse,
@@ -711,10 +707,6 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "variable": _one(SystemVariableResponse),
     "system_owners": _by_mode({}, {}),
     "system_owner": _by_mode({"url": "/admin/ui-profile", "label": "Interface profile"}, None),
-    "secrets": _many(SecretMetadataResponse),
-    "secret": _one(SecretMetadataResponse),
-    "scopes": _many(SecretScopeResponse),
-    "scope": _one(SecretScopeResponse),
     "tag": _one(TagResponse),
 
     # Projects
@@ -984,10 +976,6 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "config/": {
         "logs": _many(AuditLogEntry),
         "history": _many(VariableChangeLog),
-    },
-    "config/secrets/": {
-        "legacy_count": _by_mode(2, 0),
-        "can_import": _by_mode(True, False),
     },
     "config/notifications/": {
         "channels": _notification_channels,

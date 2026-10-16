@@ -821,7 +821,7 @@ def _seed_user_pair(
           still queried by some consumer-UI surfaces that
           have not yet migrated off the legacy
           :class:`UserManager` (``routes_users.py``,
-          ``routes_secrets.py``, ``routes_sessions.py``).
+          ``routes_sessions.py``).
           The ``roles`` CSV is no longer consulted by
           :meth:`check_permission` (modern RBAC reads
           ``rbac_role_bindings``), but the column is preserved

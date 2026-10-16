@@ -1,24 +1,22 @@
 """
-.. module:: test_p13g_config_secrets_sessions_audit_routes_m1
+.. module:: test_p13g_config_sessions_audit_routes_m1
     :platform: Darwin, Linux, Unix, Windows
     :synopsis: Tests for the D4 (final) slice of the config
-               blueprint port -- secrets + sessions + audit logs.
+               blueprint port -- sessions + audit logs.
 
 .. moduleauthor:: Code Craft AI LLC
 
-PR D4 ports the remaining seven flask config routes (secret
-management 4 + session admin 2 + audit log viewer 1) to
+PR D4 ports the remaining flask config routes (session admin
+2 + audit log viewer 1; the legacy secret pages that were part
+of it are gone, see ``specs/model-convergence.md`` section 10) to
 webworks AND deletes the legacy ``endpoints.py`` flask
 scaffolding. With this PR the ``/config`` surface is fully
 webworks-native.
 
 Tests cover:
 
-* ``register_secrets_routes`` / ``register_sessions_routes`` /
-  ``register_audit_routes`` -- route attachment matrices.
-* secret list / create (GET + POST happy + manager-error +
-  CSRF) / edit (GET + POST happy + 404) / delete (happy +
-  manager-error + unparsable id).
+* ``register_sessions_routes`` / ``register_audit_routes`` --
+  route attachment matrices.
 * session list (happy + filter passthrough), session terminate
   (happy + 404 + manager-error).
 * audit log date-filter parsing. (The audit page now reads the
@@ -50,7 +48,6 @@ from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
 from ccai.pychestrate.webservice.webinterface.blueprints.config import (
     routes as config_routes,
     routes_audit as config_routes_audit,
-    routes_secrets as config_routes_secrets,
     routes_sessions as config_routes_sessions,
 )
 from ccai.pychestrate.webservice.webinterface.foundation import (
@@ -207,97 +204,6 @@ class _StubJinjaEnvironment:
 # ---- Fakes specific to D4 -------------------------------------------------
 
 
-class _FakeSecretMetadata:
-    def __init__(
-            self, *, secret_id: int, name: str, scope_id: int,
-            scope_name: str = "default", description: str = "",
-            version: int = 1
-        ) -> None:
-        self.id: int = secret_id
-        self.name: str = name
-        self.scope_id: int = scope_id
-        self.scope_name: str = scope_name
-        self.description: str = description
-        self.version: int = version
-        self.secret_type = type("ST", (), {"value": "generic"})()
-        self.updated_at = datetime(2026, 1, 1, 12, 0)
-        return
-
-
-class _FakeSecretManager:
-    last_instance: Optional["_FakeSecretManager"] = None
-
-    def __init__(self, db_session: Any) -> None:
-        self.db_session: Any = db_session
-        self.list_secrets_response: List[_FakeSecretMetadata] = []
-        self.list_scopes_response: List[Any] = []
-        self.get_metadata_response: Optional[_FakeSecretMetadata] = None
-        self.list_secrets_calls: List[Dict[str, Any]] = []
-        self.create_secret_calls: List[Any] = []
-        self.update_secret_calls: List[Any] = []
-        self.delete_secret_calls: List[Any] = []
-        self.create_secret_raises: Optional[Exception] = None
-        self.update_secret_raises: Optional[Exception] = None
-        self.delete_secret_raises: Optional[Exception] = None
-        _FakeSecretManager.last_instance = self
-        return
-
-    def list_secrets(
-            self, *, scope_id: Optional[int], user_id: str,
-            offset: int, limit: int
-        ) -> Any:
-        from types import SimpleNamespace
-        self.list_secrets_calls.append({
-            "scope_id": scope_id, "user_id": user_id,
-            "offset": offset, "limit": limit,
-        })
-        return SimpleNamespace(
-            secrets=self.list_secrets_response,
-            total=len(self.list_secrets_response),
-            offset=offset,
-            limit=limit,
-        )
-
-    def list_scopes(self, user_id: str) -> Any:
-        from types import SimpleNamespace
-        return SimpleNamespace(
-            scopes=self.list_scopes_response,
-            total=len(self.list_scopes_response),
-            offset=0,
-            limit=len(self.list_scopes_response),
-        )
-
-    def get_secret_metadata(
-            self, name: str, scope_id: int
-        ) -> Optional[_FakeSecretMetadata]:
-        return self.get_metadata_response
-
-    def create_secret(self, request: Any, user_id: str) -> None:
-        self.create_secret_calls.append((request, user_id))
-        if self.create_secret_raises is not None:
-            raise self.create_secret_raises
-        return
-
-    def update_secret(
-            self, name: str, scope_id: int,
-            request: Any, user_id: str
-        ) -> None:
-        self.update_secret_calls.append(
-            (name, scope_id, request, user_id)
-        )
-        if self.update_secret_raises is not None:
-            raise self.update_secret_raises
-        return
-
-    def delete_secret(
-            self, name: str, scope_id: int, user_id: str
-        ) -> None:
-        self.delete_secret_calls.append((name, scope_id, user_id))
-        if self.delete_secret_raises is not None:
-            raise self.delete_secret_raises
-        return
-
-
 class _SessionSeamRecorder:
     """
         Records calls to the patched ``routes_sessions`` data-access
@@ -339,7 +245,6 @@ def _reset_global_state() -> None:
     SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = None
     SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = None
     _FakeSecurityManager.last_instance = None
-    _FakeSecretManager.last_instance = None
     return
 
 
@@ -356,71 +261,6 @@ def _patch_security_manager() -> Any:
     patch = create_module_patch(config_routes, "_build_security_manager")
     mock = patch.activate()
     mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_secret_manager(
-        *, configure: Optional[Callable[[_FakeSecretManager], None]] = None
-    ) -> Any:
-    def _builder(*, db_session: Any) -> _FakeSecretManager:
-        instance = _FakeSecretManager(db_session)
-        if configure is not None:
-            configure(instance)
-        return instance
-
-    patch = create_module_patch(
-        config_routes_secrets, "_build_secret_manager"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_secret_create_request_factory() -> Any:
-    class _NS:
-        def __init__(self, **kwargs: Any) -> None:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-            return
-
-    def _builder(**kwargs: Any) -> _NS:
-        return _NS(**kwargs)
-
-    patch = create_module_patch(
-        config_routes_secrets, "_build_secret_create_request"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_secret_update_request_factory() -> Any:
-    class _NS:
-        def __init__(self, **kwargs: Any) -> None:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-            return
-
-    def _builder(**kwargs: Any) -> _NS:
-        return _NS(**kwargs)
-
-    patch = create_module_patch(
-        config_routes_secrets, "_build_secret_update_request"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_resolve_secret_type() -> Any:
-    def _resolve(*, secret_type_str: str) -> Any:
-        return type("ST", (), {"value": secret_type_str})()
-
-    patch = create_module_patch(
-        config_routes_secrets, "_resolve_secret_type"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_resolve)
     return patch
 
 
@@ -495,39 +335,6 @@ def _register_url_for_endpoints() -> None:
 # ===========================================================================
 
 
-def test_register_secrets_routes_attaches_documented_routes():
-    """
-    **Feature: webworks config secrets port T4.1 (D4)**
-    **Property: register_secrets_routes attaches the four
-    secret-management routes at /admin/secrets* and the import into the vault
-    (audit ADM-07).**
-    """
-    _reset_global_state()
-    try:
-        app = _FakeApp()
-        config_routes_secrets.register_secrets_routes(app=app)
-        actual = set(
-            (path, methods) for path, methods, _ in app.calls
-        )
-        expected = {
-            ("/admin/secrets", ("GET",)),
-            ("/admin/secrets/create", ("GET", "POST")),
-            (
-                "/admin/secrets/{scope_id}/{name}/edit",
-                ("GET", "POST"),
-            ),
-            (
-                "/admin/secrets/{scope_id}/{name}/delete",
-                ("POST",),
-            ),
-            ("/admin/secrets/import", ("POST",)),
-        }
-        testbase.assert_equal(actual, expected)
-    finally:
-        _reset_global_state()
-    return
-
-
 def test_register_sessions_routes_attaches_documented_routes():
     """
     **Feature: webworks config sessions port T4.2 (D4)**
@@ -579,344 +386,6 @@ def test_register_audit_routes_attaches_documented_routes():
         }
         testbase.assert_equal(actual, expected)
     finally:
-        _reset_global_state()
-    return
-
-
-# ===========================================================================
-# Secrets -- list / create / edit / delete
-# ===========================================================================
-
-
-def test_handle_secret_list_renders_with_filters():
-    """
-    **Feature: webworks config secrets port T4.4**
-    **Property: GET /admin/secrets renders config/secrets/
-    list.html with the secret_manager outputs and the
-    selected_scope_id filter passed through.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secrets = [
-            _FakeSecretMetadata(
-                secret_id=1, name="db_pw", scope_id=2,
-                scope_name="prod"
-            )
-        ]
-
-        def _seed(instance: _FakeSecretManager) -> None:
-            instance.list_secrets_response = secrets
-            instance.list_scopes_response = []
-            return
-
-        secret_patch = _patch_secret_manager(configure=_seed)
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={"page": "2", "per_page": "10", "scope_id": "5"},
-        )
-        response = config_routes_secrets.handle_secret_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        testbase.assert_equal(
-            env.template_lookups, ["config/secrets/list.html"]
-        )
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["secrets"], secrets)
-        testbase.assert_equal(ctx["selected_scope_id"], 5)
-        sm = _FakeSecretManager.last_instance
-        testbase.assert_equal(sm.list_secrets_calls[0]["scope_id"], 5)
-        testbase.assert_equal(sm.list_secrets_calls[0]["offset"], 10)
-        testbase.assert_equal(sm.list_secrets_calls[0]["limit"], 10)
-    finally:
-        for p in (secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_create_post_happy_path_redirects_to_list():
-    """
-    **Feature: webworks config secrets port T4.5**
-    **Property: A valid POST creates the secret via SecretManager
-    and redirects to /admin/secrets with a success flash.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    cr_patch = None
-    rt_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secret_patch = _patch_secret_manager()
-        cr_patch = _patch_secret_create_request_factory()
-        rt_patch = _patch_resolve_secret_type()
-
-        cookie_value = _build_authenticated_cookie()
-        body = (
-            b"csrf_token=csrf-fresh&name=db_pw&value=hunter2"
-            b"&secret_type=password&scope_id=2&description=DB+admin"
-        )
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-        )
-        response = config_routes_secrets.handle_secret_create(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/admin/secrets"
-        )
-        sm = _FakeSecretManager.last_instance
-        testbase.assert_equal(len(sm.create_secret_calls), 1)
-        ar, user_id = sm.create_secret_calls[0]
-        testbase.assert_equal(ar.name, "db_pw")
-        testbase.assert_equal(ar.scope_id, 2)
-        testbase.assert_equal(user_id, "u-admin")
-    finally:
-        for p in (rt_patch, cr_patch, secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_create_post_manager_error_re_renders_with_flash():
-    """
-    **Feature: webworks config secrets port T4.5**
-    **Property: A curated (surfaceable) exception on create
-    yields a 400 re-render with an error-category flash
-    carrying the curated message.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    cr_patch = None
-    rt_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeSecretManager) -> None:
-            instance.create_secret_raises = ValueError(
-                "duplicate secret name"
-            )
-            return
-
-        secret_patch = _patch_secret_manager(configure=_seed)
-        cr_patch = _patch_secret_create_request_factory()
-        rt_patch = _patch_resolve_secret_type()
-
-        cookie_value = _build_authenticated_cookie()
-        body = (
-            b"csrf_token=csrf-fresh&name=db_pw&value=x"
-            b"&secret_type=password&scope_id=2"
-        )
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-        )
-        response = config_routes_secrets.handle_secret_create(request)
-
-        testbase.assert_equal(response.status_code, 400)
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "duplicate" in message
-        testbase.assert_equal(contains, True)
-    finally:
-        for p in (rt_patch, cr_patch, secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_edit_post_happy_path_redirects_to_list():
-    """
-    **Feature: webworks config secrets port T4.6**
-    **Property: A valid edit POST calls update_secret with
-    name/scope_id/UpdateRequest/user_id and redirects.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    upd_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secret_patch = _patch_secret_manager()
-        upd_patch = _patch_secret_update_request_factory()
-
-        cookie_value = _build_authenticated_cookie()
-        body = b"csrf_token=csrf-fresh&value=newpw&description=Updated"
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-            path_params={"scope_id": "3", "name": "db_pw"},
-        )
-        response = config_routes_secrets.handle_secret_edit(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/admin/secrets"
-        )
-        sm = _FakeSecretManager.last_instance
-        testbase.assert_equal(len(sm.update_secret_calls), 1)
-        name, scope_id, ar, user_id = sm.update_secret_calls[0]
-        testbase.assert_equal(name, "db_pw")
-        testbase.assert_equal(scope_id, 3)
-        testbase.assert_equal(ar.value, "newpw")
-        testbase.assert_equal(user_id, "u-admin")
-    finally:
-        for p in (upd_patch, secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_edit_get_redirects_when_metadata_missing():
-    """
-    **Feature: webworks config secrets port T4.6**
-    **Property: get_secret_metadata returning None yields a
-    redirect to /admin/secrets with an error flash.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secret_patch = _patch_secret_manager()
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            path_params={"scope_id": "3", "name": "ghost"},
-        )
-        response = config_routes_secrets.handle_secret_edit(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/admin/secrets"
-        )
-    finally:
-        for p in (secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_delete_happy_path_redirects_to_list():
-    """
-    **Feature: webworks config secrets port T4.7**
-    **Property: A valid POST calls SecretManager.delete_secret
-    and redirects with a success flash.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secret_patch = _patch_secret_manager()
-
-        cookie_value = _build_authenticated_cookie()
-        body = b"csrf_token=csrf-fresh"
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-            path_params={"scope_id": "3", "name": "db_pw"},
-        )
-        response = config_routes_secrets.handle_secret_delete(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/admin/secrets"
-        )
-        sm = _FakeSecretManager.last_instance
-        testbase.assert_equal(
-            sm.delete_secret_calls, [("db_pw", 3, "u-admin")]
-        )
-    finally:
-        for p in (secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_delete_unparsable_scope_id_short_circuits():
-    """
-    **Feature: webworks config secrets port T4.7**
-    **Property: A non-int scope_id path param yields a
-    redirect to the list with an error flash WITHOUT building
-    the SecretManager / calling delete_secret.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secret_patch = _patch_secret_manager()
-
-        cookie_value = _build_authenticated_cookie()
-        body = b"csrf_token=csrf-fresh"
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-            path_params={"scope_id": "not-an-int", "name": "db_pw"},
-        )
-        response = config_routes_secrets.handle_secret_delete(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(_FakeSecretManager.last_instance, None)
-    finally:
-        for p in (secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
         _reset_global_state()
     return
 
@@ -1182,115 +651,6 @@ def test_parse_iso_datetime_or_none_handles_valid_and_invalid():
 # ===========================================================================
 
 
-def test_handle_secret_list_passes_pagination_totals():
-    """
-    **Feature: admin UX -- secret list pagination**
-    **Property: GET /admin/secrets passes total + total_pages
-    into the template context so the list can render windowed
-    pagination controls.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        secrets = [
-            _FakeSecretMetadata(
-                secret_id=n, name="s-{}".format(n), scope_id=1
-            )
-            for n in range(1, 8)
-        ]
-
-        def _seed(instance: _FakeSecretManager) -> None:
-            instance.list_secrets_response = secrets
-            return
-
-        secret_patch = _patch_secret_manager(configure=_seed)
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={"page": "2", "per_page": "3"},
-        )
-        response = config_routes_secrets.handle_secret_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        ctx = env.last_template.render_calls[0]
-        # The fake reports total == len(list_secrets_response).
-        testbase.assert_equal(ctx["total"], 7)
-        testbase.assert_equal(ctx["total_pages"], 3)
-        testbase.assert_equal(ctx["page"], 2)
-        testbase.assert_equal(ctx["per_page"], 3)
-    finally:
-        for p in (secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_secret_create_post_unexpected_error_masks_message():
-    """
-    **Feature: admin UX -- typed error flashes**
-    **Property: A non-curated (unexpected) exception on create
-    re-renders with a GENERIC error flash -- the raw exception
-    text never reaches the browser.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    secret_patch = None
-    cr_patch = None
-    rt_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeSecretManager) -> None:
-            instance.create_secret_raises = RuntimeError(
-                "psycopg2.OperationalError: connection refused"
-            )
-            return
-
-        secret_patch = _patch_secret_manager(configure=_seed)
-        cr_patch = _patch_secret_create_request_factory()
-        rt_patch = _patch_resolve_secret_type()
-
-        cookie_value = _build_authenticated_cookie()
-        body = (
-            b"csrf_token=csrf-fresh&name=db_pw&value=x"
-            b"&secret_type=password&scope_id=2"
-        )
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            body=body,
-        )
-        response = config_routes_secrets.handle_secret_create(request)
-
-        testbase.assert_equal(response.status_code, 400)
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        raw_leaked = "psycopg2" in message
-        testbase.assert_equal(raw_leaked, False)
-        generic_present = "unexpected internal error" in message
-        testbase.assert_equal(generic_present, True)
-    finally:
-        for p in (rt_patch, cr_patch, secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
 def test_resolve_admin_page_title_maps_known_paths_and_defaults():
     """
     **Feature: admin UX -- per-page shell titles**
@@ -1302,8 +662,7 @@ def test_resolve_admin_page_title_maps_known_paths_and_defaults():
     cases = (
         ("/admin/users", "Users · Pychestrate"),
         ("/admin/users/u-1/edit", "Users · Pychestrate"),
-        ("/admin/secrets", "Secrets · Pychestrate"),
-        ("/admin/scopes/3/edit", "Secret Scopes · Pychestrate"),
+        ("/admin/variables", "Variables · Pychestrate"),
         ("/admin/sessions", "Sessions · Pychestrate"),
         ("/admin/audit-logs", "Audit Logs · Pychestrate"),
         ("/admin/enrollment-tokens", "Enrollment Tokens · Pychestrate"),

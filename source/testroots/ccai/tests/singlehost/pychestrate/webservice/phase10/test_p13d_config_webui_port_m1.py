@@ -447,7 +447,7 @@ def test_register_config_routes_pre_registers_future_endpoint_patterns():
     **Feature: webworks config blueprint port T1.1 (D1)**
     **Property: register_config_routes pre-registers the URL
     patterns for D2/D3/D4 endpoints (user_list / role_list /
-    variable_list / scope_list / secret_list / session_list /
+    variable_list / session_list /
     audit_log_list) so the dashboard render does not crash at
     url_for() time before those handlers ship.**
     """
@@ -461,8 +461,6 @@ def test_register_config_routes_pre_registers_future_endpoint_patterns():
             "config.user_list",
             "config.role_list",
             "config.variable_list",
-            "config.scope_list",
-            "config.secret_list",
             "config.session_list",
             "config.audit_log_list",
         ):

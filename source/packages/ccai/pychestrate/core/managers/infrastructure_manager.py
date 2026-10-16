@@ -340,17 +340,15 @@ class InfrastructureManager:
     Validates: Requirements 6.1-6.5, 7.1-7.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, secret_manager=None):
+    def __init__(self, db_session: DbSession, audit_logger=None):
         """
         Initialize the InfrastructureManager with a database session.
         
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
-        :param secret_manager: Optional SecretManager instance for secret resolution
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
-        self._secret_manager = secret_manager
     
     # =========================================================================
     # Validation Methods

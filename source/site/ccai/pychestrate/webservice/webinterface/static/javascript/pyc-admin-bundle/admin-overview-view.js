@@ -50,7 +50,7 @@ const SHORTCUT_GROUPS = [
     title: "Configuration",
     links: [
       { label: "Variables", href: "/admin/variables", permission: "system:ui.admin.view", detail: "Settings shared by the whole installation." },
-      { label: "Secrets (legacy)", href: "/admin/secrets", permission: "system:secrets.read", detail: "Stored credentials, by scope." }
+      { label: "Secrets", href: "/secrets", permission: "system:secrets.read", detail: "Encrypted credentials the installation uses." }
     ]
   }
 ];

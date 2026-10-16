@@ -8,7 +8,7 @@
 Deleting a project, a pool or a secret in the bundle views asks for the name to be typed; the same deletions on the server-rendered pages used the
 ordinary confirm. The rule, recorded here: a deletion asks for the name when it is permanent and removes something that other records depend on or
 that holds history, and it is rare enough that typing a name costs nothing: a role (its holders lose it), a device (its allocation, reservation and
-health history goes with it), a resource pool, an IP pool, a secret (every version), and retiring an RPA job type. Reversible or small actions keep the
+health history goes with it), a resource pool, an IP pool, and retiring an RPA job type (a secret, every version, asks too, in the vault's bundle view; the server-rendered legacy secret page is gone). Reversible or small actions keep the
 ordinary confirm: removing a member, revoking a token, cancelling a reservation, deleting a tag. This lint reads every server-rendered template, so a new
 page with one of these forms cannot forget it.
 """
@@ -33,7 +33,7 @@ from ccai.tests.singlehost.pychestrate.webservice.phase10 import _adm_helpers as
 
 
 #: The endpoints whose forms must ask for a name to be typed.
-TYPE_TO_CONFIRM = ("config.role_delete", "resources.resource_delete", "resources.pool_delete", "resources.ip_pool_delete", "config.rpa_type_retire", "config.secret_delete")
+TYPE_TO_CONFIRM = ("config.role_delete", "resources.resource_delete", "resources.pool_delete", "resources.ip_pool_delete", "config.rpa_type_retire")
 
 #: Endpoints that stay with the ordinary confirm (reversible or small), pinned so the decision is deliberate.
 ORDINARY_CONFIRM = ("projects.member_remove", "resources.tag_delete", "resources.reservation_cancel", "config.variable_delete", "config.user_deactivate")
@@ -66,8 +66,8 @@ def _forms(endpoint: str) -> List[str]:
 def test_every_form_that_makes_a_permanent_deletion_asks_for_the_name():
     """
     **Feature: type to confirm on server-rendered pages (XC-15)**
-    **Property: every ``<form>`` posting to the role, device, resource pool, IP pool, secret and job-type-retire endpoints carries a
-    ``data-confirm-type`` that is the entity's name (the form or its button), and there are at least ten such forms.**
+    **Property: every ``<form>`` posting to the role, device, resource pool, IP pool and job-type-retire endpoints carries a
+    ``data-confirm-type`` that is the entity's name (the form or its button), and there are at least nine such forms.**
     """
     missing: List[str] = []
     count = 0
@@ -77,7 +77,7 @@ def test_every_form_that_makes_a_permanent_deletion_asks_for_the_name():
             if re.search(r'data-confirm-type="\{\{\s*[a-z_]+\.(?:name|type_id)\s*\}\}"', block) is None:
                 missing.append(endpoint)
 
-    testbase.assert_equal((missing, count >= 10), ([], True))
+    testbase.assert_equal((missing, count >= 9), ([], True))
     return
 
 
