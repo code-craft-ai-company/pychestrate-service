@@ -29,6 +29,9 @@ preview tag.
 
 ### Fixed
 
+- **Entries under a section heading in the sidebar are indented.** In the Admin menu the headings (People & access, Configuration, Fleet enrollment, Platform) and the entries under them started at exactly the same
+  place, so the headings did not read as headings. Entries under a heading now sit one step in from it; the Overview, which is under no heading, stays level with them, and groups without sections are unchanged. A browser test
+  measures where the text of each heading and entry starts, and fails when the entries are not indented past their heading (checked against a CSS regression and a script regression).
 - **An RPA packet can point at a vault secret instead of holding its value (ADM-07).** Write `{"$secret": "company/db-password"}` where a job needs a secret (see the RPA page of the user guide). The reference is checked when
   a specification is saved or a run supplies it, as the signed-in user, through the vault's own read path (the secret must exist, not be expired, and be readable by that user; every failing reference is listed with its packet
   path, in the form next to the packet or as a 422 `errors` list). At dispatch the service reads it once and puts the value into the payload sent to the pod only: the specification, its revisions, the job row and the packet

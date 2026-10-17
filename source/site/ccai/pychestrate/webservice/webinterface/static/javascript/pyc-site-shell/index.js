@@ -3495,6 +3495,9 @@ var SidebarRenderer = class {
         entry.route,
         active_path
       );
+      if (section.length > 0) {
+        entry_element.classList.add("pyc-site-shell__sidebar-entry--in-section");
+      }
       if (entry.route === active_path) {
         has_active_entry = true;
       }

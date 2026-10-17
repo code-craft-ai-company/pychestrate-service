@@ -200,6 +200,10 @@ class SidebarRenderer {
         entry.route,
         active_path
       );
+      if (section.length > 0) {
+        // An entry under a section heading sits one step in from the heading.
+        entry_element.classList.add("pyc-site-shell__sidebar-entry--in-section");
+      }
       if (entry.route === active_path) {
         has_active_entry = true;
       }

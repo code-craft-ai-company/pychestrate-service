@@ -153,6 +153,54 @@ def test_the_sidebar_writes_each_section_heading_above_its_entries(browser: Brow
     return
 
 
+#: Where the text of each heading and entry in the open Admin panel starts, in pixels from the left of the page.
+INDENT_JS = """() => {
+  const panel = Array.from(document.querySelectorAll('.pyc-site-shell__sidebar-panel')).find((p) => !p.hidden && p.querySelector('.pyc-site-shell__sidebar-section'));
+  const rows = [];
+  for (const li of panel.querySelectorAll('.pyc-site-shell__sidebar-panel-list > li')) {
+    const heading = li.classList.contains('pyc-site-shell__sidebar-section');
+    const node = heading ? li : li.firstElementChild;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    rows.push({heading, text: node.textContent.trim(), left: Math.round(range.getBoundingClientRect().left)});
+  }
+  return rows;
+}"""
+
+
+def test_entries_under_a_section_heading_are_indented_past_it(browser: Browser):
+    """
+    **Feature: admin menu (ADM-39)**
+    **Property: in the open Admin panel every entry under a section heading starts further right than the heading (by at least 8 px), the entries of one
+    section share one indent, and the Overview, which sits under no heading, starts where the headings do, so the hierarchy reads group, heading, entries.**
+    """
+    page = open_shell_page(browser, path="/admin/users", **DESKTOP)
+    try:
+        rows = page.evaluate(INDENT_JS)
+    finally:
+        page.context.close()
+    heading_left: Dict[str, int] = {}
+    entry_lefts: Dict[str, List[int]] = {}
+    current = ""
+    for row in rows:
+        if row["heading"]:
+            current = row["text"]
+            heading_left[current] = row["left"]
+            entry_lefts[current] = []
+        elif current != "":
+            entry_lefts[current].append(row["left"])
+    overview_left = rows[0]["left"]
+    summary = {
+        name: (all(left - heading_left[name] >= 8 for left in lefts), len(set(lefts)) == 1, len(lefts) > 0)
+        for name, lefts in entry_lefts.items()
+    }
+    testbase.assert_equal(
+        (rows[0]["text"], overview_left == min(heading_left.values()), list(summary.keys()), set(summary.values())),
+        ("Overview", True, SECTIONS, {(True, True, True)}),
+    )
+    return
+
+
 def test_a_group_without_sections_gets_no_headings(browser: Browser):
     """
     **Feature: admin menu (ADM-39)**

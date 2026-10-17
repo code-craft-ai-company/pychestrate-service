@@ -556,6 +556,14 @@ pyc-site-shell:not(:defined)::before {
     font-size: var(--pyc-site-shell-font-size-small);
 }
 
+/*
+ * An entry under a section heading (the Admin group) is indented one step past the heading, so the headings
+ * read as headings: group, then section, then its entries. Entries with no section stay at the group's indent.
+ */
+.pyc-site-shell__sidebar-entry--in-section {
+    padding-left: 3.25rem;
+}
+
 .pyc-site-shell__sidebar-entry:hover {
     background-color: var(--pyc-site-shell-surface-hover);
 }
