@@ -898,17 +898,20 @@ def list_identity_users(
         db_session: Any,
         offset: int,
         limit: int,
-        search: Optional[str]
+        search: Optional[str],
+        include_deleted: bool = False
     ) -> AdminUserListResult:
     """
         Return a page of identity users with their SYSTEM-scope role
         names, optionally filtered by a search term matched against
-        login name, email, and display name.
+        login name, email, and display name. Deleted (anonymised) accounts
+        are left out unless ``include_deleted``.
 
         :param db_session: The active SQLAlchemy session.
         :param offset: Pagination offset.
         :param limit: Page size.
         :param search: Optional search substring.
+        :param include_deleted: Also list deleted accounts.
 
         :returns: An :class:`AdminUserListResult`.
     """
@@ -917,6 +920,8 @@ def list_identity_users(
     from ccai.pychestrate.webservice.identity.users.models import IdentityUser
 
     query = db_session.query(IdentityUser)
+    if include_deleted is False:
+        query = query.filter(IdentityUser.anonymised_at.is_(None))
     if search is not None and len(search) > 0:
         pattern = "%{}%".format(search)
         query = query.filter(

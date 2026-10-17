@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- **A user can be deleted.** A deactivated account now has a **Delete** button, in the Users list and on the user's page, in place of **Anonymise** (it asks for the login name to be typed and cannot be undone). Deleting
+  erases the person exactly as anonymising did: name, email, login, credentials, sessions, API tokens, memberships and roles. The login name and email address can be used again, and the account leaves the Users list and its
+  CSV export; **Show deleted accounts** (`?show_deleted=1`) lists them as *Deleted*. Only an id with no name stays, because the audit log, "created by" fields and run history refer to users by id and removing the row would leave
+  every one of them naming nothing (the decision and what it does not do are in `specs/1-user-management/requirements.md`, Requirement 5a). REST: `DELETE /api/v1/identity/users/{user_id}` does the same as `POST .../anonymise`
+  (which stays) and answers `deleted: true`; `GET /api/v1/identity/users`, the picker's list, leaves deleted accounts out unless `include_deleted=true`, so a deleted person is never offered as an owner. The old
+  `/admin/users/{id}/anonymise` address still works.
 - **Entries under a section heading in the sidebar are indented.** In the Admin menu the headings (People & access, Configuration, Fleet enrollment, Platform) and the entries under them started at exactly the same
   place, so the headings did not read as headings. Entries under a heading now sit one step in from it; the Overview, which is under no heading, stays level with them, and groups without sections are unchanged. A browser test
   measures where the text of each heading and entry starts, and fails when the entries are not indented past their heading (checked against a CSS regression and a script regression).

@@ -35,8 +35,8 @@
             <th scope="row">Status</th>
             <td>
                 {% if user.status == 'anonymised' %}
-                <span class="badge badge-secondary">Anonymised</span>
-                <span class="muted small">Personal data erased. It cannot be edited or reactivated; the account's id stays in the audit log.</span>
+                <span class="badge badge-secondary">Deleted</span>
+                <span class="muted small">Personal data erased. It cannot be edited or reactivated; only the account's id stays, in the audit log.</span>
                 {% elif user.status == 'invited' %}
                 <span class="badge badge-secondary">Invited</span>
                 <span class="muted small">No password yet &mdash; waiting for the user to open their invite link.</span>
@@ -93,10 +93,10 @@
             {{ ui.icon("check_circle") }} Reactivate
         </button>
     </form>
-    <form action="{{ url_for('config.user_anonymise', user_id=user.id) }}" method="post" data-role="anonymise-form" data-confirm="Anonymise {{ user.username }}? Their name, email address, password, sign-in history, API tokens and memberships are erased permanently. The audit log keeps the account's id but no longer names the person. This cannot be undone." data-confirm-type="{{ user.username }}">
+    <form action="{{ url_for('config.user_delete', user_id=user.id) }}" method="post" data-role="delete-form" data-confirm="Delete {{ user.username }}? Their name, email address, password, sign-in history, API tokens and memberships are erased permanently, and the account leaves the Users list. Only an id with no name stays, so the audit log still makes sense. This cannot be undone." data-confirm-type="{{ user.username }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger">
-            {{ ui.icon("delete") }} Anonymise
+            {{ ui.icon("delete") }} Delete
         </button>
     </form>
     {% endif %}

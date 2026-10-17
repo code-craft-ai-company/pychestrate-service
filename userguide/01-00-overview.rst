@@ -177,20 +177,24 @@ Users, roles, and permissions
     whether the account is active, invited or inactive, the roles held everywhere, and
     when it was created (at most 5,000 users; a longer list is cut and the download says
     so in its ``X-Export-Truncated`` header).
-    To answer a data-protection request, first **Deactivate** the account (that ends its
-    access and can be undone), then choose **Anonymise** on the user's page. It asks for the
-    login name to be typed and cannot be undone: the name, email address, password, MFA
-    enrolment, sign-in sessions, API tokens, group and project memberships and roles are erased,
-    and the account stays in the list as *Anonymised* so the audit log keeps resolving its id
-    (it no longer names the person). An account that owns a project cannot be anonymised until the
-    project is transferred or deleted; your own account cannot be anonymised. Entries written to
-    the audit log *before* the account was anonymised may still contain the person's login name:
+    To remove a person, first **Deactivate** the account (that ends its access and can be
+    undone), then choose **Delete**, in the list or on the user's page. It asks for the login
+    name to be typed and cannot be undone: the name, email address, password, MFA enrolment,
+    sign-in sessions, API tokens, group and project memberships and roles are erased, the login
+    name and email address can be used again, and the account leaves the list. Only an id with
+    no name stays, so the audit log and the records the person made keep resolving; **Show
+    deleted accounts** on the Users page lists them as *Deleted*. This is also how to meet a
+    data-protection request. An account that owns a project cannot be deleted until the project
+    is transferred or deleted; your own account cannot be deleted. Entries written to
+    the audit log *before* the account was deleted may still contain the person's login name:
     the log is tamper-evident (each entry is chained to the one before), so entries are not edited;
     old ones leave by a retention policy. A notification rule holds the recipient addresses as they
     were typed, so look for the person's address on **Admin**, **Notifications** and remove it.
-    The same three actions are in the REST API for a scripted request:
-    ``POST /api/v1/identity/users/{id}/deactivate``, ``/reactivate`` and ``/anonymise`` (need
-    ``system:users.write``; a refusal is a 409 that says why and changes nothing).
+    The same actions are in the REST API for a scripted request:
+    ``POST /api/v1/identity/users/{id}/deactivate``, ``/reactivate`` and ``/anonymise``, and
+    ``DELETE /api/v1/identity/users/{id}`` (the same as ``/anonymise``; they need
+    ``system:users.write``; a refusal is a 409 that says why and changes nothing). The user
+    list there leaves deleted accounts out unless ``include_deleted=true``.
 
 Secrets and variables
     Credentials and configuration that jobs and integrations use.

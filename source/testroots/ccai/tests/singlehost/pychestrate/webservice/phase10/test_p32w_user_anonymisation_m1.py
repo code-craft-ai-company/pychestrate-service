@@ -257,8 +257,8 @@ def test_anonymising_a_deactivated_user_erases_everything_that_names_or_authenti
 def test_an_anonymised_account_shows_as_anonymised_and_offers_no_way_back():
     """
     **Feature: user anonymisation (ADM-41)**
-    **Property: the user's page and the list say "Anonymised"; neither offers Edit, Reset password,
-    Reactivate or Anonymise; Edit redirects to the page with a message; Reactivate is refused and the
+    **Property: the user's page and the list (when deleted accounts are asked for) say "Deleted"; neither offers Edit, Reset password,
+    Reactivate or Delete; Edit redirects to the page with a message; Reactivate is refused and the
     account stays anonymised; the CSV export says "anonymised" with no roles.**
     """
     cookies = adm.admin_cookies()
@@ -268,17 +268,17 @@ def test_an_anonymised_account_shows_as_anonymised_and_offers_no_way_back():
     anonymised = "anonymised-" + uuid.UUID(user_id).hex
 
     detail = adm.get(path="/admin/users/" + user_id, cookies=cookies).text
-    listing = adm.get(path="/admin/users", cookies=cookies, query={"search": anonymised}).text
+    listing = adm.get(path="/admin/users", cookies=cookies, query={"search": anonymised, "show_deleted": "1"}).text
     edit = adm.get(path="/admin/users/{}/edit".format(user_id), cookies=cookies)
     reactivate = _post(cookies, "/admin/users/{}/reactivate".format(user_id))
     after = _flash_after(cookies, "/admin/users/" + user_id)
-    exported = list(csv.DictReader(io.StringIO(adm.get(path="/admin/users", cookies=cookies, query={"format": "csv", "search": anonymised}).text)))
+    exported = list(csv.DictReader(io.StringIO(adm.get(path="/admin/users", cookies=cookies, query={"format": "csv", "search": anonymised, "show_deleted": "1"}).text)))
 
     testbase.assert_equal(
         (
-            "Anonymised" in detail, username in detail,
-            any(text in detail for text in ("Edit User", "Reset password", "Reactivate", 'data-role="anonymise-form"')),
-            "Anonymised" in listing and "Erased" in listing, edit.status_code in (302, 303), reactivate.status_code in (302, 303),
+            "Deleted" in detail, username in detail,
+            any(text in detail for text in ("Edit User", "Reset password", "Reactivate", 'data-role="delete-form"')),
+            "Deleted" in listing and "Erased" in listing, edit.status_code in (302, 303), reactivate.status_code in (302, 303),
             "cannot be reactivated" in after, _identity_row(user_id)["anonymised"],
             [(row["status"], row["system_roles"]) for row in exported],
         ),
@@ -335,7 +335,7 @@ def test_it_refuses_and_changes_nothing_for_an_active_account_the_administrators
 def test_the_button_asks_for_the_login_name_and_is_only_on_a_deactivated_account_and_needs_the_permission():
     """
     **Feature: user anonymisation (ADM-41)**
-    **Property: a deactivated user's page carries an Anonymise form whose confirmation asks for the
+    **Property: a deactivated user's page carries a Delete form whose confirmation asks for the
     login name to be typed; an active user's page has none; a signed-in user without the users permission
     is refused (403) and nothing changes; the anonymisation is written to the audit log with no name or
     email in it.**
@@ -346,23 +346,101 @@ def test_the_button_asks_for_the_login_name_and_is_only_on_a_deactivated_account
     active_page = adm.get(path="/admin/users/" + user_id, cookies=cookies).text
     _deactivate(cookies, user_id)
     inactive_page = adm.get(path="/admin/users/" + user_id, cookies=cookies).text
-    form = re.search(r'<form[^>]*data-role="anonymise-form"[^>]*>', inactive_page)
+    form = re.search(r'<form[^>]*data-role="delete-form"[^>]*>', inactive_page)
 
     viewer = login_as(wsgi_app=ensure_app().wsgi_app, user=ensure_seeded_viewer())
-    refused = adm.post_form(path="/admin/users/{}/anonymise".format(user_id), cookies=viewer, fields={})
+    refused = adm.post_form(path="/admin/users/{}/delete".format(user_id), cookies=viewer, fields={})
     still_there = _identity_row(user_id)["login"]
 
     mark = adm.latest_audit_sequence()
-    _post(cookies, "/admin/users/{}/anonymise".format(user_id))
+    _post(cookies, "/admin/users/{}/delete".format(user_id))
     records = adm.audit_records_for(kind="audit.user.anonymised", since_sequence=mark)
     recorded = " ".join(str(record.payload_json) for record in records)
 
     testbase.assert_equal(
         (
-            'data-role="anonymise-form"' in active_page, form is not None and 'data-confirm-type="{}"'.format(username) in form.group(0),
+            'data-role="delete-form"' in active_page, form is not None and 'data-confirm-type="{}"'.format(username) in form.group(0),
             refused.status_code, still_there == username, len(records),
             user_id in recorded, username in recorded, "Grace Hopper" in recorded, "@example.com" in recorded,
         ),
         (False, True, 403, True, 1, True, False, False, False),
+    )
+    return
+
+
+def test_deleting_a_user_erases_the_person_says_so_and_frees_their_login_and_email_for_reuse():
+    """
+    **Feature: deleting a user (ADM-41, Requirement 5a)**
+    **Property: POSTing to the delete address of a deactivated user shows the "User deleted" message, leaves the account anonymised (login and email derived from its id), and
+    a new account can then be created with the same login name and email address.**
+    """
+    cookies = adm.admin_cookies()
+    user_id, username = _make_user(cookies, prefix="del")
+    _deactivate(cookies, user_id)
+    _post(cookies, "/admin/users/{}/delete".format(user_id))
+    message = _flash_after(cookies, "/admin/users/" + user_id)
+
+    again = adm.post_form(
+        path="/admin/users/create", cookies=cookies,
+        fields={
+            "username": username, "email": "{}@example.com".format(username), "password_setup": "password", "password": GOOD_PASSWORD,
+            "display_name": "Second Person", "firstname": "Grace", "lastname": "Hopper",
+        },
+    )
+    testbase.assert_equal(
+        ("User deleted" in message, _identity_row(user_id)["anonymised"], username in str(_identity_row(user_id)["login"]), again.status_code in (302, 303)),
+        (True, True, False, True),
+    )
+    return
+
+
+def test_a_deleted_account_is_left_out_of_the_list_and_the_export_until_deleted_accounts_are_asked_for():
+    """
+    **Feature: deleting a user (ADM-41, Requirement 5a)**
+    **Property: after a delete the account is in neither the Users list nor its CSV export; with ``show_deleted=1`` it is in both, as "Deleted" and "anonymised"; and the list
+    page links to "Show deleted accounts" and then to "Hide deleted accounts".**
+    """
+    cookies = adm.admin_cookies()
+    user_id, _username = _make_user(cookies, prefix="hid")
+    _deactivate(cookies, user_id)
+    _post(cookies, "/admin/users/{}/delete".format(user_id))
+    derived = "anonymised-" + uuid.UUID(user_id).hex
+
+    default_page = adm.get(path="/admin/users", cookies=cookies, query={"search": derived}).text
+    shown_page = adm.get(path="/admin/users", cookies=cookies, query={"search": derived, "show_deleted": "1"}).text
+    default_csv = adm.get(path="/admin/users", cookies=cookies, query={"format": "csv", "search": derived}).text
+    shown_csv = adm.get(path="/admin/users", cookies=cookies, query={"format": "csv", "search": derived, "show_deleted": "1"}).text
+
+    testbase.assert_equal(
+        (
+            "/admin/users/" + user_id in default_page, 'data-role="show-deleted"' in default_page,
+            "/admin/users/" + user_id in shown_page, "Deleted" in shown_page, 'data-role="hide-deleted"' in shown_page,
+            derived in default_csv, derived in shown_csv,
+        ),
+        (False, True, True, True, True, False, True),
+    )
+    return
+
+
+def test_the_list_offers_delete_only_on_a_deactivated_account_and_asks_for_the_login_name():
+    """
+    **Feature: deleting a user (ADM-41, Requirement 5a)**
+    **Property: in the Users list an active account's row has Deactivate and no Delete; once deactivated its row has Delete, in a form whose confirmation asks for the login name.**
+    """
+    cookies = adm.admin_cookies()
+    user_id, username = _make_user(cookies, prefix="row")
+
+    def _row_html() -> str:
+        page = adm.get(path="/admin/users", cookies=cookies, query={"search": username}).text
+        return re.search(r"<tr>(?:(?!</tr>).)*" + re.escape(username) + r".*?</tr>", page, re.S).group(0)
+
+    active_row = _row_html()
+    _deactivate(cookies, user_id)
+    inactive_row = _row_html()
+    form = re.search(r'<form[^>]*data-role="delete-form"[^>]*>', inactive_row)
+
+    testbase.assert_equal(
+        ("Deactivate" in active_row, 'data-role="delete-form"' in active_row, form is not None and 'data-confirm-type="{}"'.format(username) in form.group(0), "Reactivate" in inactive_row),
+        (True, False, True, True),
     )
     return

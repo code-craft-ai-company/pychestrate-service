@@ -456,6 +456,7 @@ def test_identity_users_routes_declare_documented_permissions():
         ("POST", base + "/{user_id}/deactivate"): "system:users.write",
         ("POST", base + "/{user_id}/reactivate"): "system:users.write",
         ("POST", base + "/{user_id}/anonymise"): "system:users.write",
+        ("DELETE", base + "/{user_id}"): "system:users.write",
     }
     testbase.assert_equal(
         _declared_permissions(registrar=users_routes.register_users_routes),

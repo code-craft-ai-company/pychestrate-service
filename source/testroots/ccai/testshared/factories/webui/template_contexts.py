@@ -542,6 +542,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "window_start": _const(1),
     "window_end": _by_mode(3, 1),
     "search": _by_mode("needle", ""),
+    "show_deleted": _by_mode(True, False),
     "filters_active": _by_mode(True, False),
     "filter_username": _by_mode("admin", ""),
     "filter_user_id": _by_mode("user_id-7", ""),

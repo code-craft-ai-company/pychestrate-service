@@ -490,7 +490,7 @@ def test_register_users_routes_attaches_documented_routes():
     **Property: register_users_routes attaches the user-
     management routes at /admin/users*, including the reset-
     password page, the reset / invite link action (ADM-04) and
-    the anonymise action (ADM-41).**
+    the anonymise and delete actions (ADM-41).**
     """
     _reset_global_state()
     try:
@@ -506,6 +506,7 @@ def test_register_users_routes_attaches_documented_routes():
             ("/admin/users/{user_id}/edit", ("GET", "POST")),
             ("/admin/users/{user_id}/deactivate", ("POST",)),
             ("/admin/users/{user_id}/anonymise", ("POST",)),
+            ("/admin/users/{user_id}/delete", ("POST",)),
             ("/admin/users/{user_id}/reactivate", ("POST",)),
             ("/admin/users/{user_id}/password", ("GET", "POST")),
             ("/admin/users/{user_id}/password-link", ("POST",)),
@@ -737,7 +738,7 @@ def test_handle_user_list_renders_with_pagination_and_search():
 
         def _list(
                 *, db_session: Any, offset: int, limit: int,
-                search: Optional[str]
+                search: Optional[str], include_deleted: bool = False
             ) -> _FakeListResult:
             list_calls.append(
                 {"offset": offset, "limit": limit, "search": search}

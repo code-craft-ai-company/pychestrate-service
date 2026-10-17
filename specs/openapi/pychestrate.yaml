@@ -750,13 +750,18 @@ paths:
         A page of users ordered by login name, optionally narrowed to those whose
         login name or display name contains `q` (a literal substring). Only what a
         picker needs is returned (id, login name, display name, status), not the
-        email address. Requires `system:users.read`.
+        email address. Deleted accounts are left out unless `include_deleted` is true,
+        so nobody is offered a deleted person to pick. Requires `system:users.read`.
       operationId: users_list
       parameters:
         - name: q
           in: query
           description: A substring of the login name or display name.
           schema: { type: string }
+        - name: include_deleted
+          in: query
+          description: List deleted (anonymised) accounts too. They are left out by default.
+          schema: { type: boolean, default: false }
         - $ref: '#/components/parameters/PageParam'
         - name: per_page
           in: query
@@ -827,6 +832,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [users]
+      summary: Delete a deactivated user account.
+      description: >-
+        The administrator's name for anonymising: the same rules and the same effect, and it **cannot be
+        undone**. The person's personal data is erased (login name, email and display name become
+        values derived from the id; credentials, sessions, API tokens, group memberships, role
+        bindings and project memberships are deleted), so the login name and email address can be used
+        again, and the account no longer appears in the user list unless deleted accounts are asked
+        for. The row and its id stay, with no name, so audit records and the records the user made keep
+        resolving. Refused with 409, changing nothing, when the account is not deactivated, is already
+        deleted, is your own, or owns a project (transfer or delete it first). Requires
+        `system:users.write`.
+      operationId: users_delete
+      responses:
+        '200': { $ref: '#/components/responses/UserLifecycle' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /identity/users/{user_id}/deactivate:
     parameters:
       - $ref: '#/components/parameters/UserIdParam'
@@ -7146,7 +7169,10 @@ components:
                 enum: [deactivated, active, invited, anonymised]
               anonymised:
                 type: boolean
-                description: Present, true, after `anonymise`.
+                description: Present, true, after `anonymise` or `delete` (the same action).
+              deleted:
+                type: boolean
+                description: Present, true, after `delete`.
     Unprocessable:
       description: Request was well-formed but semantically invalid.
       content:

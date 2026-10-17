@@ -111,6 +111,7 @@ _ROUTE_TABLE = (
     ("config.user_edit", "/users/{user_id}/edit", ("GET", "POST")),
     ("config.user_deactivate", "/users/{user_id}/deactivate", ("POST",)),
     ("config.user_anonymise", "/users/{user_id}/anonymise", ("POST",)),
+    ("config.user_delete", "/users/{user_id}/delete", ("POST",)),
     ("config.user_reactivate", "/users/{user_id}/reactivate", ("POST",)),
     ("config.user_password", "/users/{user_id}/password", ("GET", "POST")),
     ("config.user_password_link", "/users/{user_id}/password-link", ("POST",)),
@@ -173,6 +174,7 @@ _ROUTE_PERMISSIONS = {
     "config.user_edit": USERS_WRITE_PERMISSION,
     "config.user_deactivate": USERS_WRITE_PERMISSION,
     "config.user_anonymise": USERS_WRITE_PERMISSION,
+    "config.user_delete": USERS_WRITE_PERMISSION,
     "config.user_reactivate": USERS_WRITE_PERMISSION,
     "config.user_password": USERS_WRITE_PERMISSION,
     "config.user_password_link": USERS_WRITE_PERMISSION,
@@ -193,7 +195,8 @@ def _svc_list_users(
         db_session: Any,
         offset: int,
         limit: int,
-        search: Optional[str]
+        search: Optional[str],
+        include_deleted: bool = False
     ) -> Any:
     """
         List identity users. Lazy-imports the service so the routes
@@ -204,6 +207,7 @@ def _svc_list_users(
         :param offset: Pagination offset.
         :param limit: Page size.
         :param search: Optional search substring.
+        :param include_deleted: Also list deleted accounts (left out by default).
 
         :returns: An ``AdminUserListResult``.
     """
@@ -211,7 +215,7 @@ def _svc_list_users(
         identity_admin,
     )
     rtnval = identity_admin.list_identity_users(
-        db_session=db_session, offset=offset, limit=limit, search=search
+        db_session=db_session, offset=offset, limit=limit, search=search, include_deleted=include_deleted,
     )
     return rtnval
 
@@ -697,7 +701,15 @@ USERS_EXPORT_MAX_ROWS: int = 5000
 USERS_EXPORT_COLUMNS = ("username", "email", "display_name", "status", "system_roles", "created_at")
 
 
-def _users_csv_response(*, db_session: Any, search: Optional[str]) -> Response:
+def _wants_deleted(request: Request) -> bool:
+    """
+        Whether the page asked for deleted accounts too (``?show_deleted=1``).
+    """
+    raw = str(request.query_params.get("show_deleted", "") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _users_csv_response(*, db_session: Any, search: Optional[str], include_deleted: bool = False) -> Response:
     """
         The matching users as a CSV attachment for an access review (ORG-F22): who
         exists, whether they can sign in, and which roles they hold everywhere. Every
@@ -705,6 +717,7 @@ def _users_csv_response(*, db_session: Any, search: Optional[str]) -> Response:
 
         :param db_session: Open SQLAlchemy session.
         :param search: The page's ``?search=`` filter, or ``None``.
+        :param include_deleted: Also export deleted accounts (the page's ``?show_deleted=1``).
 
         :returns: A CSV download.
     """
@@ -715,7 +728,7 @@ def _users_csv_response(*, db_session: Any, search: Optional[str]) -> Response:
     while len(users) <= USERS_EXPORT_MAX_ROWS:
         page = _svc_list_users(
             db_session=db_session, offset=len(users),
-            limit=min(500, USERS_EXPORT_MAX_ROWS + 1 - len(users)), search=search,
+            limit=min(500, USERS_EXPORT_MAX_ROWS + 1 - len(users)), search=search, include_deleted=include_deleted,
         )
         total = page.total
         if len(page.users) == 0:
@@ -743,7 +756,8 @@ def _users_csv_response(*, db_session: Any, search: Optional[str]) -> Response:
 def handle_user_list(request: Request) -> Response:
     """
         ``GET /admin/users`` -- paginated list of identity users with
-        an optional ``?search=`` filter.
+        an optional ``?search=`` filter. Deleted accounts are left out unless
+        ``?show_deleted=1``.
 
         :param request: Incoming webworks request.
 
@@ -767,13 +781,14 @@ def handle_user_list(request: Request) -> Response:
             search_arg = search
 
         if str(request.query_params.get("format", "") or "").strip().lower() == "csv":
-            return _users_csv_response(db_session=db_session, search=search_arg)
+            return _users_csv_response(db_session=db_session, search=search_arg, include_deleted=_wants_deleted(request))
 
         result = _svc_list_users(
             db_session=db_session,
             offset=offset,
             limit=params["per_page"],
             search=search_arg,
+            include_deleted=_wants_deleted(request),
         )
 
         total = result.total
@@ -793,6 +808,7 @@ def handle_user_list(request: Request) -> Response:
         context["per_page"] = per_page
         context["total_pages"] = total_pages
         context["search"] = search
+        context["show_deleted"] = _wants_deleted(request)
         context["current_user_id"] = auth.user_id
 
         response = _render(
@@ -1292,12 +1308,15 @@ def handle_user_deactivate(request: Request) -> Response:
             pass
 
 
-def handle_user_anonymise(request: Request) -> Response:
+def _erase_user(request: Request, *, success_message: str) -> Response:
     """
-        ``POST /admin/users/{user_id}/anonymise`` -- erase a deactivated user's personal data
-        in place (ADM-41), then return to the user's page with a flash. Refusals (the account
-        is not deactivated, is the administrator's own, is already anonymised, or owns a
-        project) change nothing and say what to do first.
+        Erase a deactivated user's personal data in place (ADM-41), then return to the user's page with a
+        flash. Refusals (the account is not deactivated, is the administrator's own, is already erased,
+        or owns a project) change nothing and say what to do first. Shared by the Delete and the
+        Anonymise addresses: they are one action under two names.
+
+        :param request: Incoming webworks request.
+        :param success_message: The flash shown when the account was erased.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -1330,7 +1349,7 @@ def handle_user_anonymise(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message="User anonymised. Their personal data has been erased; the account's id stays in the audit log.",
+                message=success_message,
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
@@ -1362,6 +1381,30 @@ def handle_user_anonymise(request: Request) -> Response:
             db_session.close()
         except Exception:
             pass
+
+
+def handle_user_delete(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/delete`` -- delete a deactivated user: the person's personal data is erased
+        for good, the login name and email address can be used again, and the account leaves the list. Its id
+        stays, with no name, so the audit log and the records it made still resolve (``specs/1-user-management``
+        Requirement 5a).
+    """
+    return _erase_user(
+        request,
+        success_message="User deleted. Their personal data has been erased and the account no longer appears in the list; its id stays in the audit log.",
+    )
+
+
+def handle_user_anonymise(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/anonymise`` -- the older address of the same action as
+        ``/delete``, kept for existing callers.
+    """
+    return _erase_user(
+        request,
+        success_message="User anonymised. Their personal data has been erased; the account's id stays in the audit log.",
+    )
 
 
 def handle_user_reactivate(request: Request) -> Response:
@@ -1605,6 +1648,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.user_edit": handle_user_edit,
     "config.user_deactivate": handle_user_deactivate,
     "config.user_anonymise": handle_user_anonymise,
+    "config.user_delete": handle_user_delete,
     "config.user_reactivate": handle_user_reactivate,
     "config.user_password": handle_user_password,
     "config.user_password_link": handle_user_password_link,
@@ -1642,6 +1686,7 @@ __all__ = [
     "handle_user_edit",
     "handle_user_deactivate",
     "handle_user_anonymise",
+    "handle_user_delete",
     "handle_user_reactivate",
     "handle_user_password",
     "handle_user_password_link",

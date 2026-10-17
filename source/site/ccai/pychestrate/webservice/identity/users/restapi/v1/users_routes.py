@@ -291,14 +291,15 @@ def handle_read_user(request: Request) -> Response:
 
 def _admin_user_action(request: Request, *, action: str) -> Response:
     """
-        Run one of the account-lifecycle actions the Users pages offer (``deactivate``, ``reactivate``, ``anonymise``) for the user in the path.
+        Run one of the account-lifecycle actions the Users pages offer (``deactivate``, ``reactivate``, ``anonymise``, ``delete``) for the user in the path.
+        ``delete`` is the administrator's name for ``anonymise``: the same function, the same rules, the same effect.
         The functions are :mod:`webinterface.blueprints.config.identity_admin`'s, so the REST API and the pages cannot disagree about what is
         allowed. A refusal (not found, your own account, wrong state, a project's owner) is a problem document; nothing changed.
 
         :param request: Incoming webworks request.
-        :param action: ``deactivate``, ``reactivate`` or ``anonymise``.
+        :param action: ``deactivate``, ``reactivate``, ``anonymise`` or ``delete``.
 
-        :returns: JSON ``{"user_id", "status"}`` (or ``"anonymised": true``), or a problem response.
+        :returns: JSON ``{"user_id", "status"}`` (or ``"anonymised": true``, plus ``"deleted": true`` for ``delete``), or a problem response.
     """
     from ccai.pychestrate.webservice.webinterface.blueprints.config import identity_admin  # noqa: E402
 
@@ -316,6 +317,8 @@ def _admin_user_action(request: Request, *, action: str) -> Response:
             else:
                 identity_admin.anonymise_identity_user(db_session=db_session, user_id=user_id, actor_user_id=actor)
                 body = {"user_id": user_id, "status": "anonymised", "anonymised": True}
+                if action == "delete":
+                    body["deleted"] = True
         except identity_admin.AdminNotFoundError as xcpt:
             _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"user_id": user_id})
         except (identity_admin.SelfLockoutError, identity_admin.AdminValidationError) as xcpt:
@@ -347,6 +350,14 @@ def handle_anonymise_user(request: Request) -> Response:
     return _admin_user_action(request, action="anonymise")
 
 
+def handle_delete_user(request: Request) -> Response:
+    """
+        ``DELETE /api/v1/identity/users/{user_id}`` -- delete a deactivated account: erase the person's personal data and take the account out of the lists
+        (its id stays, with no name, so the audit log still resolves). The same rules and effect as ``anonymise``.
+    """
+    return _admin_user_action(request, action="delete")
+
+
 #: The most users one page of the picker list returns.
 MAX_USERS_PAGE_SIZE: int = 200
 DEFAULT_USERS_PAGE_SIZE: int = 50
@@ -357,7 +368,8 @@ def handle_list_users(request: Request) -> Response:
         ``GET /api/v1/identity/users`` -- a page of users for a picker.
 
         Query params: ``q`` (a substring of the login or display name), ``page``,
-        ``per_page`` (at most 200). Only what a picker needs is returned: the id,
+        ``per_page`` (at most 200), ``include_deleted`` (``true`` to list deleted accounts,
+        which are left out otherwise). Only what a picker needs is returned: the id,
         the login name, the display name and the status (not the email address).
 
         :param request: Incoming webworks request.
@@ -381,8 +393,9 @@ def handle_list_users(request: Request) -> Response:
 
         page = number("page", 1, 1000000)
         per_page = number("per_page", DEFAULT_USERS_PAGE_SIZE, MAX_USERS_PAGE_SIZE)
+        include_deleted = str(request.query_params.get("include_deleted", "") or "").strip().lower() in ("1", "true", "yes")
         users, total = user_service.list_users(
-            db_session=db_session, text=str(request.query_params.get("q", "") or ""), page=page, per_page=per_page,
+            db_session=db_session, text=str(request.query_params.get("q", "") or ""), page=page, per_page=per_page, include_deleted=include_deleted,
         )
         body = {
             "items": [
@@ -430,6 +443,9 @@ def register_users_routes(*, app: Any, version_prefix: str) -> None:
         app.attach_route(
             base + "/{user_id}/" + action, methods=["POST"]
         )(require_rest_permission(handler, permission_key="system:users.write"))
+    app.attach_route(
+        base + "/{user_id}", methods=["DELETE"]
+    )(require_rest_permission(handle_delete_user, permission_key="system:users.write"))
 
     return
 
@@ -443,6 +459,7 @@ __all__ = [
     "handle_create_user",
     "handle_read_user",
     "handle_deactivate_user",
+    "handle_delete_user",
     "handle_reactivate_user",
     "handle_anonymise_user",
 ]

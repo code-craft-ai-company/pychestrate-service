@@ -154,21 +154,24 @@ def list_users(
         db_session: DbSession,
         text: str = "",
         page: int = 1,
-        per_page: int = 50
+        per_page: int = 50,
+        include_deleted: bool = False
     ) -> Tuple[List[IdentityUser], int]:
     """
         A page of users for a picker: those whose login or display name contains
-        ``text``, by login name.
+        ``text``, by login name. Deleted accounts are left out unless ``include_deleted``.
 
         :param db_session: Active SQLAlchemy session.
         :param text: Substring to look for (empty for every user).
         :param page: 1-based page number.
         :param per_page: Users per page.
+        :param include_deleted: Also list deleted (anonymised) accounts.
 
         :returns: ``(users, total matching)``.
     """
     rtnval = user_repository.search_page(
         db_session=db_session, text=text, offset=(max(page, 1) - 1) * per_page, limit=per_page,
+        include_deleted=include_deleted,
     )
     return rtnval
 

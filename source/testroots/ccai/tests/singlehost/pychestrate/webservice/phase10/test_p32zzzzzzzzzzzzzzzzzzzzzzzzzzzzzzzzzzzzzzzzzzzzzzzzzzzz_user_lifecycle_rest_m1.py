@@ -115,3 +115,61 @@ def test_the_api_refuses_your_own_account_an_unknown_user_and_a_malformed_id():
         (409, True, 409, 404, 404, True, False),
     )
     return
+
+
+def _list(query: Dict[str, str]) -> Tuple[int, Dict[str, Any]]:
+    session = adm.open_db_session()
+    try:
+        request = SimpleNamespace(path="/api/v1/identity/users", path_params={}, db_session=session, query_params=query)
+        response = users_routes.handle_list_users(request)
+    finally:
+        session.close()
+    return response.status_code, json.loads(response.body.decode("utf-8"))
+
+
+def test_deleting_a_user_through_the_api_follows_the_anonymise_rules_and_answers_deleted():
+    """
+    **Feature: deleting a user (ADM-41, Requirement 5a)**
+    **Property: DELETE on an active account is a 409 that says to deactivate first; after deactivating it answers 200 with ``deleted: true`` and the account is erased exactly as
+    anonymising does; deleting it again is a 409 ("already anonymised") and changes nothing.**
+    """
+    cookies = adm.admin_cookies()
+    actor = ensure_seeded_admin().user_id
+    user_id, username = _make_user(cookies, "rest-delete")
+
+    early = _call(users_routes.handle_delete_user, user_id, actor)
+    _call(users_routes.handle_deactivate_user, user_id, actor)
+    erased = _call(users_routes.handle_delete_user, user_id, actor)
+    after = _row(user_id)
+    twice = _call(users_routes.handle_delete_user, user_id, actor)
+
+    testbase.assert_equal(
+        (
+            early[0], "Deactivate the account first" in early[1]["detail"], erased,
+            after.anonymised, after.login.startswith("anonymised-"), username in after.login or username in after.email, twice[0], "already anonymised" in twice[1]["detail"],
+        ),
+        (409, True, (200, {"user_id": user_id, "status": "anonymised", "anonymised": True, "deleted": True}), True, True, False, 409, True),
+    )
+    return
+
+
+def test_the_user_picker_leaves_deleted_accounts_out_unless_they_are_asked_for():
+    """
+    **Feature: deleting a user (ADM-41, Requirement 5a)**
+    **Property: ``GET /identity/users`` does not list a deleted account (nobody should be offered a deleted person to pick) and does with ``include_deleted=true``.**
+    """
+    cookies = adm.admin_cookies()
+    actor = ensure_seeded_admin().user_id
+    user_id, _username = _make_user(cookies, "rest-pick")
+    derived = "anonymised-" + uuid.UUID(user_id).hex
+    _call(users_routes.handle_deactivate_user, user_id, actor)
+    _call(users_routes.handle_delete_user, user_id, actor)
+
+    default = _list({"q": derived})
+    asked = _list({"q": derived, "include_deleted": "true"})
+
+    testbase.assert_equal(
+        (default[0], [item["user_id"] for item in default[1]["items"]], asked[0], [item["user_id"] for item in asked[1]["items"]]),
+        (200, [], 200, [user_id]),
+    )
+    return

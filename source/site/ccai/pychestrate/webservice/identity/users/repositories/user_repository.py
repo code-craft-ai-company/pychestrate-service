@@ -101,11 +101,14 @@ def search_page(
         db_session: DbSession,
         text: str,
         offset: int,
-        limit: int
+        limit: int,
+        include_deleted: bool = False
     ) -> Tuple[List[IdentityUser], int]:
     """
         A page of identity users whose login name or display name contains ``text``
         (any user when it is empty), ordered by login name, and how many match.
+        Deleted (anonymised) accounts are left out unless ``include_deleted``: nobody
+        should be offered a deleted person to pick.
 
         The text is matched literally: ``%`` and ``_`` are not wildcards.
 
@@ -113,10 +116,13 @@ def search_page(
         :param text: Substring to look for; empty matches every user.
         :param offset: Row offset.
         :param limit: Maximum rows to return.
+        :param include_deleted: Also return deleted (anonymised) accounts.
 
         :returns: ``(rows, total matching)``.
     """
     query = db_session.query(IdentityUser)
+    if include_deleted is False:
+        query = query.filter(IdentityUser.anonymised_at.is_(None))
     needle = text.strip()
     if len(needle) > 0:
         escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

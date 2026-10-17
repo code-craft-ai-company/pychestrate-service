@@ -153,7 +153,7 @@ def test_register_users_routes_attaches_every_route():
     **Feature: 1-user-management T1.1 (webworks routes)**
     **Property: register_users_routes attaches the two method+path pairs
     the flask_restx controller exposed, the picker list (a searchable, paged
-    ``GET /identity/users``) and the deactivate, reactivate and anonymise
+    ``GET /identity/users``) and the deactivate, reactivate, anonymise and delete
     actions (audit ADM-41).**
     """
     app = _FakeApp()
@@ -166,6 +166,7 @@ def test_register_users_routes_attaches_every_route():
         ("/api/v1/identity/users/{user_id}/deactivate", ("POST",)),
         ("/api/v1/identity/users/{user_id}/reactivate", ("POST",)),
         ("/api/v1/identity/users/{user_id}/anonymise", ("POST",)),
+        ("/api/v1/identity/users/{user_id}", ("DELETE",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)

@@ -126,6 +126,48 @@ audit trail, so that the request can be met and history stays attributable.
 5. The administrator interface SHALL require the user's login name to be typed
    before it performs the action, and SHALL say that it cannot be undone.
 
+### Requirement 5a: Deleting an Account (decided 2026-10-17)
+
+**User Story:** As an administrator, I want to delete a user and have them gone,
+so that the Users list holds the people who can use the system and nothing else,
+without breaking the audit trail.
+
+**Decision.** *Delete* is the administrator's name for the erasure of Requirement 5.
+Nothing new is erased and no second mechanism is added: a user is not a free-standing
+record, so removing the row would leave the audit log, "created by" and "triggered by"
+fields and other records pointing at an id that names nothing. What changes is what the
+administrator sees and what is hidden.
+
+**Acceptance Criteria (EARS):**
+
+1. The Users pages SHALL offer **Delete**, not "Anonymise", on a deactivated account (in the
+   list row and on the account's page), with the confirmation and the rules of Requirement 5
+   (login name typed, cannot be undone, deactivate first, not your own account, not a
+   project's owner). Its confirmation SHALL say what is erased and that only an id with no
+   name stays behind.
+2. WHEN an account is deleted THEN the system SHALL do exactly what Requirement 5 says for
+   anonymising: the login name and email become values derived from the id (so the person's
+   login name and email address can be used again), and credentials, sessions, tokens,
+   memberships and role bindings are removed.
+3. A deleted account SHALL NOT appear in the Users list or its CSV export unless the
+   administrator asks for deleted accounts (`?show_deleted=1` on the page; `include_deleted=true`
+   on the REST list). It SHALL show as "Deleted" wherever it is listed or named, and its page,
+   reached by its id (for example from an audit record), SHALL say that it was deleted and
+   cannot be edited or reactivated.
+4. The REST API SHALL accept `DELETE /api/v1/identity/users/{user_id}` with the same rules and
+   the same effect as `POST /api/v1/identity/users/{user_id}/anonymise`, which stays (data-
+   protection requests name "anonymise") and answers `anonymised: true` as before; `DELETE`
+   answers the same body with `deleted: true` added (`status` stays `anonymised`: one account
+   never reads as two statuses).
+5. The event published SHALL stay `entity.user.anonymised` (consumers of it are unchanged); the
+   audit record of a delete made from the Users pages SHALL read as the user having been
+   anonymised, because that is what was done to the data.
+
+**Not part of this decision.** Removing the identity row itself. It would need every plain-id
+reference in the system (the audit log, about fifty "by" columns, the legacy mirror's foreign
+keys) to be found, rewritten or refused first; the stub row costs nothing and keeps all of
+them true.
+
 ## Property-Based Test Requirements
 
 ### Property 1: Create-Then-Read Round Trip
