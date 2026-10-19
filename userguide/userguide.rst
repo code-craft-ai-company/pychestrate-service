@@ -54,7 +54,8 @@ Reference
 
 * `REST API <../specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
   contract for ``/api/v1``. In the built site it opens as a searchable
-  reference; a running service shows the same at ``/api/docs``.
+  reference; a running service shows an interactive explorer (Swagger UI)
+  at ``/api/docs``.
 
 .. only:: reference
 

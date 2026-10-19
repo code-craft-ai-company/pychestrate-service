@@ -559,7 +559,7 @@ def register_service_extensions() -> None:
     register_api_tokens_routes(app=app, version_prefix="/api/v1")
     # The REST contract as JSON for the pyc CLI.
     register_openapi_document_routes(app=app, version_prefix="/api/v1")
-    # The same document for people, rendered by ReDoc (/api/docs redirects).
+    # The same document for people, as a Swagger UI explorer (/api/docs redirects).
     register_api_docs_routes(app=app, version_prefix="/api/v1")
     # The pages the type member of an error response points to (public).
     register_error_catalogue_routes(app=app)

@@ -124,6 +124,14 @@ Running the server
        Each worker keeps its own cache, so a change made through one worker
        reaches the others within this time (the worker that handled the change
        sees it at once). ``0`` turns the cache off.
+   * - ``PYCHESTRATE_API_DOCS_TRY_IT_OUT``
+     - ``all``
+     - What **Try it out** may send from the API explorer at ``/api/docs``:
+       ``all`` (every method), ``get`` (reads only, so a stray click cannot
+       change anything; the right choice for a production system) or ``off``
+       (no Try it out). A call made from the page is made as the signed-in
+       person, with their permissions, whatever this is set to. Any other
+       value is read as ``get``.
    * - ``PYCHESTRATE_THREADS``
      - ``8`` for the built-in server, ``2`` for the gunicorn scripts
      - Threads in each worker. A pod's long poll holds one for up to

@@ -29,6 +29,12 @@ preview tag.
 
 ### Fixed
 
+- **The API page is now an interactive explorer, folded and grouped by path.** `/api/docs` showed the OpenAPI document with ReDoc, a read-only reference: one long scroll with no way to try a call. It now opens Swagger UI (the
+  copy that ships inside `codecraftai-webworks`, served from this origin, no new package): every API is folded, grouped by where its path puts it (`projects / rpa`, 105 groups instead of 48 feature tags), with a filter, deep links
+  so a link opens one API, no Schemas block, and **Try it out** (a person clicks it, then Execute) that sends the request to this service as the person signed in. The page is behind the same sign-in as before, so a read-only
+  reference protected nothing. `PYCHESTRATE_API_DOCS_TRY_IT_OUT` limits what it may send: `all` (default), `get` (reads only, for production) or `off`; an unrecognised value is read as `get`. The grouping is a copy of the document
+  (`GET /api/v1/_meta/openapi.json?group_by=path`; the feature tags stay on each operation as `x-original-tags`, and the plain document that `pyc` builds its commands from is unchanged). The page's script policy no longer
+  allows a `blob:` worker (it was ReDoc's search). The offline user guide keeps its own static reference. Needs `codecraftai-webworks` 1.4.0 (grouping, the page and the starter script live there).
 - **A user can be deleted.** A deactivated account now has a **Delete** button, in the Users list and on the user's page, in place of **Anonymise** (it asks for the login name to be typed and cannot be undone). Deleting
   erases the person exactly as anonymising did: name, email, login, credentials, sessions, API tokens, memberships and roles. The login name and email address can be used again, and the account leaves the Users list and its
   CSV export; **Show deleted accounts** (`?show_deleted=1`) lists them as *Deleted*. Only an id with no name stays, because the audit log, "created by" fields and run history refer to users by id and removing the row would leave

@@ -366,7 +366,15 @@ paths:
         `specs/openapi/pychestrate.yaml`, with `servers` set to
         `/api/v1` on the answering host. The `pyc` CLI builds its
         commands from it. 404 when the deployment does not carry the
-        spec.
+        spec. `group_by=path` returns a copy whose operations are tagged
+        by where their path puts them (`projects / rpa`), which is what
+        the API explorer page reads; the feature tags are kept on each
+        operation under `x-original-tags`.
+      parameters:
+        - name: group_by
+          in: query
+          description: "`path` to tag operations by their path. Any other value is a 400."
+          schema: { type: string, enum: [path] }
       responses:
         '200':
           description: The OpenAPI document.
@@ -374,23 +382,28 @@ paths:
             application/json:
               schema:
                 type: object
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /_meta/docs:
     get:
       tags: [meta]
-      summary: The API reference page, rendered from this document.
+      summary: The API explorer page (Swagger UI), rendered from this document.
       operationId: meta_get_api_docs
       description: |
-        A browsable, searchable reference (ReDoc) built from
-        `/_meta/openapi.json`. Signed-in callers only. `/api/docs` on the
-        same host redirects here. The page sets its own
-        Content-Security-Policy: it loads nothing from another host and
-        allows the `blob:` worker its search needs.
+        An interactive explorer (Swagger UI) over `/_meta/openapi.json`,
+        folded and grouped by path, with **Try it out**. Signed-in callers
+        only; a call made from the page goes to this service as the person
+        signed in, so the page adds no access the API does not already
+        give. The deployment can limit Try it out to reads or remove it
+        (`PYCHESTRATE_API_DOCS_TRY_IT_OUT`). `/api/docs` on the same host
+        redirects here. The page sets its own Content-Security-Policy:
+        scripts from this origin only, requests to this origin only,
+        nothing from another host.
       responses:
         '200':
-          description: The reference page.
+          description: The explorer page.
           content:
             text/html:
               schema: { type: string }
@@ -398,23 +411,27 @@ paths:
   /_meta/docs/assets/{filename}:
     get:
       tags: [meta]
-      summary: A script the reference page loads.
+      summary: A file the explorer page loads.
       operationId: meta_get_api_docs_asset
       description: |
-        Serves the bundled reference renderer to the page above. Only
-        the file names the page uses are served (`redoc.standalone.js`);
-        any other name is a 404.
+        Serves the bundled Swagger UI files, and the small script that
+        starts it, to the page above. Only the file names the page uses
+        are served; any other name is a 404.
       parameters:
         - in: path
           name: filename
           required: true
-          schema: { type: string, enum: [redoc.standalone.js] }
+          schema: { type: string, enum: [swagger-ui-bundle.js, swagger-ui.css, favicon-32x32.png, swagger-initializer.js] }
       responses:
         '200':
-          description: The script.
+          description: The file.
           content:
             application/javascript:
               schema: { type: string }
+            text/css:
+              schema: { type: string }
+            image/png:
+              schema: { type: string, format: binary }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /_metrics/ui:
