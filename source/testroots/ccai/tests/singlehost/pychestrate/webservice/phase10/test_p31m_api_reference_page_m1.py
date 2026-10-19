@@ -323,14 +323,14 @@ def test_an_unknown_group_by_is_a_400_that_names_the_choice():
 def test_the_served_document_names_the_right_licence():
     """
     **Feature: REST reference page (DOC-06)**
-    **Property: the OpenAPI document declares the Pychestrate End User
-    License Agreement, not Apache-2.0.**
+    **Property: the OpenAPI document declares the Code Craft AI Source
+    Available License, not Apache-2.0.**
     """
     openapi_document.reset_cache_for_testing()
     document = openapi_document.load_served_document()
 
     testbase.assert_equal(
         (document["info"]["license"]["name"], "apache" in str(document["info"]["license"]).lower()),
-        ("Pychestrate End User License Agreement", False),
+        ("Code Craft AI Source Available License", False),
     )
     return

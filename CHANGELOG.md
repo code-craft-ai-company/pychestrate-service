@@ -1582,9 +1582,14 @@ preview tag.
   `codecraftai-errors` is replaced by `codecraftai-foundations`, which
   provides the same `ccai.errors` module.
 
-- **License:** the MIT license was replaced by a proprietary Code Craft
-  AI end-user license agreement (`LICENSE.txt`); Pychestrate is licensed
-  per organization for on-premises use.
+- **License:** the MIT license was replaced by the Code Craft AI Source
+  Available License (`LICENSE.md`), which covers the full Python
+  Automation Kit: every `codecraftai-*` package, every `pychestrate`
+  package, and the `pychestrate` server. Non-commercial use is free.
+  Commercial use pays one yearly usage fee for the whole kit, set by
+  derived income (contribution estimate times profit), with a two-year
+  allowance for each product migrated from another code base and the
+  option to negotiate a fixed license cost.
 
 - The consumer web UI carried out the September 2026 UI remediation
   program (179 audit findings, seven phases; see `ROADMAP.md`): strict
@@ -1639,7 +1644,7 @@ preview tag.
   route always read them. Twenty operations carry examples captured from
   the running service. Tests compare the document with the registered
   routes and hold every example to its schema. The licence is the
-  Pychestrate End User License Agreement, not Apache-2.0, and
+  Code Craft AI Source Available License, not Apache-2.0, and
   `info.version` is `0.0.17-preview`.
 
 - **Forms show an error next to the field it is about.** A refused value

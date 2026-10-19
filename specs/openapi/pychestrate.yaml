@@ -46,9 +46,10 @@ info:
     name: Code Craft AI LLC
     url: https://github.com/code-craft-ai-company/pychestrate-service
   license:
-    # Proprietary: the repository's LICENSE.txt is the Pychestrate End
-    # User License Agreement. The document used to say Apache-2.0.
-    name: Pychestrate End User License Agreement
+    # Source available: the repository's LICENSE.md is the Code Craft AI
+    # Source Available License, which covers the Python Automation Kit.
+    # The document used to say Apache-2.0.
+    name: Code Craft AI Source Available License
 
 servers:
   - url: https://{host}/api/v1

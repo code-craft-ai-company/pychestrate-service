@@ -4,7 +4,7 @@ description = "Code Craft AI - Pychestrate Service"
 version = "0.0.7-preview"
 authors = []
 readme = "README.rst"
-license = "LICENSE.txt"
+license = "LicenseRef-CodeCraftAI-Source-Available"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: Other/Proprietary License",

@@ -91,5 +91,8 @@ Documentation
 License
 =======
 
-Proprietary; licensed per organization for on-premises use. See
-`LICENSE.txt <LICENSE.txt>`_.
+Source available under the Code Craft AI Source Available License, which
+covers the full Python Automation Kit: every ``codecraftai-*`` package,
+every ``pychestrate`` package, and the ``pychestrate`` server.
+Non-commercial use is free; commercial use pays a yearly usage fee based
+on derived income. See `LICENSE.md <LICENSE.md>`_.
