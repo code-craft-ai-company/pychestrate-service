@@ -8,7 +8,7 @@
 
 ## Checklist
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md#pull-request-checklist).
+See [DEVELOPING.md](../DEVELOPING.md#change-checklist).
 
 - [ ] Tests cover the change, and the single-host suite passes.
 - [ ] REST changes are in `specs/openapi/pychestrate.yaml`; `make openapi-validate` passes.

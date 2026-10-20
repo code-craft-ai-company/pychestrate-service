@@ -228,7 +228,7 @@ there is no Node-based unit-test harness. The browser tests live in
 ``webservice/phase11/test_p23a_mj_components_browser_m1.py``
 (and any sibling ``test_p*_browser_*.py`` files for view-specific
 coverage). They read ``PYCHESTRATE_TEST_BASE_URL`` and the
-``PYCHESTRATE_TEST_ADMIN_*`` credentials; see ``CONTRIBUTING.md``. The
+``PYCHESTRATE_TEST_ADMIN_*`` credentials; see ``DEVELOPING.md``. The
 conventional pattern:
 
 1. Sign in via the shared ``_sign_in`` helper.

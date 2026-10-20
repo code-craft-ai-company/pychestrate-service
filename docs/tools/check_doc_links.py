@@ -3,7 +3,7 @@
     Check the links in the repository's documentation.
 
     Every relative link in the Markdown and reStructuredText documents
-    (the READMEs, CONTRIBUTING, CHANGELOG, ROADMAP, AGENTS, the user
+    (the READMEs, CONTRIBUTING, DEVELOPING, SECURITY, CHANGELOG, ROADMAP, AGENTS, the user
     manual, the runbooks, and the docs site sources) must point at a
     file or directory that exists, and a ``#fragment`` on a link to a
     Markdown or reStructuredText document must name one of that

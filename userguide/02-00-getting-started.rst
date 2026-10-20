@@ -272,5 +272,5 @@ Next steps
 * Pods run jobs through the pod client (``pychestrate-client``), which
   lives in its own repository; an administrator creates its one-time
   enrollment token under **Admin**, **Enrollment Tokens**.
-* `CONTRIBUTING.md <../CONTRIBUTING.md>`_ -- run the tests and change
-  Pychestrate.
+* `DEVELOPING.md <../DEVELOPING.md>`_ -- run the tests and change
+  Pychestrate (for the maintainers).

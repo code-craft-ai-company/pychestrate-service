@@ -65,8 +65,8 @@ The tests use the ``testbase`` framework, not pytest:
     testbase testing run --root source/testroots/ccai --includes=ccai.tests.singlehost --output=.output/singlehost
     testbase agents summary extract --summary-file .output/singlehost/testrun_summary.json
 
-`CONTRIBUTING.md <CONTRIBUTING.md>`_ covers focused runs, the suites that
-need a live server, and what a pull request needs.
+`DEVELOPING.md <DEVELOPING.md>`_ covers focused runs, the suites that
+need a live server, and what a change needs.
 
 
 Documentation
@@ -84,8 +84,18 @@ Documentation
   (``pipx install ./packages/pychestrate-cli``).
 * `REST API <specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
   contract for ``/api/v1``. A running service renders it at ``/api/docs``.
-* `CONTRIBUTING.md <CONTRIBUTING.md>`_, `CHANGELOG.md <CHANGELOG.md>`_,
+* `DEVELOPING.md <DEVELOPING.md>`_, `CHANGELOG.md <CHANGELOG.md>`_,
   and `ROADMAP.md <ROADMAP.md>`_.
+
+
+Reporting problems
+==================
+
+This project is source-available, not open source. Issues are the only
+contribution accepted: bug reports, questions and feature requests go in the
+Issues tab, and pull requests are not accepted. Security problems are
+reported privately; see `CONTRIBUTING.md <CONTRIBUTING.md>`_ and
+`SECURITY.md <SECURITY.md>`_.
 
 
 License

@@ -6,7 +6,7 @@ Testing Frameworks
 
 This repository's tests use **testbase**: every suite is under
 ``source/testroots/ccai`` and runs with ``testbase testing run`` (see
-`CONTRIBUTING.md <../CONTRIBUTING.md>`_ for the commands). The pages
+`DEVELOPING.md <../DEVELOPING.md>`_ for the commands). The pages
 below record Code Craft AI's conventions for each framework; the
 unittest and pytest pages apply to repositories that use those
 frameworks, and nothing in this repository does.

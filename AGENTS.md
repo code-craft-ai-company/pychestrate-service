@@ -110,7 +110,7 @@ When checking out the code for this repository in order to test changes, agents 
 * run the 'repository-setup/rehome-repository' script.  It creates a needed '.env' file.
 * run the 'development/setup-environment' script in order to create the virtual environment.
 
-The dependencies are private Code Craft AI packages; [CONTRIBUTING.md](CONTRIBUTING.md) links to how to get access.
+The dependencies are private Code Craft AI packages; [DEVELOPING.md](DEVELOPING.md) links to how to get access.
 
 # Writing Tests
 
@@ -466,7 +466,7 @@ Before making a recommendation to change a file.  Make sure you have the latest 
 
 
 # Pull Request Guidelines
-Follow the pull request checklist in [CONTRIBUTING.md](CONTRIBUTING.md): testbase tests for the change, the
+Follow the change checklist in [DEVELOPING.md](DEVELOPING.md): testbase tests for the change, the
 OpenAPI spec updated for REST changes (`make openapi-validate`), an alembic migration for model changes, the
 user manual and `CHANGELOG.md` updated for user-visible changes.
 

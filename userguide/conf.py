@@ -25,7 +25,7 @@ So chapters link to each other with plain hyperlinks to the ``.rst`` file
 ``:doc:`` or ``:ref:``, and the index carries explicit links beside a
 hidden toctree. :class:`RstFileLinks` rewrites those hyperlinks at build
 time: a link to another chapter becomes a link to its HTML page, and a
-link to a file outside the manual (``../CONTRIBUTING.md``) becomes a link
+link to a file outside the manual (``../DEVELOPING.md``) becomes a link
 to that file in the repository. A link to a chapter that does not exist
 is a build warning.
 """

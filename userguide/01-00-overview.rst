@@ -242,5 +242,6 @@ Where to go next
   permissions. An administrator can limit it to reads
   (``PYCHESTRATE_API_DOCS_TRY_IT_OUT``). The document itself is at
   ``/api/v1/_meta/openapi.json``.
-* `CONTRIBUTING.md <../CONTRIBUTING.md>`_ -- how to change Pychestrate
-  and run its tests.
+* `DEVELOPING.md <../DEVELOPING.md>`_ -- how the maintainers change
+  Pychestrate and run its tests. To report a problem, open an issue; see
+  `CONTRIBUTING.md <../CONTRIBUTING.md>`_.

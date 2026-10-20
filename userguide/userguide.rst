@@ -67,7 +67,7 @@ Reference
 Contributing to Pychestrate
 ===========================
 
-Start with `CONTRIBUTING.md <../CONTRIBUTING.md>`_ at the repository
+Start with `DEVELOPING.md <../DEVELOPING.md>`_ at the repository
 root. The standards and internals it refers to:
 
 * `Code Organization and Conventions

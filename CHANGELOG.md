@@ -945,6 +945,7 @@ preview tag.
 
 ### Changed
 
+- **The repository is source-available and takes issues only.** `CONTRIBUTING.md` now says so (no pull requests, security problems reported privately), `SECURITY.md` explains private reporting, and the repository has bug, feature and question issue forms. The working guide for the maintainers that used to be `CONTRIBUTING.md` is now `DEVELOPING.md`, and the user manual, README and `AGENTS.md` link to it.
 - A link to a project's page opens that project's page (ORC-27). Six bundle views
   (provisioning runs, environments, blast-radius guards, SLOs, alert rules, test
   metrics) always opened on the first project, whatever the address said, and the
