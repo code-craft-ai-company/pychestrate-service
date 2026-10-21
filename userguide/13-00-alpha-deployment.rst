@@ -394,9 +394,11 @@ every request except ``/setup/*``, ``/static/*``, and
    password of at least 12 characters, twice. Choose **Create
    administrator**.
 
-The wizard then lands on the sign-in page (``/login``), deletes the
-token file, and disappears for good (``/setup/unlock`` answers 404).
-Sign in, and create the other accounts under **Admin**, **Users**.
+The wizard then signs the new administrator in and opens the home
+page, deletes the token file, and disappears for good
+(``/setup/unlock`` answers 404). (If the sign-in is not accepted for any
+reason, it sends you to the sign-in page instead.) Create the other
+accounts under **Admin**, **Users**.
 
 To create the administrator without a browser -- from a provisioning
 script, for example -- post the same two forms. Set ``ADMIN_USER``,
@@ -418,14 +420,14 @@ script, for example -- post the same two forms. Set ``ADMIN_USER``,
     curl -fsS -c "$jar" -o /dev/null \
         --data-urlencode "token=$(cat "$TOKEN_FILE")" "$BASE/setup/unlock"
 
-    # Create the administrator; success redirects to /login.
+    # Create the administrator; success signs them in and redirects home.
     test "$(curl -sS -b "$jar" -o /dev/null -w '%{http_code} %{redirect_url}' \
         --data-urlencode "login_name=$ADMIN_USER" \
         --data-urlencode "email=$ADMIN_EMAIL" \
         --data-urlencode "display_name=$ADMIN_USER" \
         --data-urlencode "password=$ADMIN_PASSWORD" \
         --data-urlencode "password_confirm=$ADMIN_PASSWORD" \
-        "$BASE/setup/admin")" = "303 $BASE/login"
+        "$BASE/setup/admin")" = "303 $BASE/"
 
     echo "administrator $ADMIN_USER created"
 
