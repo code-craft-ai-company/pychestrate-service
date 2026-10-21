@@ -42,6 +42,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.errors.exceptions import ConfigurationError
@@ -291,6 +292,15 @@ class InitialSetupManager:
             hash is updated. This recovers from "I lost the token"
             without a manual DB edit.
 
+            Safe when several workers run it at once, as they do on the
+            first start of a new deployment: the singleton row decides
+            who provisions. Only the worker whose insert wins writes
+            the token file, so the file and the stored hash always
+            belong together; a worker that loses the race adopts the
+            winner's row and leaves the file alone. (Writing the file
+            first let a loser overwrite the winner's token, after which
+            the right token was rejected.)
+
             :returns: The :class:`InitialSetup` singleton row.
             :raises: ConfigurationError on filesystem misconfig.
         """
@@ -303,10 +313,7 @@ class InitialSetupManager:
         if row is None:
             plaintext = _generate_token_plaintext()
             token_hash = _hash_token_bytes(plaintext=plaintext)
-            _atomic_write_token_file(
-                path=self._token_path, plaintext=plaintext
-            )
-            row = InitialSetup(
+            new_row = InitialSetup(
                 setup_id=uuid.uuid4(),
                 singleton_key=SINGLETON_KEY_VALUE,
                 token_hash=token_hash,
@@ -315,15 +322,34 @@ class InitialSetupManager:
                 completed_at=None,
                 completed_by_user_id=None,
             )
-            self._db_session.add(row)
-            self._db_session.flush()
-            _module_logger.info(
-                "pychestrate.setup.token_provisioned path=%s setup_id=%s",
-                self._token_path,
-                str(row.setup_id),
-            )
-            rtnval = row
-            return rtnval
+            try:
+                # A savepoint, so losing the race undoes only this insert.
+                # On PostgreSQL the insert waits for a concurrent worker's
+                # transaction, so a loser learns of the conflict only after
+                # the winner has stored its row and written its file.
+                with self._db_session.begin_nested():
+                    self._db_session.add(new_row)
+            except IntegrityError:
+                row = self.get_state()
+                if row is None:
+                    raise
+                _module_logger.info(
+                    "pychestrate.setup.token_provisioned_elsewhere path=%s setup_id=%s",
+                    self._token_path,
+                    str(row.setup_id),
+                )
+            else:
+                # This worker holds the row: only now write the file.
+                _atomic_write_token_file(
+                    path=self._token_path, plaintext=plaintext
+                )
+                _module_logger.info(
+                    "pychestrate.setup.token_provisioned path=%s setup_id=%s",
+                    self._token_path,
+                    str(new_row.setup_id),
+                )
+                rtnval = new_row
+                return rtnval
 
         # Row exists but setup is still pending. If the operator lost
         # the token, regenerate; otherwise leave the existing token
@@ -331,12 +357,16 @@ class InitialSetupManager:
         if os.path.exists(self._token_path) is False:
             plaintext = _generate_token_plaintext()
             new_hash = _hash_token_bytes(plaintext=plaintext)
-            _atomic_write_token_file(
-                path=self._token_path, plaintext=plaintext
-            )
+            # Store the hash first: the update takes the row's lock, so a
+            # second worker regenerating at the same moment waits here and
+            # writes its file after this worker's transaction, and the
+            # last file and the last hash belong together.
             row.token_hash = new_hash
             row.token_path = self._token_path
             self._db_session.flush()
+            _atomic_write_token_file(
+                path=self._token_path, plaintext=plaintext
+            )
             _module_logger.warning(
                 "pychestrate.setup.token_regenerated path=%s setup_id=%s"
                 " reason=token_file_missing",
