@@ -7,12 +7,17 @@
 #     pipx install ./packages/pychestrate-cli          (from a checkout)
 #     python3 -m pip wheel --no-deps -w dist ./packages/pychestrate-cli
 #
-# Build it from a full checkout: package-dir points two levels up.
-# The version comes from ccai/pychestrate/cli/version.py (PYC_VERSION),
-# the one place pyc's version is defined.
+# Build it from a full checkout: package-dir points two levels up, so only a
+# wheel is published (a source archive of this directory would not contain the
+# sources). The version comes from ccai/pychestrate/cli/version.py
+# (PYC_VERSION), the one place pyc's version is defined.
+#
+# Released to PyPI by .github/workflows/publish-cli.yml when PYC_VERSION changes.
+# LICENSE.md here is a copy of the repository's (a build cannot reach outside
+# this directory); a test keeps the two identical.
 
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -20,6 +25,8 @@ name = "pychestrate-cli"
 dynamic = ["version"]
 description = "pyc - the command line for the Pychestrate service"
 readme = "README.rst"
+license = "LicenseRef-CodeCraftAI-Source-Available"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.10"
 authors = [{name = "Code Craft AI LLC"}]
 keywords = ["pychestrate", "cli", "pyc"]
@@ -28,9 +35,12 @@ classifiers = [
     "Environment :: Console",
     "Operating System :: POSIX",
     "Operating System :: MacOS",
-    "Private :: Do Not Upload",
 ]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/code-craft-ai-company/pychestrate-service"
+Issues = "https://github.com/code-craft-ai-company/pychestrate-service/issues"
 
 [project.scripts]
 pyc = "ccai.pychestrate.cli.entry:console_main"
