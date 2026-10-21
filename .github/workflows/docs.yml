@@ -208,7 +208,7 @@ jobs:
           TOKEN_FILE: ${{ runner.temp }}/presence/initial-admin-token
           ADMIN_USER: ci-admin
           ADMIN_EMAIL: ci-admin@example.com
-          ADMIN_PASSWORD: runbook-ci-password-1
+          ADMIN_PASSWORD: Runbook-Smoke-Pass-1!
         run: |
           python3 docs/tools/extract_code_block.py userguide/13-00-alpha-deployment.rst setup-wizard-headless > "$RUNNER_TEMP/setup-wizard-headless.sh"
           bash "$RUNNER_TEMP/setup-wizard-headless.sh"
@@ -216,7 +216,7 @@ jobs:
       - name: Run the runbook's smoke test after setup
         env:
           ADMIN_USER: ci-admin
-          ADMIN_PASSWORD: runbook-ci-password-1
+          ADMIN_PASSWORD: Runbook-Smoke-Pass-1!
         run: |
           python3 docs/tools/extract_code_block.py userguide/13-00-alpha-deployment.rst smoke-after-setup > "$RUNNER_TEMP/smoke-after-setup.sh"
           bash "$RUNNER_TEMP/smoke-after-setup.sh"

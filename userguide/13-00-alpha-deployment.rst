@@ -476,8 +476,9 @@ After the first administrator exists (set ``ADMIN_USER`` and
     test "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE/")" = \
         "303 $BASE/login?next=%2F"
 
-    # The REST API refuses anonymous callers.
-    test "$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/system/health")" = "401"
+    # The REST API refuses anonymous callers. (The health endpoint is the
+    # exception: a monitor may read the overall status without signing in.)
+    test "$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/projects")" = "401"
 
     # Sign in as a browser does: read the form's CSRF token, then post it.
     csrf="$(curl -fsS -c "$jar" -b "$jar" "$BASE/login" |
