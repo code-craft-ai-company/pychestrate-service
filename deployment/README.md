@@ -242,9 +242,8 @@ only the read-only SSH checks, and lets `rsync --dry-run
 files `--delete` would remove (lines starting `*deleting`).
 
 `CODECRAFTAI_REPO_TOKEN` is needed only while `pyproject.toml` pulls
-the private `codecraftai-*` packages from git; when it resolves them
-from a package index, step 3 is skipped and the index's credentials
-must be configured for poetry on the host.
+the `codecraftai-*` packages from private git repositories. They now come
+from PyPI, so step 3 is skipped and the host needs no credentials for them.
 
 ### `.env` sourcing
 

@@ -12,10 +12,9 @@ manual.
 ## Set up a checkout
 
 You need Linux or macOS, Python 3.12, Poetry 2, `git`, `make`, and
-`openssl`, plus read access to the private Code Craft AI framework
-packages. [Getting Started](userguide/02-00-getting-started.rst#get-access-to-the-dependencies)
-explains how to get that access (package-index credentials or git
-access, depending on what `pyproject.toml` declares).
+`openssl`, plus access to PyPI, where the `codecraftai-*` framework
+packages are published and `poetry install` fetches them
+([Getting Started](userguide/02-00-getting-started.rst#the-dependencies) says more).
 
 From the repository root:
 

@@ -78,8 +78,8 @@ the project's maturity and remain in the git history for reference only.
 - Multi-host or highly available deployments; the message bus is
   in-process.
 - A packaged install for outside organizations (container image,
-  installer); the dependencies come from private Code Craft AI
-  repositories.
+  installer); the dependencies are published on PyPI, but the service
+  itself runs from a checkout.
 
 ### Test coverage
 

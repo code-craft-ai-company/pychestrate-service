@@ -9,10 +9,6 @@ name: deploy
 #
 # Required GitHub secrets (org or repo level):
 #
-#   CODECRAFTAI_REPO_TOKEN     fine-grained PAT with Contents:Read
-#                           on the nine private codecraftai-* repos.
-#                           Same secret CI's test workflow uses.
-#
 #   TS_OAUTH_CLIENT_ID      OAuth client ID created in Tailscale
 #   TS_OAUTH_SECRET         admin -> Settings -> OAuth clients.
 #                           Tags scope: tag:ci. Devices: Write.
@@ -45,9 +41,8 @@ name: deploy
 # bootstrap completes -- ``setup-debian-machine`` requires sudo
 # and CI cannot satisfy an interactive password prompt):
 #
-#   CODECRAFTAI_REPO_TOKEN=ghp_xxx \\
-#       deployment/deploy-alpha-to-host.sh \\
-#           --host=HOST --user=USER
+#   deployment/deploy-alpha-to-host.sh \\
+#       --host=HOST --user=USER
 #
 # After that, the CI deploy workflow uses --skip-system-setup
 # and deploys are entirely non-interactive.
@@ -176,8 +171,6 @@ jobs:
               >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Run deploy
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
           # Start an ephemeral ssh-agent and load the deploy key.
           # The deploy script's ssh invocations pick up the

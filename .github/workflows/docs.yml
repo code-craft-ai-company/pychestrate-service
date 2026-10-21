@@ -71,34 +71,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Give the runner access to the private codecraftai-* packages
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-          CODECRAFTAI_INDEX_USERNAME: ${{ secrets.CODECRAFTAI_INDEX_USERNAME }}
-          CODECRAFTAI_INDEX_TOKEN: ${{ secrets.CODECRAFTAI_INDEX_TOKEN }}
-        run: |
-          # Same as the runbook-smoke job: see the runbook's
-          # "CI prerequisite: dependency access".
-          if grep -q 'name = "codecraftai"' pyproject.toml; then
-            if [ -z "${CODECRAFTAI_INDEX_USERNAME}" ] || [ -z "${CODECRAFTAI_INDEX_TOKEN}" ]; then
-              echo "::error::pyproject.toml uses the codecraftai package index;" \
-                   "set the CODECRAFTAI_INDEX_USERNAME and CODECRAFTAI_INDEX_TOKEN secrets."
-              exit 1
-            fi
-            echo "POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME=${CODECRAFTAI_INDEX_USERNAME}" >> "$GITHUB_ENV"
-            echo "POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD=${CODECRAFTAI_INDEX_TOKEN}" >> "$GITHUB_ENV"
-          else
-            if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-              echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                   "(see the lint-and-build job in test.yml for setup instructions)."
-              exit 1
-            fi
-            git config --global \
-              url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-              "https://github.com/automationmojo/"
-          fi
-
       - name: Install dependencies
         run: poetry install --no-interaction
 
@@ -157,35 +129,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Give the runner access to the private codecraftai-* packages
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-          CODECRAFTAI_INDEX_USERNAME: ${{ secrets.CODECRAFTAI_INDEX_USERNAME }}
-          CODECRAFTAI_INDEX_TOKEN: ${{ secrets.CODECRAFTAI_INDEX_TOKEN }}
-        run: |
-          # pyproject.toml takes the packages either from the Code Craft AI
-          # package index or from git repositories; see the runbook's
-          # "CI prerequisite: dependency access".
-          if grep -q 'name = "codecraftai"' pyproject.toml; then
-            if [ -z "${CODECRAFTAI_INDEX_USERNAME}" ] || [ -z "${CODECRAFTAI_INDEX_TOKEN}" ]; then
-              echo "::error::pyproject.toml uses the codecraftai package index;" \
-                   "set the CODECRAFTAI_INDEX_USERNAME and CODECRAFTAI_INDEX_TOKEN secrets."
-              exit 1
-            fi
-            echo "POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME=${CODECRAFTAI_INDEX_USERNAME}" >> "$GITHUB_ENV"
-            echo "POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD=${CODECRAFTAI_INDEX_TOKEN}" >> "$GITHUB_ENV"
-          else
-            if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-              echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                   "(see the lint-and-build job in test.yml for setup instructions)."
-              exit 1
-            fi
-            git config --global \
-              url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-              "https://github.com/automationmojo/"
-          fi
-
       - name: Install dependencies
         run: poetry install --no-interaction
 

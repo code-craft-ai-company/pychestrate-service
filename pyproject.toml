@@ -25,13 +25,13 @@ pychestrate-admin = "ccai.pychestrate.admin.__main__:console_main"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-codecraftai-foundations = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-runtime = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-credentials = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-dataprofiles = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-storage-database = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-testbase = { version = "<2.0.0", source = "codecraftai" }
-codecraftai-webworks = { version = "<2.0.0", source = "codecraftai" }
+codecraftai-foundations = ">=1.0.0,<2.0.0"
+codecraftai-runtime = ">=1.0.0,<2.0.0"
+codecraftai-credentials = ">=1.0.0,<2.0.0"
+codecraftai-dataprofiles = ">=1.0.0,<2.0.0"
+codecraftai-storage-database = ">=1.0.0,<2.0.0"
+codecraftai-testbase = ">=1.0.0,<2.0.0"
+codecraftai-webworks = ">=1.4.0,<2.0.0"
 # NOTE: pychestrate-core was previously a git-source dep but it
 # ships an empty ``ccai/pychestrate/__init__.py`` that
 # converts ``ccai.pychestrate`` from a PEP-420 namespace
@@ -74,11 +74,6 @@ httpx = "^0.27"
 # HTML parsing for the httpx-based tests (CSRF token extraction,
 # rendered-page assertions). Kept out of the runtime deps.
 beautifulsoup4 = "^4.12"
-
-[[tool.poetry.source]]
-name = "codecraftai"
-url = "https://code-craft.ai/licensed-repository/simple/"
-priority = "supplemental"
 
 [build-system]
 requires = ["poetry-core"]

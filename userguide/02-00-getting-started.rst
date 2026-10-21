@@ -26,38 +26,19 @@ What you need
 * ``git``, ``make``, and ``openssl`` (the development server generates
   a throwaway certificate authority with it).
 * A web browser.
-* Access to the private Code Craft AI framework packages -- see the
-  next section.
+* Access to PyPI, where the Code Craft AI framework packages are
+  published -- see the next section.
 
 
-Get access to the dependencies
-==============================
+The dependencies
+================
 
 Pychestrate is built on Code Craft AI's framework libraries (the
 ``codecraftai-*`` packages: webworks, testbase, runtime, and others).
-They are not on PyPI. How you get them depends on what the
-``pyproject.toml`` in your checkout declares:
-
-* **A package index.** If ``pyproject.toml`` has a
-  ``[[tool.poetry.source]]`` named ``codecraftai`` (URL
-  ``https://code-craft.ai/licensed-repository/simple/``), give Poetry
-  the username and token Code Craft AI issued you for that index:
-
-  .. code-block:: bash
-
-      poetry config http-basic.codecraftai <username> <token>
-
-  Poetry keeps the token in your system keyring, or in its
-  ``auth.toml`` when no keyring is available. On a CI runner, set the
-  environment variables ``POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME`` and
-  ``POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD`` instead.
-
-* **Git repositories.** If the dependencies are listed as
-  ``git = "https://github.com/automationmojo/codecraftai-..."``
-  entries, your git credentials need read access to those
-  repositories. CI provides it through the ``CODECRAFTAI_REPO_TOKEN``
-  secret; see `the runbook
-  <13-00-alpha-deployment.rst#ci-prerequisite-dependency-access>`_.
+They are published on PyPI, so Poetry installs them with everything
+else and there is nothing to set up: no package index, no token. The
+``pyproject.toml`` accepts any release in the 1.x line of each (webworks
+from 1.4, which the API explorer page needs).
 
 
 Install

@@ -441,240 +441,190 @@ files = [
 
 [[package]]
 name = "codecraftai-arcli"
-version = "1.0.1"
+version = "1.2.1"
 description = "Advanced Re-Usable Commandline Interface Framework"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_arcli-1.0.1-py3-none-any.whl", hash = "sha256:46e2fac4c1d4d57085114c7f73167007a639aeb2b891a6bf8908a8995cc033b7"},
-    {file = "codecraftai_arcli-1.0.1.tar.gz", hash = "sha256:a4f3066b83cadb11237a00f734c459963fe29142a445525e5abfa0b49807ffc1"},
+    {file = "codecraftai_arcli-1.2.1-py3-none-any.whl", hash = "sha256:3ee1f622a50c64feb5b79814ebceae94d7b22ac821fbae2960406abd9bcbd207"},
+    {file = "codecraftai_arcli-1.2.1.tar.gz", hash = "sha256:c606b8604ce11c0b8d92d03f42125f1f0afcad003adfc97d6f86d622331cac4c"},
 ]
 
 [package.dependencies]
-codecraftai-foundations = "<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "codecraftai-configuration"
-version = "1.0.2"
+version = "1.3.1"
 description = "Code Craft AI - Configuration"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_configuration-1.0.2-py3-none-any.whl", hash = "sha256:52aded00241509ddc04e30c74b258b90c70bfbaaa9d05a4ba1bf47e1c9463acb"},
-    {file = "codecraftai_configuration-1.0.2.tar.gz", hash = "sha256:6fc545fd7276ef87f022551186e661d96169c4b7247ac5077c04ec246e2129ed"},
+    {file = "codecraftai_configuration-1.3.1-py3-none-any.whl", hash = "sha256:6ba2adfa6d388f2fa2ab19e077cf692a771ae660bd8cc5a7e90e4febc07ab235"},
+    {file = "codecraftai_configuration-1.3.1.tar.gz", hash = "sha256:1685e03b6c5148d1daaf87cd53d2e2708b5b004fd15e0fd394bfdad3facf8ca8"},
 ]
 
 [package.dependencies]
-codecraftai-credentials = "<2.0.0"
-codecraftai-foundations = "<2.0.0"
-codecraftai-this-app = "<2.0.0"
-codecraftai-xmodules = "<2.0.0"
+codecraftai-credentials = ">=1.0.0,<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
+codecraftai-this-app = ">=1.0.0,<2.0.0"
+codecraftai-xmodules = ">=1.0.0,<2.0.0"
 cryptography = ">=45.0.5,<51.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 requests = ">=2.32.4,<3.0.0"
 
 [package.extras]
-couchdb = ["couchdb (>=1.2,<2.0)"]
+couchdb = ["couchdb (>=1.2,<2.0.0)"]
 pymongo = ["pymongo (>=4.13.2,<5.0.0)"]
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "codecraftai-credentials"
-version = "1.0.1"
+version = "1.2.1"
 description = "Code Craft AI - Credentials Package"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_credentials-1.0.1-py3-none-any.whl", hash = "sha256:41a1743f6ed87028db40ad3846624dc8a9baa471c10144fac9789c85d4424db0"},
-    {file = "codecraftai_credentials-1.0.1.tar.gz", hash = "sha256:5be172c84a5dfa269335dab622ac6dbaaa4cb492c00d93563c0131192f2639de"},
+    {file = "codecraftai_credentials-1.2.1-py3-none-any.whl", hash = "sha256:ffd3fe1101ca5f44fa310c6f9ecb81b476c25a73fa11f33c27593de0114f086e"},
+    {file = "codecraftai_credentials-1.2.1.tar.gz", hash = "sha256:89163b8726b74aa31f9719d723754caf6a3933a05ed2d5359b343b652d7f480c"},
 ]
 
 [package.dependencies]
-codecraftai-foundations = "<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
 
 [[package]]
 name = "codecraftai-dataprofiles"
-version = "1.0.1"
+version = "1.2.1"
 description = "Code Craft AI - Data Profiles Package"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_dataprofiles-1.0.1-py3-none-any.whl", hash = "sha256:87538c4994a931854465c3ca9f14ec44eecdb9470936b04340bca4be8c2d88cd"},
-    {file = "codecraftai_dataprofiles-1.0.1.tar.gz", hash = "sha256:8a083e5057dfbbe4e106923626e064ee4f40de221ac695c5cda754fc62e2a7bd"},
+    {file = "codecraftai_dataprofiles-1.2.1-py3-none-any.whl", hash = "sha256:7aff5198d2e1af3af774857b42911e66c6be93d4341f878a77211d7ceb8bbb08"},
+    {file = "codecraftai_dataprofiles-1.2.1.tar.gz", hash = "sha256:36ef5509dc91b8b4b2f453c6b8cda89586a372c9e46edb338637215d2adb11d9"},
 ]
 
 [package.dependencies]
-codecraftai-foundations = "<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
 
 [[package]]
 name = "codecraftai-extension"
-version = "1.0.0"
+version = "1.3.1"
 description = "Code Craft AI - Extension Package"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_extension-1.0.0-py3-none-any.whl", hash = "sha256:f7dc4b9fe4fc517ea10c22741cb43c84637c2fab61b7efd62246df6bae94e76a"},
-    {file = "codecraftai_extension-1.0.0.tar.gz", hash = "sha256:8d9b4972a75c9e87a3c6fa48d14694feaeae6dacebbd2244ae35f3ccde5a586b"},
+    {file = "codecraftai_extension-1.3.1-py3-none-any.whl", hash = "sha256:fb80ca97bd2304ad8632c23977bf59e4905092cecf50fc4316b7a13e1299daae"},
+    {file = "codecraftai_extension-1.3.1.tar.gz", hash = "sha256:ca49c7b858102a5bfc40a799f085063c9baaa5f42eebb122e3b2e40993ea312b"},
 ]
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "codecraftai-foundations"
-version = "1.0.1"
+version = "1.2.1"
 description = "Code Craft AI - Foundations Package"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_foundations-1.0.1-py3-none-any.whl", hash = "sha256:402e816416f5d2e6d4e8f74c0c2590c6a0da02cb0753a399454b1ff776203b22"},
-    {file = "codecraftai_foundations-1.0.1.tar.gz", hash = "sha256:e998e6cb602480b64570b552a614a915b9cb5d83f9c56958ce481d40aca7847c"},
+    {file = "codecraftai_foundations-1.2.1-py3-none-any.whl", hash = "sha256:356854e3e41bced216362ac3beb811547f427106efd703fce29ee7eed03d8ec8"},
+    {file = "codecraftai_foundations-1.2.1.tar.gz", hash = "sha256:368e635cb1026f442dd155b813191a3e9f916c852595c6da19a68a853f6d2e55"},
 ]
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "codecraftai-runtime"
-version = "1.0.0"
+version = "1.2.1"
 description = "Code Craft AI - Runtime"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_runtime-1.0.0-py3-none-any.whl", hash = "sha256:7833f3bbcd3b1e131a8ec195bb55d9f529ac12cf5af263aafdbfc0d4720833a0"},
-    {file = "codecraftai_runtime-1.0.0.tar.gz", hash = "sha256:fa210d7c47ce8d579aab2ccaf0febfab4678c51537148b6a53e90d12dc218eb5"},
+    {file = "codecraftai_runtime-1.2.1-py3-none-any.whl", hash = "sha256:5ee0d12765718fee8cb0a75406b88f75620f747bf4328ebe612e1c8725876e7a"},
+    {file = "codecraftai_runtime-1.2.1.tar.gz", hash = "sha256:49d2b26aaf1e971fea80027db12f5fd6d66c3035987d3c6a5062cdc221c26af9"},
 ]
 
 [package.dependencies]
-codecraftai-this-app = "<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
+codecraftai-this-app = ">=1.0.0,<2.0.0"
 
 [[package]]
 name = "codecraftai-storage-database"
-version = "1.0.1"
+version = "1.2.2"
 description = "Code Craft AI - Storage Database"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_storage_database-1.0.1-py3-none-any.whl", hash = "sha256:1e620a7d1836e0f980c617bb1cb01eda22892d95583a1edaf74eb9ff31c9c3d5"},
-    {file = "codecraftai_storage_database-1.0.1.tar.gz", hash = "sha256:d45edeba7e469f347dcf3dc5d7f8117779f1e4878975d2dbc1de4ceb750adcf1"},
+    {file = "codecraftai_storage_database-1.2.2-py3-none-any.whl", hash = "sha256:85780f02d5f1400b2aae2d5cd4671adfd9273f904fc743f9a8fa9c50616fdee9"},
+    {file = "codecraftai_storage_database-1.2.2.tar.gz", hash = "sha256:456e28babf5a2ef1d0bd84f4df7018f7f66ae79052e53f42add4acbd36d20b28"},
 ]
 
 [package.dependencies]
-codecraftai-credentials = "<2.0.0"
-codecraftai-dataprofiles = "<2.0.0"
-codecraftai-foundations = "<2.0.0"
-codecraftai-runtime = "<2.0.0"
+codecraftai-credentials = ">=1.0.0,<2.0.0"
+codecraftai-dataprofiles = ">=1.0.0,<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
+codecraftai-runtime = ">=1.0.0,<2.0.0"
 psycopg2-binary = ">=2.0.10,<3.0.0"
 sqlalchemy = ">=2.0.43,<3.0.0"
-sqlalchemy-utils = ">=0.42.0,<0.43.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
+sqlalchemy-utils = ">=0.43.0,<0.44.0"
 
 [[package]]
 name = "codecraftai-testbase"
-version = "1.0.3"
+version = "1.3.1"
 description = "Code Craft AI - TestBase"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_testbase-1.0.3-py3-none-any.whl", hash = "sha256:38eb050dd9bd62465ae9871bb71d61a0c84113e97b1989a53a7308214ce249d8"},
-    {file = "codecraftai_testbase-1.0.3.tar.gz", hash = "sha256:5649b2891b80710a625d120753ff99d8ad90a9e747fa90da8df96c971774c76d"},
+    {file = "codecraftai_testbase-1.3.1-py3-none-any.whl", hash = "sha256:fa48312b8a352cac9c8b787838752d8a2094c81bf382a6b8cc2ff572f5666ba6"},
+    {file = "codecraftai_testbase-1.3.1.tar.gz", hash = "sha256:91a686ab28eeefcbf452ff12ea9bebb63cb9f4a8b2fced5dcfe1fe51e4082127"},
 ]
 
 [package.dependencies]
-codecraftai-arcli = "<2.0.0"
-codecraftai-foundations = "<2.0.0"
-codecraftai-runtime = "<2.0.0"
-codecraftai-this-app = "<2.0.0"
-codecraftai-xmodules = "<2.0.0"
+codecraftai-arcli = ">=1.0.0,<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
+codecraftai-runtime = ">=1.0.0,<2.0.0"
+codecraftai-this-app = ">=1.0.0,<2.0.0"
+codecraftai-xmodules = ">=1.0.0,<2.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "codecraftai-this-app"
-version = "1.0.1"
+version = "1.4.1"
 description = "Code Craft AI - This-App"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_this_app-1.0.1-py3-none-any.whl", hash = "sha256:3610f3c14ebac676aba2526f1f72d3ec729f807db6c84131e8be485205cfc67c"},
-    {file = "codecraftai_this_app-1.0.1.tar.gz", hash = "sha256:0398be881f6c8ea2e274e3c38e9bd5ce968ff9343625747527a282874451b7e7"},
+    {file = "codecraftai_this_app-1.4.1-py3-none-any.whl", hash = "sha256:87e255f54ef302e92fc719ffba825435594182e376d54139acffcb73f9afa3d9"},
+    {file = "codecraftai_this_app-1.4.1.tar.gz", hash = "sha256:073622f2ad9ad236cfaf80eebba9d1b212990ce4f49009f4c5e3c9cb421c3881"},
 ]
 
 [package.dependencies]
-codecraftai-extension = "<2.0.0"
-codecraftai-foundations = "<2.0.0"
-codecraftai-xmodules = "<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
+codecraftai-extension = ">=1.0.0,<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
+codecraftai-xmodules = ">=1.0.0,<2.0.0"
 
 [[package]]
 name = "codecraftai-webworks"
-version = "1.4.0"
+version = "1.5.1"
 description = "Code Craft AI - WebWorks"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_webworks-1.4.0-py3-none-any.whl", hash = "sha256:5cf421d1de4df541945a169b2228aa3cc9e0abc00be6dfd61d767e276343161d"},
-    {file = "codecraftai_webworks-1.4.0.tar.gz", hash = "sha256:e8c1b631ce484b8d15a29975e00bd7ccc460e2b56347881c95116b1a04f1bfaf"},
+    {file = "codecraftai_webworks-1.5.1-py3-none-any.whl", hash = "sha256:1493405200634873289626e10bc7df96932b814744baafaf202f07657b8cdefa"},
+    {file = "codecraftai_webworks-1.5.1.tar.gz", hash = "sha256:877773df95081e685e403b112102b69f1cbe349908b4e116f9e2cdc32965e425"},
 ]
 
 [package.dependencies]
-codecraftai-configuration = "<2.0.0"
-codecraftai-credentials = "<2.0.0"
-codecraftai-dataprofiles = "<2.0.0"
-codecraftai-testbase = "<2.0.0"
-codecraftai-this-app = "<2.0.0"
+codecraftai-configuration = ">=1.0.0,<2.0.0"
+codecraftai-credentials = ">=1.0.0,<2.0.0"
+codecraftai-dataprofiles = ">=1.0.0,<2.0.0"
+codecraftai-testbase = ">=1.0.0,<2.0.0"
+codecraftai-this-app = ">=1.0.0,<2.0.0"
 cryptography = ">=42.0.0,<51.0.0"
 requests = ">=2.32.5,<3.0.0"
 
@@ -683,31 +633,21 @@ jinja2 = ["jinja2 (>=3.1.0,<4.0.0)"]
 mako = ["mako (>=1.3.0,<2.0.0)"]
 templating = ["jinja2 (>=3.1.0,<4.0.0)", "mako (>=1.3.0,<2.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
-
 [[package]]
 name = "codecraftai-xmodules"
-version = "1.1.0"
+version = "1.3.1"
 description = "Code Craft AI - Python Extension Modules"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_xmodules-1.1.0-py3-none-any.whl", hash = "sha256:145310a04530f792840b8f6ef54bb525590048c4743e9279782a5f0ec2ac2ea5"},
-    {file = "codecraftai_xmodules-1.1.0.tar.gz", hash = "sha256:fbea4e468f59c1504ee5436f5877c6c4e0eb1039c32b49db7d2fe092cb6ab33b"},
+    {file = "codecraftai_xmodules-1.3.1-py3-none-any.whl", hash = "sha256:c1450a52356d119137d5c10a9a2258b2d32386ba32f9e012782b1b2141f6bdda"},
+    {file = "codecraftai_xmodules-1.3.1.tar.gz", hash = "sha256:19bd4295bdad20396986f8d6211a99293a50f835e46b8284ea84ecc24b536cf6"},
 ]
 
 [package.dependencies]
-codecraftai-foundations = "<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
 debugpy = ">=1.8.14,<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "https://code-craft.ai/licensed-repository/simple"
-reference = "codecraftai"
 
 [[package]]
 name = "colorama"
@@ -2166,18 +2106,18 @@ sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
 name = "sqlalchemy-utils"
-version = "0.42.1"
+version = "0.43.0"
 description = "Various utility functions for SQLAlchemy."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "sqlalchemy_utils-0.42.1-py3-none-any.whl", hash = "sha256:243cfe1b3a1dae3c74118ae633f1d1e0ed8c787387bc33e556e37c990594ac80"},
-    {file = "sqlalchemy_utils-0.42.1.tar.gz", hash = "sha256:881f9cd9e5044dc8f827bccb0425ce2e55490ce44fc0bb848c55cc8ee44cc02e"},
+    {file = "sqlalchemy_utils-0.43.0-py3-none-any.whl", hash = "sha256:b1a4739bea23a02a4cb7da9437d3e79645bac66cddec07051597149357191c09"},
+    {file = "sqlalchemy_utils-0.43.0.tar.gz", hash = "sha256:7e8741dbc2c0f992d2181cd69de13de292b3a2a5305a9da832e10d540abcedbf"},
 ]
 
 [package.dependencies]
-SQLAlchemy = ">=1.4"
+SQLAlchemy = ">=2.0"
 
 [package.extras]
 arrow = ["arrow (>=0.3.4)"]
@@ -2188,8 +2128,8 @@ intervals = ["intervals (>=0.7.1)"]
 password = ["passlib (>=1.6,<2.0)"]
 pendulum = ["pendulum (>=2.0.5)"]
 phone = ["phonenumbers (>=5.9.2)"]
-test = ["Jinja2 (>=2.3)", "Pygments (>=1.2)", "docutils (>=0.10)", "flake8 (>=2.4.0)", "flexmock (>=0.9.7)", "isort (>=4.2.2)", "pg8000 (>=1.12.4)", "psycopg (>=3.1.8)", "psycopg2 (>=2.5.1)", "psycopg2cffi (>=2.8.1)", "pymysql", "pyodbc", "pytest (==7.4.4)", "python-dateutil (>=2.6)", "pytz (>=2014.2)"]
-test-all = ["Babel (>=1.3)", "Jinja2 (>=2.3)", "Pygments (>=1.2)", "arrow (>=0.3.4)", "colour (>=0.0.4)", "cryptography (>=0.6)", "docutils (>=0.10)", "flake8 (>=2.4.0)", "flexmock (>=0.9.7)", "furl (>=0.4.1)", "intervals (>=0.7.1)", "isort (>=4.2.2)", "passlib (>=1.6,<2.0)", "pendulum (>=2.0.5)", "pg8000 (>=1.12.4)", "phonenumbers (>=5.9.2)", "psycopg (>=3.1.8)", "psycopg2 (>=2.5.1)", "psycopg2cffi (>=2.8.1)", "pymysql", "pyodbc", "pytest (==7.4.4)", "python-dateutil", "python-dateutil (>=2.6)", "pytz (>=2014.2)"]
+test = ["Jinja2 (>=2.3)", "Pygments (>=1.2)", "docutils (>=0.10)", "flexmock (>=0.9.7)", "pg8000 (>=1.12.4)", "psycopg (>=3.1.8)", "psycopg2 (>=2.5.1)", "psycopg2cffi (>=2.8.1)", "pymysql", "pyodbc", "pytest (>=9.0,<10)", "python-dateutil (>=2.6)", "pytz (>=2014.2)"]
+test-all = ["Babel (>=1.3)", "Jinja2 (>=2.3)", "Pygments (>=1.2)", "arrow (>=0.3.4)", "colour (>=0.0.4)", "cryptography (>=0.6)", "docutils (>=0.10)", "flexmock (>=0.9.7)", "furl (>=0.4.1)", "intervals (>=0.7.1)", "passlib (>=1.6,<2.0)", "pendulum (>=2.0.5)", "pg8000 (>=1.12.4)", "phonenumbers (>=5.9.2)", "psycopg (>=3.1.8)", "psycopg2 (>=2.5.1)", "psycopg2cffi (>=2.8.1)", "pymysql", "pyodbc", "pytest (>=9.0,<10)", "python-dateutil", "python-dateutil (>=2.6)", "pytz (>=2014.2)"]
 timezone = ["python-dateutil"]
 url = ["furl (>=0.4.1)"]
 
@@ -2284,4 +2224,4 @@ zstd = ["backports-zstd (>=1.0.0) ; python_version < \"3.14\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "54e0fb61429a6f105eebb0cee1c3f05fbc3f750f6ed0ec775cfb8e8166672fdc"
+content-hash = "cddee3d11502876a2c6a8aaa925889a5cc549f175f8b4ef149b20ea6641de9a5"

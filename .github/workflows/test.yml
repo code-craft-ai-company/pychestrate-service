@@ -38,27 +38,6 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: |
           poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set." \
-                 "The pyproject.toml git-source deps (codecraftai-errors," \
-                 "codecraftai-runtime, codecraftai-arcli, codecraftai-credentials," \
-                 "codecraftai-dataprofiles, codecraftai-storage-database," \
-                 "codecraftai-testbase, codecraftai-webworks, pychestrate-core)" \
-                 "live in private repos under the automationmojo org and the" \
-                 "default GITHUB_TOKEN cannot read sibling private repos." \
-                 "Add a fine-grained PAT (Contents: Read on the automationmojo" \
-                 "org private repos) to this repo's secrets as CODECRAFTAI_REPO_TOKEN."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: |
           poetry install --no-interaction
@@ -92,20 +71,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                 "(see lint-and-build job for setup instructions)."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: poetry install --no-interaction
 
@@ -155,20 +120,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                 "(see lint-and-build job for setup instructions)."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: poetry install --no-interaction
 
@@ -281,20 +232,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                 "(see lint-and-build job for setup instructions)."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: poetry install --no-interaction
 
@@ -351,20 +288,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                 "(see lint-and-build job for setup instructions)."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: poetry install --no-interaction
 
@@ -411,20 +334,6 @@ jobs:
 
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
-
-      - name: Configure git to clone private codecraftai-* deps
-        env:
-          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
-        run: |
-          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
-            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
-                 "(see lint-and-build job for setup instructions)."
-            exit 1
-          fi
-          git config --global \
-            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
-            "https://github.com/automationmojo/"
-
       - name: Install dependencies
         run: poetry install --no-interaction
 

@@ -110,7 +110,7 @@ When checking out the code for this repository in order to test changes, agents 
 * run the 'repository-setup/rehome-repository' script.  It creates a needed '.env' file.
 * run the 'development/setup-environment' script in order to create the virtual environment.
 
-The dependencies are private Code Craft AI packages; [DEVELOPING.md](DEVELOPING.md) links to how to get access.
+The `codecraftai-*` dependencies are published on PyPI; `poetry install` fetches them (see [DEVELOPING.md](DEVELOPING.md)).
 
 # Writing Tests
 
@@ -474,7 +474,7 @@ user manual and `CHANGELOG.md` updated for user-visible changes.
 # Packaging
 The service is not published as a package; it runs from a checkout (see the operator runbook,
 [userguide/13-00-alpha-deployment.rst](userguide/13-00-alpha-deployment.rst)). Its `codecraftai-*` framework
-dependencies come from private Code Craft AI sources declared in `pyproject.toml`.
+dependencies are the `codecraftai-*` packages on PyPI, declared in `pyproject.toml`.
 
 The `pyc` CLI (`source/site/ccai/pychestrate/cli/`) is also packaged on its own as `pychestrate-cli`
 (`packages/pychestrate-cli/pyproject.toml`; user guide: [userguide/14-00-pyc-command-line.rst](userguide/14-00-pyc-command-line.rst)).

@@ -945,6 +945,8 @@ preview tag.
 
 ### Changed
 
+- **Dependencies come from PyPI.** The `codecraftai-*` packages are published on PyPI, so `pyproject.toml` no longer names the private package index and the lock file resolves them from PyPI. That moves the framework stack up a generation (webworks 1.4.0 to 1.5.1, foundations 1.0.1 to 1.2.1, testbase 1.0.3 to 1.3.1, this-app 1.0.1 to 1.4.1, configuration, credentials, dataprofiles, runtime, storage-database, extension, arcli and xmodules likewise; the only third-party change is sqlalchemy-utils 0.42.1 to 0.43.0). Getting Started and the runbook no longer ask for an index token, and the CI and deploy workflows no longer need the `CODECRAFTAI_REPO_TOKEN` secret or index credentials.
+
 - **The repository is source-available and takes issues only.** `CONTRIBUTING.md` now says so (no pull requests, security problems reported privately), `SECURITY.md` explains private reporting, and the repository has bug, feature and question issue forms. The working guide for the maintainers that used to be `CONTRIBUTING.md` is now `DEVELOPING.md`, and the user manual, README and `AGENTS.md` link to it.
 - A link to a project's page opens that project's page (ORC-27). Six bundle views
   (provisioning runs, environments, blast-radius guards, SLOs, alert rules, test

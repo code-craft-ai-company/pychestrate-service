@@ -53,9 +53,9 @@ Prerequisites
   ``psycopg2``, is installed with the service's dependencies.
 * nginx (or another reverse proxy that terminates TLS) and a
   certificate for the host name users will open.
-* Read access to the private Code Craft AI framework packages: see
-  `Get access to the dependencies
-  <02-00-getting-started.rst#get-access-to-the-dependencies>`_.
+* Access to PyPI, where the Code Craft AI framework packages are
+  published: ``poetry install`` fetches them (see `The dependencies
+  <02-00-getting-started.rst#the-dependencies>`_).
 
 
 Install the service
@@ -637,28 +637,6 @@ Upgrade
 #. Load the configuration, run ``make db-upgrade``, and start the
    service. Run the smoke test after setup, and confirm ``/readyz`` answers
    ``200``.
-
-
-CI prerequisite: dependency access
-==================================
-
-The CI workflows install the service's dependencies before running
-anything, so the runner needs the same access to the private Code
-Craft AI packages a person does:
-
-* **Package index** (``pyproject.toml`` declares a
-  ``[[tool.poetry.source]]`` named ``codecraftai``): store the index
-  username and token as repository secrets and expose them to the
-  install step as ``POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME`` and
-  ``POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD``.
-* **Git repositories** (``pyproject.toml`` lists ``git = ...``
-  dependencies under ``github.com/automationmojo``): the default
-  ``GITHUB_TOKEN`` cannot read other private repositories, so the
-  workflows in ``.github/workflows/`` read a fine-grained personal
-  access token with **Contents: Read-only** on those repositories from
-  the ``CODECRAFTAI_REPO_TOKEN`` secret, and install it as a git
-  ``url.<base>.insteadOf`` rewrite before ``poetry install``. A missing
-  secret fails the job with an ``::error::`` annotation that names it.
 
 
 Known limitations

@@ -34,9 +34,9 @@ Try it
 ======
 
 You need Linux or macOS, Python 3.12, Poetry 2, ``git``, ``make``,
-``openssl``, and read access to the private Code Craft AI framework
-packages (`how to get it
-<userguide/02-00-getting-started.rst#get-access-to-the-dependencies>`_).
+``openssl``, and access to PyPI, where the ``codecraftai-*`` framework
+packages are published (`about the dependencies
+<userguide/02-00-getting-started.rst#the-dependencies>`_).
 Then:
 
 .. code-block:: bash
