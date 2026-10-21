@@ -106,6 +106,14 @@ REFERENCE_BUILD = tags.has("reference")
 extensions = []
 html_extra_path = []
 
+#: The plugin catalog (``extensions/index``) is generated, and only by the whole-site build. A plain build (no ``-t reference``)
+#: has no catalog, so the two ``:doc:`Plugin Catalog <extensions/index>``` links in ``11-00-extensions.rst`` have nothing to point
+#: at and read as plain text; Sphinx would otherwise fail ``-W`` on them with "unknown document". (``only`` blocks do not help:
+#: Sphinx resolves references before it drops them.) The whole-site build still resolves, and with ``-W`` checks, every ``:doc:`` link.
+suppress_warnings = []
+if REFERENCE_BUILD is not True:
+    suppress_warnings.append("ref.doc")
+
 if REFERENCE_BUILD is True:
     sys.path.insert(0, os.path.join(_REPO_ROOT, "source", "site"))
     sys.path.insert(0, os.path.join(_REPO_ROOT, "source", "packages"))

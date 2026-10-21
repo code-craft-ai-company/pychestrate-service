@@ -38,15 +38,27 @@ depends_on: Union[str, Sequence[str], None] = None
 SCOPE_KIND_DEFAULT = "ORG"
 
 
+def _scope_kind_enum() -> sa.Enum:
+    """
+        The column type. PostgreSQL has a real ``secret_scope_kind`` type; ``op.add_column`` does not create it
+        (only ``create_table`` does), so ``upgrade`` creates it first. SQLite stores the column as text.
+    """
+    return sa.Enum("ORG", "PROJECT", "USER", name="secret_scope_kind")
+
+
 def upgrade() -> None:
     """
         Add ``scope_kind`` + ``scope_ref`` to ``phase1_secrets``.
     """
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        # ``checkfirst`` keeps a database where the type already exists (made by ``create_all``) working.
+        _scope_kind_enum().create(bind, checkfirst=True)
     op.add_column(
         "phase1_secrets",
         sa.Column(
             "scope_kind",
-            sa.Enum("ORG", "PROJECT", "USER", name="secret_scope_kind"),
+            _scope_kind_enum(),
             nullable=False,
             server_default=SCOPE_KIND_DEFAULT,
         ),
@@ -74,4 +86,7 @@ def downgrade() -> None:
     op.drop_index("ix_phase1_secrets_scope", table_name="phase1_secrets")
     op.drop_column("phase1_secrets", "scope_ref")
     op.drop_column("phase1_secrets", "scope_kind")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        _scope_kind_enum().drop(bind, checkfirst=True)
     return

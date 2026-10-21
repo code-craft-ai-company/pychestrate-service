@@ -29,6 +29,9 @@ preview tag.
 
 ### Fixed
 
+- **A new PostgreSQL database can be migrated.** `make db-upgrade` on an empty PostgreSQL database stopped at `a7b8c9d0e1f2` (add secret scope columns) with `type "secret_scope_kind" does not exist`: the migration added an enum column without creating the PostgreSQL type, which `op.add_column` does not do. SQLite stores enums as text, so development and staging never showed it. The migration now creates the type first (only on PostgreSQL, and only if it is missing) and drops it on downgrade, and a test checks that no migration adds an enum column without creating the type. The runbook smoke test in CI found it, once CI could install dependencies again.
+- **The user manual builds on its own.** A manual-only build (without the plugin catalog, which only the whole-site build generates) failed with "unknown document: extensions/index"; the two catalog links read as plain text there, and the whole-site build still checks them.
+
 - **The API page is now an interactive explorer, folded and grouped by path.** `/api/docs` showed the OpenAPI document with ReDoc, a read-only reference: one long scroll with no way to try a call. It now opens Swagger UI (the
   copy that ships inside `codecraftai-webworks`, served from this origin, no new package): every API is folded, grouped by where its path puts it (`projects / rpa`, 105 groups instead of 48 feature tags), with a filter, deep links
   so a link opens one API, no Schemas block, and **Try it out** (a person clicks it, then Execute) that sends the request to this service as the person signed in. The page is behind the same sign-in as before, so a read-only
