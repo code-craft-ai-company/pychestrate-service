@@ -952,6 +952,8 @@ preview tag.
 
 ### Changed
 
+- **Version `0.0.7-preview.1` (PyPI `0.0.7rc1`)** is the first PyPI release with the first-start setup-token fix (below) and the security refresh of the locked `urllib3`, `certifi` and `mako`. PyPI's `0.0.7rc0` has the startup race, so use `0.0.7rc1` or later. The README now says what the wheel carries (the code and the `pyc` and `pychestrate-admin` commands) and what stays in the repository (migrations, the OpenAPI document, the manual and the deployment scripts), which is why a service is run from a checkout.
+
 - **`pychestrate-cli` can be released.** `packages/pychestrate-cli` (the standalone `pyc` command) no longer carries the `Private :: Do Not Upload` classifier, declares the repository's licence and ships a copy of `LICENSE.md` (a test keeps the copy identical), and `.github/workflows/publish-cli.yml` releases it when `PYC_VERSION` changes, through the same gates as the service (tests, `twine check --strict`, approval of the `pypi` environment, PyPI trusted publishing). Only a wheel is released, because the package's source directory points at the service tree. Nothing has been released yet; the pending publisher on pypi.org comes first. `pychestrate-service` also installs the CLI files, so the two packages should not share an environment.
 - **`pychestrate-core`, `pychestrate-client` and `pychestrate-service` are on PyPI** (0.0.1, 0.0.1 and 0.0.7rc0, a pre-release), released through `publish.yml`.
 

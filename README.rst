@@ -29,6 +29,15 @@ development, but it is not supported for production use beyond the
 project author and direct collaborators. `ROADMAP.md <ROADMAP.md>`_
 says what works, what does not, and what the milestones mean.
 
+**Installing from PyPI.** ``pychestrate-service`` is published on PyPI as a
+pre-release (``pip install --pre pychestrate-service``). The package carries
+the service's code and the ``pyc`` and ``pychestrate-admin`` commands. The
+database migrations (``alembic/``), the OpenAPI document, the user manual and
+the deployment scripts live in this repository, and the runbook's ``make``
+targets and ``/api/docs`` read them from a checkout, so to run a service,
+clone the repository and follow the runbook
+(`userguide/13-00-alpha-deployment.rst <userguide/13-00-alpha-deployment.rst>`_).
+
 
 Try it
 ======

@@ -40,7 +40,7 @@ REST API::
     $ pyc version
     pyc      0.3.0 (python 3.12.14)
     server   https://pychestrate.example.com
-    service  0.0.7-preview
+    service  0.0.7-preview.1
     api      0.0.17-preview
 
 Signing in

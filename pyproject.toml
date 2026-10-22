@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "pychestrate-service"
 description = "Code Craft AI - Pychestrate Service"
-version = "0.0.7-preview"
+version = "0.0.7-preview.1"
 authors = []
 readme = "README.rst"
 license = "LicenseRef-CodeCraftAI-Source-Available"
