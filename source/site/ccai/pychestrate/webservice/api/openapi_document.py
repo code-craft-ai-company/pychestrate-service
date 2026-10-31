@@ -25,14 +25,15 @@ also names the running service's own version as
 ``info.x-service-version`` (the ``[tool.poetry] version`` of the
 checkout's ``pyproject.toml``), which ``pyc version`` reports.
 
-The same document is shown to people at ``GET /api/v1/_meta/docs`` with Swagger UI, from the copy that ships inside codecraftai-webworks and is
-served from this origin (``/api/v1/_meta/docs/assets/``), so the page needs no third-party host and works under the service's Content-Security-Policy
-(which allows scripts from this origin only, so the starter script is a file of its own). It opens folded, grouped by where each operation's path puts it
-(``projects / rpa``): the page reads ``GET /api/v1/_meta/openapi.json?group_by=path``, a copy of the document whose operations are tagged by path (the plain
-document, which ``pyc`` builds its commands from, keeps the feature tags). **Try it out** sends the request to this service as the person signed in, so the page
-adds no access the API does not already give; ``PYCHESTRATE_API_DOCS_TRY_IT_OUT`` (``all``, ``get`` or ``off``) limits what it may send. Like the document, the
-page needs a signed-in caller, and it lives beside it because only ``/api/v1/`` resolves the session cookie. ``GET /api/docs``, the address people try first,
-redirects to it (audit finding DOC-06). It replaced a read-only ReDoc page: a read-only reference protected nothing, since the page is behind the same sign-in.
+The same document is shown to people at ``GET /api/v1/_meta/docs`` as an explorer (a tree of the APIs by where their paths live, and the ones a person
+pins, each in a pane of its own that runs Swagger UI), from the copy that ships inside codecraftai-webworks and is served from this origin
+(``/api/v1/_meta/docs/assets/``), so the page needs no third-party host and works under the service's Content-Security-Policy (which allows scripts from this
+origin only, so the starter script is a file of its own). The page reads the plain document and builds its own tree; the pinned set is kept in the page
+address, so a link shares it. ``GET /api/v1/_meta/openapi.json?group_by=path``, a copy whose operations are tagged by path, is still served for clients that
+want it. **Try it out** sends the request to this service as the person signed in, so the page adds no access the API does not already give;
+``PYCHESTRATE_API_DOCS_TRY_IT_OUT`` (``all``, ``get`` or ``off``) limits what it may send. Like the document, the page needs a signed-in caller, and it
+lives beside it because only ``/api/v1/`` resolves the session cookie. ``GET /api/docs``, the address people try first, redirects to it (audit finding
+DOC-06). It replaced a read-only ReDoc page: a read-only reference protected nothing, since the page is behind the same sign-in.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -72,7 +73,7 @@ API_DOCS_ASSET_DIRECTORY: str = "/_meta/docs/assets"
 API_DOCS_ALIAS_PATH: str = "/api/docs"
 API_DOCS_TITLE: str = "Pychestrate REST API"
 
-#: The ``group_by`` value that asks the document endpoint for the copy tagged by path, and the one the explorer page asks for.
+#: The ``group_by`` value that asks the document endpoint for the copy tagged by path (the explorer page builds its own tree from the plain document).
 GROUP_BY_PATH: str = "path"
 
 #: How many fixed words of a path name its group in the explorer (``projects / rpa``).
@@ -337,31 +338,32 @@ API_DOCS_CONTENT_SECURITY_POLICY: str = "; ".join([
 
 def _docs_page_html(*, version_prefix: str) -> str:
     """
-        The Swagger UI page for a version prefix: the library and its starter, both from this origin, and no script of its own.
+        The explorer page for a version prefix: Swagger UI, the explorer's scripts and its starter, all from this origin, and no script of its own.
 
         :param version_prefix: Versioned API prefix (``"/api/v1"``).
 
         :returns: HTML.
     """
-    from ccai.webworks.openapi.swaggerui import render_swagger_ui_page  # noqa: E402
+    from ccai.webworks.openapi.explorer import render_explorer_page  # noqa: E402
 
-    rtnval = render_swagger_ui_page(title=API_DOCS_TITLE, static_path=version_prefix + API_DOCS_ASSET_DIRECTORY)
+    rtnval = render_explorer_page(title=API_DOCS_TITLE, static_path=version_prefix + API_DOCS_ASSET_DIRECTORY)
     return rtnval
 
 
 def _docs_initializer_js(*, version_prefix: str) -> bytes:
     """
-        The script that starts Swagger UI on the path-grouped document, folded, with **Try it out** limited as ``PYCHESTRATE_API_DOCS_TRY_IT_OUT`` says.
+        The script that starts the explorer on the plain document, with **Try it out** limited as ``PYCHESTRATE_API_DOCS_TRY_IT_OUT`` says.
 
         :param version_prefix: Versioned API prefix (``"/api/v1"``).
 
         :returns: The script, UTF-8.
     """
-    from ccai.webworks.openapi.swaggerui import SwaggerUIOptions, render_swagger_ui_initializer  # noqa: E402
+    from ccai.webworks.openapi.explorer import ExplorerOptions, render_explorer_initializer  # noqa: E402
 
-    script = render_swagger_ui_initializer(
-        spec_url="{}{}?group_by={}".format(version_prefix, OPENAPI_DOCUMENT_PATH, GROUP_BY_PATH),
-        options=SwaggerUIOptions(supported_submit_methods=try_it_out_methods()),
+    script = render_explorer_initializer(
+        document_url=version_prefix + OPENAPI_DOCUMENT_PATH,
+        title=API_DOCS_TITLE,
+        options=ExplorerOptions(supported_submit_methods=try_it_out_methods()),
     )
     rtnval = script.encode("utf-8")
     return rtnval
@@ -373,7 +375,7 @@ def make_api_docs_handler(*, version_prefix: str) -> Any:
 
         :param version_prefix: Versioned API prefix (``"/api/v1"``).
 
-        :returns: A handler answering the Swagger UI page.
+        :returns: A handler answering the explorer page.
     """
     def handle_get_api_docs(request: Any) -> Any:
         from ccai.webworks.routing.response import HTMLResponse  # noqa: E402
@@ -406,21 +408,21 @@ def make_api_docs_asset_handler(*, version_prefix: str) -> Any:
 
         :param version_prefix: Versioned API prefix (``"/api/v1"``), which the starter script names the document under.
 
-        :returns: A handler answering the Swagger UI library files and the starter script, and a 404 problem document for any other name (the
-                  allowlist is webworks': only those files are ever read).
+        :returns: A handler answering the Swagger UI library files, the explorer's own files and the starter script, and a 404 problem document for any
+                  other name (the allowlist is webworks': only those files are ever read).
     """
     def handle_get_api_docs_asset(request: Any) -> Any:
-        from ccai.webworks.openapi.swaggerui import SWAGGER_UI_INITIALIZER_NAME, read_swagger_ui_asset  # noqa: E402
+        from ccai.webworks.openapi.explorer import EXPLORER_INITIALIZER_NAME, read_explorer_asset  # noqa: E402
         from ccai.webworks.routing.response import Response  # noqa: E402
 
         filename = str(request.path_params.get("filename", ""))
         content: Optional[bytes] = None
         content_type = ""
-        if filename == SWAGGER_UI_INITIALIZER_NAME:
+        if filename == EXPLORER_INITIALIZER_NAME:
             content = _docs_initializer_js(version_prefix=version_prefix)
             content_type = "application/javascript"
         else:
-            found = read_swagger_ui_asset(filename)
+            found = read_explorer_asset(filename)
             if found is not None:
                 content, content_type = found
         if content is None:
@@ -430,8 +432,8 @@ def make_api_docs_asset_handler(*, version_prefix: str) -> Any:
                 instance=getattr(request, "path", None),
             )
             return rtnval
-        # The starter script depends on a setting and the prefix; the library files never change under a release.
-        cache = "no-cache" if filename == SWAGGER_UI_INITIALIZER_NAME else "private, max-age=86400"
+        # The starter script depends on a setting and the prefix; the other files never change under a release.
+        cache = "no-cache" if filename == EXPLORER_INITIALIZER_NAME else "private, max-age=86400"
         rtnval = Response(
             status_code=200,
             headers={"Content-Type": content_type, "Cache-Control": cache},
@@ -444,7 +446,7 @@ def make_api_docs_asset_handler(*, version_prefix: str) -> Any:
 
 def register_api_docs_routes(*, app: Any, version_prefix: str) -> None:
     """
-        Attach ``GET <prefix>/_meta/docs`` (the Swagger UI explorer) and
+        Attach ``GET <prefix>/_meta/docs`` (the API explorer) and
         ``GET <prefix>/_meta/docs/assets/{filename}`` (its files and starter
         script), for any signed-in principal, and ``GET /api/docs``, which
         redirects to the page.

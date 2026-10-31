@@ -2,16 +2,17 @@
 .. module:: test_p31m_api_reference_page_m1
     :platform: Darwin, Linux, Unix, Windows
     :synopsis: Tests for the REST API explorer page
-               ``GET /api/v1/_meta/docs`` (DOC-06), a Swagger UI.
+               ``GET /api/v1/_meta/docs`` (DOC-06), a tree of the APIs with pinned panes that run Swagger UI.
 
 .. moduleauthor:: Code Craft AI LLC
 
 None of the 16 URLs an evaluator would try for the API reference was
 served, although the service already served the OpenAPI document. ``GET /api/docs``
-now shows the document with the Swagger UI that codecraftai-webworks ships, served
+now shows the document with the explorer that codecraftai-webworks ships (a tree of
+the APIs by path, and the ones a person pins, each in a pane that runs Swagger UI), served
 from this origin so the page works under the service's Content-Security-Policy
 (which allows scripts from this origin only, so the starter script is a file of its
-own), to any signed-in caller. It opens folded and grouped by path, and Try it out
+own), to any signed-in caller. Try it out
 sends requests as the person signed in. It lives under ``/api/v1/`` because only that
 prefix resolves the session cookie; ``GET /api/docs`` redirects to it. It replaced a
 read-only ReDoc page: behind the same sign-in, read-only protected nothing.
@@ -81,22 +82,23 @@ def _asset(*, filename: str, principal: Optional[Any]) -> Any:
     return rtnval
 
 
-def test_the_explorer_page_loads_swagger_ui_and_its_starter_from_this_origin():
+def test_the_explorer_page_loads_swagger_ui_the_explorer_and_its_starter_from_this_origin():
     """
     **Feature: REST API explorer (DOC-06)**
-    **Property: GET /api/v1/_meta/docs answers 200 HTML with the Swagger UI container and the library's script and style and the starter script all loaded from
-    this origin, and no address on another host.**
+    **Property: GET /api/v1/_meta/docs answers 200 HTML with the explorer container, the scripts of Swagger UI, the explorer's model and page, the starter, and
+    both style sheets, all loaded from this origin, and no address on another host.**
     """
     response = _page(principal=_principal())
     html = response.body.decode("utf-8")
 
     testbase.assert_equal(
         (
-            response.status_code, 'id="swagger-ui"' in html,
-            'src="{}/swagger-ui-bundle.js"'.format(ASSET_DIRECTORY) in html, 'href="{}/swagger-ui.css"'.format(ASSET_DIRECTORY) in html,
-            'src="{}/swagger-initializer.js"'.format(ASSET_DIRECTORY) in html, "http://" in html or "https://" in html,
+            response.status_code, 'id="explorer"' in html,
+            [name for name in ("swagger-ui-bundle.js", "explorer-model.js", "explorer.js", "explorer-initializer.js") if 'src="{}/{}"'.format(ASSET_DIRECTORY, name) not in html],
+            [name for name in ("swagger-ui.css", "explorer.css") if 'href="{}/{}"'.format(ASSET_DIRECTORY, name) not in html],
+            "http://" in html or "https://" in html,
         ),
-        (200, True, True, True, True, False),
+        (200, True, [], [], False),
     )
     return
 
@@ -110,7 +112,7 @@ def test_the_explorer_page_holds_no_script_of_its_own():
     html = _page(principal=_principal()).body.decode("utf-8")
     scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S)
 
-    testbase.assert_equal((len(scripts), all("src=" in attributes and body.strip() == "" for attributes, body in scripts)), (2, True))
+    testbase.assert_equal((len(scripts), all("src=" in attributes and body.strip() == "" for attributes, body in scripts)), (4, True))
     return
 
 
@@ -142,28 +144,49 @@ def test_the_swagger_ui_files_are_served_from_this_origin_with_their_content_typ
     return
 
 
-def test_only_the_swagger_ui_files_and_the_starter_are_served_as_assets():
+def test_the_explorer_files_are_served_from_this_origin_with_their_content_types():
     """
     **Feature: REST API explorer (DOC-06)**
-    **Property: any other name, including the old ReDoc script, a manifest and names that climb out of the asset directory, answers 404 and no file content.**
+    **Property: the explorer's model, page script and style sheet are served as JavaScript, JavaScript and CSS, and are the real files (not empty).**
+    """
+    answers = {}
+    for name in ("explorer-model.js", "explorer.js", "explorer.css"):
+        response = _asset(filename=name, principal=_principal())
+        answers[name] = (response.status_code, response.headers.get("Content-Type", ""), len(response.body) > 500)
+
+    testbase.assert_equal(
+        answers,
+        {"explorer-model.js": (200, "application/javascript", True), "explorer.js": (200, "application/javascript", True), "explorer.css": (200, "text/css", True)},
+    )
+    return
+
+
+def test_only_the_explorer_files_the_swagger_ui_files_and_the_starter_are_served_as_assets():
+    """
+    **Feature: REST API explorer (DOC-06)**
+    **Property: any other name, including the old ReDoc script, the old Swagger starter, a manifest and names that climb out of the asset directory, answers 404 and no file
+    content.**
     """
     answers = []
-    for name in ("redoc.standalone.js", "manifest.json", "../manifest.json", "..%2fmanifest.json", "../../static/manifest.json", "swagger-ui.css.map", ""):
+    for name in ("redoc.standalone.js", "swagger-initializer.js", "manifest.json", "../manifest.json", "..%2fmanifest.json", "../../static/manifest.json", "swagger-ui.css.map", ""):
         response = _asset(filename=name, principal=_principal())
         answers.append((response.status_code, len(response.body) > 10_000))
 
-    testbase.assert_equal(answers, [(404, False)] * 7)
+    testbase.assert_equal(answers, [(404, False)] * 8)
     return
 
 
 def test_the_page_and_every_file_it_loads_need_a_signed_in_caller():
     """
     **Feature: REST API explorer (DOC-06)**
-    **Property: an anonymous caller gets 401 for the library files and the starter too.**
+    **Property: an anonymous caller gets 401 for the library files, the explorer's files and the starter too.**
     """
-    answers = [_asset(filename=name, principal=None).status_code for name in ("swagger-ui-bundle.js", "swagger-ui.css", "swagger-initializer.js")]
+    answers = [
+        _asset(filename=name, principal=None).status_code
+        for name in ("swagger-ui-bundle.js", "swagger-ui.css", "explorer-model.js", "explorer.js", "explorer.css", "explorer-initializer.js")
+    ]
 
-    testbase.assert_equal(answers, [401, 401, 401])
+    testbase.assert_equal(answers, [401] * 6)
     return
 
 
@@ -206,7 +229,7 @@ def _starter(*, setting: Optional[str]) -> str:
             os.environ.pop(openapi_document.TRY_IT_OUT_ENV_VAR, None)
         else:
             os.environ[openapi_document.TRY_IT_OUT_ENV_VAR] = setting
-        rtnval = _asset(filename="swagger-initializer.js", principal=_principal()).body.decode("utf-8")
+        rtnval = _asset(filename="explorer-initializer.js", principal=_principal()).body.decode("utf-8")
     finally:
         if previous is None:
             os.environ.pop(openapi_document.TRY_IT_OUT_ENV_VAR, None)
@@ -215,20 +238,20 @@ def _starter(*, setting: Optional[str]) -> str:
     return rtnval
 
 
-def test_the_starter_opens_folded_on_the_path_grouped_document_and_leaves_try_it_out_to_a_click():
+def test_the_starter_starts_the_explorer_on_the_plain_document_and_leaves_try_it_out_to_a_click():
     """
     **Feature: REST API explorer (DOC-06)**
-    **Property: the starter script starts Swagger UI on ``/api/v1/_meta/openapi.json?group_by=path`` with everything folded, deep links on, the Schemas block hidden and
-    Try it out switched on by a person (not on by default); with no setting, every method may be sent.**
+    **Property: the starter script starts the explorer on ``/api/v1/_meta/openapi.json`` (the plain document: the page builds its own tree) with Try it out switched on by a
+    person (not on by default); with no setting, every method may be sent.**
     """
     script = _starter(setting=None)
 
     testbase.assert_equal(
         (
-            '"url": "/api/v1/_meta/openapi.json?group_by=path"' in script, '"docExpansion": "none"' in script, '"deepLinking": true' in script,
-            '"defaultModelsExpandDepth": -1' in script, '"tryItOutEnabled": false' in script, "supportedSubmitMethods" in script,
+            '"documentUrl": "/api/v1/_meta/openapi.json"' in script, '"title": "Pychestrate REST API"' in script, '"tryItOutEnabled": false' in script,
+            "supportedSubmitMethods" in script, "CCAIApiExplorer.start" in script,
         ),
-        (True, True, True, True, True, False),
+        (True, True, True, False, True),
     )
     return
 

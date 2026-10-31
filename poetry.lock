@@ -609,23 +609,25 @@ codecraftai-xmodules = ">=1.0.0,<2.0.0"
 
 [[package]]
 name = "codecraftai-webworks"
-version = "1.5.1"
+version = "1.6.0"
 description = "Code Craft AI - WebWorks"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "codecraftai_webworks-1.5.1-py3-none-any.whl", hash = "sha256:1493405200634873289626e10bc7df96932b814744baafaf202f07657b8cdefa"},
-    {file = "codecraftai_webworks-1.5.1.tar.gz", hash = "sha256:877773df95081e685e403b112102b69f1cbe349908b4e116f9e2cdc32965e425"},
+    {file = "codecraftai_webworks-1.6.0-py3-none-any.whl", hash = "sha256:60ea7dacdecbeea5dd6b45f15d67c84e3bfad79c7d321dd8c664f1e068930ce1"},
+    {file = "codecraftai_webworks-1.6.0.tar.gz", hash = "sha256:110a92bf8414dedd0edf39b36edc1b3aa00eb2d2c9b148232c6bd1687b1056f1"},
 ]
 
 [package.dependencies]
 codecraftai-configuration = ">=1.0.0,<2.0.0"
 codecraftai-credentials = ">=1.0.0,<2.0.0"
 codecraftai-dataprofiles = ">=1.0.0,<2.0.0"
+codecraftai-foundations = ">=1.0.0,<2.0.0"
 codecraftai-testbase = ">=1.0.0,<2.0.0"
 codecraftai-this-app = ">=1.0.0,<2.0.0"
 cryptography = ">=42.0.0,<51.0.0"
+pyyaml = ">=6.0.2,<7.0.0"
 requests = ">=2.32.5,<3.0.0"
 
 [package.extras]
@@ -2224,4 +2226,4 @@ zstd = ["backports-zstd (>=1.0.0) ; python_version < \"3.14\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "cddee3d11502876a2c6a8aaa925889a5cc549f175f8b4ef149b20ea6641de9a5"
+content-hash = "632f004f37276be2f6fc1a3cc08171dda3ff16a638c66ef0f1d21b2a827cd232"

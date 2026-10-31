@@ -236,10 +236,12 @@ Where to go next
 * The REST API is described by the OpenAPI document
   `specs/openapi/pychestrate.yaml <../specs/openapi/pychestrate.yaml>`_.
   A running service shows it, once you are signed in, as an interactive
-  explorer (Swagger UI) at ``/api/docs``: the APIs are grouped by where they
-  live (``projects / rpa``) and folded, you open only the ones you want, and
-  **Try it out** sends a request to the service as you, with your
-  permissions. An administrator can limit it to reads
+  explorer at ``/api/docs``: a tree of the APIs by where they live
+  (``projects / rpa``) on the left, and the ones you tick open as panes on the
+  right, each with its parameters, responses and **Try it out**, which sends a
+  request to the service as you, with your permissions. The address of the
+  page keeps the pinned APIs, so you can send a link to someone. An
+  administrator can limit Try it out to reads
   (``PYCHESTRATE_API_DOCS_TRY_IT_OUT``). The document itself is at
   ``/api/v1/_meta/openapi.json``.
 * `DEVELOPING.md <../DEVELOPING.md>`_ -- how the maintainers change

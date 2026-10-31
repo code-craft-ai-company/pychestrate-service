@@ -390,11 +390,13 @@ paths:
   /_meta/docs:
     get:
       tags: [meta]
-      summary: The API explorer page (Swagger UI), rendered from this document.
+      summary: The API explorer page, rendered from this document.
       operationId: meta_get_api_docs
       description: |
-        An interactive explorer (Swagger UI) over `/_meta/openapi.json`,
-        folded and grouped by path, with **Try it out**. Signed-in callers
+        An interactive explorer over `/_meta/openapi.json`: a tree of the
+        APIs by path, and the ones a person pins, each in a pane with its
+        parameters, responses and **Try it out** (Swagger UI). The pinned
+        set is kept in the page address. Signed-in callers
         only; a call made from the page goes to this service as the person
         signed in, so the page adds no access the API does not already
         give. The deployment can limit Try it out to reads or remove it
