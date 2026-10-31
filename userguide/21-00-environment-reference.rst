@@ -128,7 +128,8 @@ Running the server
      - ``all``
      - What **Try it out** may send from the API explorer at ``/api/docs``:
        ``all`` (every method), ``get`` (reads only, so a stray click cannot
-       change anything; the right choice for a production system) or ``off``
+       change anything; for a deployment that people outside the company
+       network can reach) or ``off``
        (no Try it out). A call made from the page is made as the signed-in
        person, with their permissions, whatever this is set to. Any other
        value is read as ``get``.

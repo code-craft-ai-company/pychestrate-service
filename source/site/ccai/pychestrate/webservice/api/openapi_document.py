@@ -78,7 +78,7 @@ GROUP_BY_PATH: str = "path"
 #: How many fixed words of a path name its group in the explorer (``projects / rpa``).
 GROUP_DEPTH: int = 2
 
-#: The operator setting that limits what **Try it out** may send: ``all`` (every method, the default), ``get`` (reads only, for a production system) or
+#: The operator setting that limits what **Try it out** may send: ``all`` (every method, the default), ``get`` (reads only, for a deployment that people outside the company network can reach) or
 #: ``off`` (no Try it out). Anything else is read as ``get``, the safe choice, and logged.
 TRY_IT_OUT_ENV_VAR: str = "PYCHESTRATE_API_DOCS_TRY_IT_OUT"
 
