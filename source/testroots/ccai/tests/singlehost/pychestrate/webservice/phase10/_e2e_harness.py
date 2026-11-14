@@ -119,7 +119,7 @@ from ccai.pychestrate.webservice.webinterface.foundation.url_for import (
 from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
     get_shell_template_search_path,
 )
-from ccai.webworks.wsgi.application import create_wsgi_application
+from ccai.pychestrate.webservice.wsgi_dispatch import create_dispatch_wsgi_application
 
 
 TEST_UI_COOKIE_SECRET: bytes = b"\x00" * 32
@@ -274,7 +274,9 @@ def _build_consumer_ui_test_app() -> Any:
         :mod:`app_pychestrate_main`, install templating, register
         the three consumer-UI registrars + static-files
         registrar, advance the lifecycle, and wrap with the
-        production ``build_wsgi_compat_dispatch`` shim.
+        production ``create_dispatch_wsgi_application`` (the
+        ``build_wsgi_compat_dispatch`` shim and the request body
+        limit).
 
         ``establish_webapp_persona`` is process-global; importing
         ``app_pychestrate_main`` establishes ``"pychestrate"`` as
@@ -287,7 +289,6 @@ def _build_consumer_ui_test_app() -> Any:
     _clear_thisapp_singleton_for_test()
     from app_pychestrate_main import (  # noqa: E402
         app,
-        build_wsgi_compat_dispatch,
     )
     _install_test_templating()
     register_static_routes(
@@ -299,9 +300,7 @@ def _build_consumer_ui_test_app() -> Any:
     register_resources_routes(app=app)
     register_projects_routes(app=app)
     app.startup()
-    rtnval = create_wsgi_application(
-        config={"handler": build_wsgi_compat_dispatch(app=app)}
-    )
+    rtnval = create_dispatch_wsgi_application(app=app)
     # As in the production builders: a form posted after the sign-in or its token
     # expired comes back filled in (XC-11).
     from ccai.pychestrate.webservice.webinterface.foundation.form_drafts import (  # noqa: E402

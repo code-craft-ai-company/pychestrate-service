@@ -141,3 +141,18 @@ def test_native_server_honours_pychestrate_threads():
         ("thread", 4),
     )
     return
+
+
+def test_native_server_accepts_bodies_up_to_the_largest_upload():
+    """
+    **Feature: request body limit of the built-in server**
+    **Property: the built-in server is started with max_request_size set
+    to the largest body a route accepts (MAX_LOCAL_UPLOAD_BYTES): webworks
+    1.7 otherwise refuses a body over 16 MiB before the upload routes
+    run.**
+    """
+    from ccai.pychestrate.webservice.runs.restapi.v1.artifacts_routes import MAX_LOCAL_UPLOAD_BYTES
+
+    arguments = _run_server_arguments(threads=None)
+    testbase.assert_equal(arguments.get("max_request_size"), MAX_LOCAL_UPLOAD_BYTES)
+    return

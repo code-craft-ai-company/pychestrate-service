@@ -133,6 +133,7 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1.api_tokens_routes impo
 )
 # The REST contract as JSON for the pyc CLI (/api/v1/_meta/openapi.json).
 from ccai.pychestrate.webservice.wsgi_dispatch import build_wsgi_compat_dispatch  # noqa: F401  (re-exported)
+from ccai.pychestrate.webservice.wsgi_dispatch import create_dispatch_wsgi_application, get_max_request_body_size
 from ccai.pychestrate.webservice.api.openapi_document import (
     register_api_docs_routes,
     register_openapi_document_routes,
@@ -284,7 +285,6 @@ from ccai.pychestrate.webservice.hardening.platform_wsgi import (
     wrap_platform_wsgi_application,
 )
 from ccai.webworks.webapplication import establish_webapp_persona
-from ccai.webworks.wsgi.application import create_wsgi_application
 from ccai.webworks.wsgi.server import run_server
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import HTMLResponse, Response
@@ -665,7 +665,7 @@ def pychestrate_website_main():
         ),
     )
 
-    wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    wsgi_app_inner = create_dispatch_wsgi_application(app=app)
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
     # ADM-16: expose the socket peer so handlers can resolve the real
     # client address behind a trusted proxy.
@@ -700,8 +700,11 @@ def pychestrate_website_main():
         ),
         flush=True,
     )
+    # The webworks server limits a request body itself (16 MiB unless told
+    # otherwise); the service's limit is the largest upload a route takes.
     run_server(app=wsgi_app, host=bind_host, port=bind_port,
-               workers=workers, threads=threads, worker_class=worker_class)
+               workers=workers, threads=threads, worker_class=worker_class,
+               max_request_size=get_max_request_body_size())
 
 
 def build_wsgi_application_for_production():
@@ -752,7 +755,7 @@ def build_wsgi_application_for_production():
         ),
     )
 
-    rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    rtnval_inner = create_dispatch_wsgi_application(app=app)
     # ADM-16: expose the socket peer (see pychestrate_website_main).
     rtnval = _wrap_with_peer_address(_eager_start_response_wsgi(rtnval_inner))
     # Cookies carry ``Secure`` for HTTPS requests (direct or through a

@@ -24,6 +24,7 @@ from typing import Any
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import Response
+from ccai.webworks.wsgi.application import create_wsgi_application
 
 
 #: Headers of the response a problem document replaces that are not carried
@@ -183,7 +184,51 @@ def build_wsgi_compat_dispatch(*, app: Any) -> Any:
     return rtnval
 
 
+def get_max_request_body_size() -> int:
+    """
+        Return the largest request body the service accepts.
+
+        webworks 1.7 refuses a request body larger than 16 MiB, in the
+        WSGI application and in its own WSGI server, unless the service
+        says otherwise (1.6 had no limit). Run artifacts are uploaded up
+        to
+        :data:`~ccai.pychestrate.webservice.runs.restapi.v1.artifacts_routes.MAX_LOCAL_UPLOAD_BYTES`
+        (256 MiB) and JUnit reports up to 64 MiB, so the limit is the
+        largest body a route accepts; each route still enforces its
+        own.
+
+        :returns: The limit in bytes.
+    """
+    # Imported here: the route module pulls in the run services, which
+    # this module does not otherwise need.
+    from ccai.pychestrate.webservice.runs.restapi.v1.artifacts_routes import MAX_LOCAL_UPLOAD_BYTES
+
+    rtnval = MAX_LOCAL_UPLOAD_BYTES
+    return rtnval
+
+
+def create_dispatch_wsgi_application(*, app: Any) -> Any:
+    """
+        Create the WSGI application that hands requests to the
+        webworks dispatcher of ``app`` (through
+        :func:`build_wsgi_compat_dispatch`), accepting bodies up to
+        :func:`get_max_request_body_size`.
+
+        :param app: WebWorks application whose ``dispatcher`` serves
+                    the requests.
+
+        :returns: The WSGI application.
+    """
+    rtnval = create_wsgi_application(config={
+        "handler": build_wsgi_compat_dispatch(app=app),
+        "max_request_body_size": get_max_request_body_size(),
+    })
+    return rtnval
+
+
 __all__ = [
     "build_wsgi_compat_dispatch",
+    "create_dispatch_wsgi_application",
     "framework_error_as_problem",
+    "get_max_request_body_size",
 ]
